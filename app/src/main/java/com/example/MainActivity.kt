@@ -18,7 +18,7 @@ import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Castle
 import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -48,12 +48,17 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.DadKingdomLocalStore
 import com.example.data.LlmSlotStore
+import com.example.data.SquirrelRpgRepository
 import com.example.engine.HybridAiCoachEngine
 import com.example.engine.VoiceSpeechEngine
 import com.example.firebase.configureAppCheck
+import com.example.model.RpgGamePhase
+import com.example.ui.components.StreakMilestoneConfettiOverlay
 import com.example.ui.screens.AiTutorCallScreen
 import com.example.ui.screens.HubAndShopScreen
 import com.example.ui.screens.SpartaVocabScreen
+import com.example.ui.screens.SquirrelHeroPickerOverlay
+import com.example.ui.screens.SquirrelStoryAndBattleOverlay
 import com.example.ui.screens.TravelScenariosScreen
 import com.example.ui.screens.WorldMapScreen
 import com.example.ui.theme.AdventureEmerald
@@ -76,8 +81,8 @@ private enum class FamilyKingdomTab(
     KINGDOM("kingdom_home", "왕국홈", "왕국 홈", Icons.Default.Castle, "nav_kingdom_home"),
     VOCAB("vocab_pattern", "단어·패턴", "단어·패턴 학습", Icons.Default.LocalFireDepartment, "nav_vocab_pattern"),
     TRAVEL("travel_100", "여행100", "여행 회화 100", Icons.Default.FlightTakeoff, "nav_travel"),
-    VIDEO_CALL("video_tutor", "영상통화", "원어민 영상통화", Icons.Default.Videocam, "nav_video_call"),
-    FAMILY_HUB("family_hub", "통계·선물", "통계·선물 허브", Icons.Default.CardGiftcard, "nav_family_hub")
+    VIDEO_CALL("video_tutor", "회화학습", "원어민 회화학습", Icons.Default.RecordVoiceOver, "nav_video_call"),
+    FAMILY_HUB("family_hub", "통계·보물", "통계·보물 허브", Icons.Default.CardGiftcard, "nav_family_hub")
 }
 
 class MainActivity : ComponentActivity() {
@@ -85,18 +90,23 @@ class MainActivity : ComponentActivity() {
     private val _pendingKakaoAuthCode = MutableStateFlow<String?>(null)
     val pendingKakaoAuthCode: StateFlow<String?> = _pendingKakaoAuthCode.asStateFlow()
 
+    private val _pendingGuestInvite = MutableStateFlow<Pair<String, String>?>(null)
+    val pendingGuestInvite: StateFlow<Pair<String, String>?> = _pendingGuestInvite.asStateFlow()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // MUST configure Firebase App Check before setContent or any Firebase AI Logic calls
         configureAppCheck(this, intent)
-        extractKakaoOAuthCode(intent)
+        extractIncomingDeepLinks(intent)
 
         setContent {
             SpeakQuestTheme {
                 FamilyKingdomApp(
                     pendingKakaoAuthCodeFlow = pendingKakaoAuthCode,
-                    onConsumeKakaoCode = { _pendingKakaoAuthCode.value = null }
+                    onConsumeKakaoCode = { _pendingKakaoAuthCode.value = null },
+                    pendingGuestInviteFlow = pendingGuestInvite,
+                    onConsumeGuestInvite = { _pendingGuestInvite.value = null }
                 )
             }
         }
@@ -105,15 +115,28 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        extractKakaoOAuthCode(intent)
+        extractIncomingDeepLinks(intent)
     }
 
-    private fun extractKakaoOAuthCode(intent: Intent?) {
+    private fun extractIncomingDeepLinks(intent: Intent?) {
         val data = intent?.data ?: return
+        // 1. Kakao OAuth redirect
         if (data.scheme == "dadquest" && data.host == "kakao-oauth") {
             val code = data.getQueryParameter("code")
             if (!code.isNullOrBlank()) {
                 _pendingKakaoAuthCode.value = code
+            }
+            return
+        }
+        // 2. Standalone Guest Invite deep link (dadquest://invite or https://dadquest.app/invite)
+        val isCustomInvite = data.scheme == "dadquest" && data.host == "invite"
+        val isWebInvite = (data.scheme == "https" || data.scheme == "http") &&
+            (data.path?.startsWith("/invite") == true)
+        if (isCustomInvite || isWebInvite) {
+            val inviteCode = data.getQueryParameter("code")
+            val hostNickname = data.getQueryParameter("host").orEmpty().ifBlank { "원삐" }
+            if (!inviteCode.isNullOrBlank()) {
+                _pendingGuestInvite.value = inviteCode to hostNickname
             }
         }
     }
@@ -122,7 +145,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun FamilyKingdomApp(
     pendingKakaoAuthCodeFlow: StateFlow<String?>,
-    onConsumeKakaoCode: () -> Unit
+    onConsumeKakaoCode: () -> Unit,
+    pendingGuestInviteFlow: StateFlow<Pair<String, String>?>,
+    onConsumeGuestInvite: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -161,6 +186,7 @@ private fun FamilyKingdomApp(
     val studyLogs by viewModel.studyLogs.collectAsStateWithLifecycle()
     val activeStudySec by viewModel.activeStudyElapsedSec.collectAsStateWithLifecycle()
     val kakaoSession by viewModel.kakaoSession.collectAsStateWithLifecycle()
+    val guestInviteSession by viewModel.guestInviteSession.collectAsStateWithLifecycle()
     val cloudflareWorkerUrl by viewModel.cloudflareWorkerUrl.collectAsStateWithLifecycle()
     val cloudflareStatusKo by viewModel.cloudflareStatusKo.collectAsStateWithLifecycle()
     val harvestStatusKo by viewModel.harvestStatusKo.collectAsStateWithLifecycle()
@@ -178,6 +204,17 @@ private fun FamilyKingdomApp(
     val slotTestResults by viewModel.slotTestResults.collectAsStateWithLifecycle()
     val bannerToast by viewModel.bannerToast.collectAsStateWithLifecycle()
     val pendingKakaoCode by pendingKakaoAuthCodeFlow.collectAsStateWithLifecycle()
+    val pendingGuestInvite by pendingGuestInviteFlow.collectAsStateWithLifecycle()
+
+    val selectedSquirrelHeroId by viewModel.selectedSquirrelHeroId.collectAsStateWithLifecycle()
+    val clearedRpgChapters by viewModel.clearedRpgChapters.collectAsStateWithLifecycle()
+    val unopenedChests by viewModel.unopenedChests.collectAsStateWithLifecycle()
+    val openedTreasures by viewModel.openedTreasures.collectAsStateWithLifecycle()
+    val rpgState by viewModel.rpgState.collectAsStateWithLifecycle()
+    val streakMilestoneEvent by viewModel.streakMilestoneEvent.collectAsStateWithLifecycle()
+    val activeSquirrelHero = remember(selectedSquirrelHeroId) {
+        SquirrelRpgRepository.findHeroById(selectedSquirrelHeroId)
+    }
 
     val todayIso = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
     val totalStudySec = remember(studyLogs, activeStudySec) {
@@ -200,6 +237,19 @@ private fun FamilyKingdomApp(
         }
     }
 
+    LaunchedEffect(pendingGuestInvite) {
+        val invite = pendingGuestInvite
+        if (invite != null) {
+            onConsumeGuestInvite()
+            viewModel.acceptGuestInviteCode(
+                rawCode = invite.first,
+                hostNickname = invite.second,
+                fromDeepLink = true
+            )
+            currentTab = FamilyKingdomTab.KINGDOM
+        }
+    }
+
     LaunchedEffect(bannerToast) {
         val message = bannerToast
         if (!message.isNullOrBlank()) {
@@ -215,6 +265,7 @@ private fun FamilyKingdomApp(
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets.statusBars,
@@ -281,7 +332,13 @@ private fun FamilyKingdomApp(
                         studyLogCount = studyLogs.size,
                         scenarioProgress = scenarioProgress,
                         activeTutor = tutorCallState.selectedTutor,
+                        activeSquirrelHero = activeSquirrelHero,
+                        clearedRpgChapters = clearedRpgChapters,
+                        unopenedChests = unopenedChests,
                         onSwitchPlayer = { name -> viewModel.selectActivePlayer(name) },
+                        onOpenHeroPicker = { viewModel.openSquirrelHeroPicker() },
+                        onStartRpgChapter = { chapterNum -> viewModel.startRpgChapter(chapterNum) },
+                        onOpenMysteryChest = { viewModel.openMysteryTreasureChest() },
                         onStartVocabTrack = { track ->
                             viewModel.startSmartVocabSession(track = track, tier1To5 = vocabGradeTier)
                             currentTab = FamilyKingdomTab.VOCAB
@@ -309,6 +366,12 @@ private fun FamilyKingdomApp(
                         },
                         onRefillHearts = {
                             viewModel.refillHearts()
+                        },
+                        onSpeakFocusEnglish = { text ->
+                            viewModel.listenRpgEnglish(text)
+                        },
+                        onRecordFocusWordResult = { wordId, known ->
+                            viewModel.recordMainFocusWordResult(wordId, known)
                         }
                     )
                 }
@@ -392,7 +455,10 @@ private fun FamilyKingdomApp(
                         speechRate = speechRate,
                         handsFreeMode = handsFreeMode,
                         onSelectTutor = { tutor -> viewModel.selectHumanTutor(tutor) },
-                        onSelectTopic = { tag, starter -> viewModel.setTutorConversationTopic(tag, starter) },
+                        onSelectTopic = { tag, starter -> viewModel.setTutorConversationTopic(context, tag, starter) },
+                        onSynthesizeNanoBanana = { tag, gesture ->
+                            viewModel.synthesizeTutorSceneWithNanoBanana(context, tag, gesture)
+                        },
                         onToggleKoreanSubtitles = { viewModel.toggleTutorKoreanTranslations() },
                         onToggleKoreanVoiceMode = { viewModel.toggleKoreanVoiceInputMode() },
                         onSetSpeechRate = { rate -> viewModel.setSpeechRateMultiplier(rate) },
@@ -412,6 +478,9 @@ private fun FamilyKingdomApp(
                         vocabGradeTier = vocabGradeTier,
                         masteredWordsCount = masteredWordIds.size,
                         harvestedApiCount = harvestedApiWords.size,
+                        clearedRpgChaptersCount = clearedRpgChapters.size,
+                        unopenedChests = unopenedChests,
+                        openedTreasures = openedTreasures,
                         giftRequests = giftRequests,
                         dadMissions = dadMissions,
                         scorecards = scorecards,
@@ -419,11 +488,13 @@ private fun FamilyKingdomApp(
                         studyLogs = studyLogs,
                         activeStudyElapsedSec = activeStudySec,
                         kakaoSession = kakaoSession,
+                        guestInviteSession = guestInviteSession,
                         cloudflareWorkerUrl = cloudflareWorkerUrl,
                         cloudflareStatusKo = cloudflareStatusKo,
                         engineMode = engineMode,
                         llmSlots = llmSlots,
                         slotTestResults = slotTestResults,
+                        onOpenMysteryChest = { viewModel.openMysteryTreasureChest() },
                         onSaveParentProfiles = { updated -> viewModel.saveParentProfiles(updated) },
                         onCreateGiftRequest = { target, title, reason ->
                             viewModel.createGiftRequest(target, title, reason)
@@ -451,6 +522,9 @@ private fun FamilyKingdomApp(
                         onLaunchKakaoLogin = { viewModel.launchKakaoLogin(context) },
                         onRefreshKakaoFriends = { viewModel.refreshKakaoFriends() },
                         onLogoutKakao = { viewModel.logoutKakao() },
+                        onGenerateAndShareGuestInvite = { viewModel.generateAndShareGuestInvite(context) },
+                        onRegenerateInviteCode = { viewModel.regenerateGuestInviteCode() },
+                        onAcceptGuestInviteCode = { code -> viewModel.acceptGuestInviteCode(code) },
                         onRegisterCloudflareLevel = { url -> viewModel.saveAndRegisterCloudflareLevel(url) },
                         onBuyCollectible = { item -> viewModel.buyCollectible(item) },
                         onRefillHearts = { viewModel.refillHearts() },
@@ -460,6 +534,49 @@ private fun FamilyKingdomApp(
                     )
                 }
             }
+        }
+    }
+
+        // Full-Screen White Pygmy Squirrel 10-Job Hero Picker Overlay
+        if (rpgState.phase == RpgGamePhase.HERO_PICKER) {
+            SquirrelHeroPickerOverlay(
+                selectedHeroId = selectedSquirrelHeroId,
+                playerNickname = parents.daughterName,
+                onSelectHero = { hero -> viewModel.selectSquirrelHero(hero) },
+                onClose = { viewModel.closeRpgOverlay() }
+            )
+        }
+
+        // Full-Screen White Pygmy Squirrel RPG Story + Turn-Based Battle + Sealed Mystery Chest Overlay
+        if (rpgState.phase != RpgGamePhase.IDLE && rpgState.phase != RpgGamePhase.HERO_PICKER) {
+            SquirrelStoryAndBattleOverlay(
+                state = rpgState,
+                hero = activeSquirrelHero,
+                playerNickname = parents.daughterName,
+                voiceState = voiceState,
+                onClose = { viewModel.closeRpgOverlay() },
+                onChooseStoryOption = { choice -> viewModel.chooseRpgStoryOption(choice) },
+                onStartChapterBattle = { viewModel.startChapterBattle() },
+                onChooseBattleAction = { action -> viewModel.chooseRpgBattleAction(action) },
+                onSubmitWordAnswer = { ans -> viewModel.submitRpgWordAnswer(ans) },
+                onSubmitPhraseAnswer = { ans -> viewModel.submitRpgPhraseAnswer(ans) },
+                onStartVoicePhraseAttack = { viewModel.startRpgVoicePhraseAttack() },
+                onStopVoice = { viewModel.stopVoiceIo() },
+                onListenEnglish = { text -> viewModel.listenRpgEnglish(text) },
+                onOpenMysteryChest = { viewModel.openMysteryTreasureChest() },
+                onNextChapter = { viewModel.advanceOrReplayRpgChapter() },
+                onRetryChapter = { viewModel.retryCurrentRpgChapter() }
+            )
+        }
+
+        // Full-Screen Congratulations Confetti Celebration when a 10-Word Daily Goal Streak milestone is hit
+        val activeStreakEvent = streakMilestoneEvent
+        if (activeStreakEvent != null) {
+            StreakMilestoneConfettiOverlay(
+                event = activeStreakEvent,
+                hero = activeSquirrelHero,
+                onDismiss = { viewModel.dismissStreakMilestoneEvent() }
+            )
         }
     }
 }

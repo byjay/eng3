@@ -1,6 +1,7 @@
 package com.example.viewmodel
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.CloudflareLevelPayload
@@ -9,30 +10,47 @@ import com.example.data.DadKingdomLocalStore
 import com.example.data.DailyWordHarvesterService
 import com.example.data.HumanTutorRepository
 import com.example.data.KakaoAuthAndFriendsService
+import com.example.data.KakaoGuestInviteService
+import com.example.data.LearningAchievementResult
 import com.example.data.LlmSlotStore
 import com.example.data.PatternSentenceRepository
+import com.example.data.SquirrelRpgRepository
 import com.example.data.TravelCurriculumRepository
 import com.example.data.VocabRepository
 import com.example.engine.HybridAiCoachEngine
+import com.example.engine.NanoBananaMotionEngine
 import com.example.engine.PronunciationAnalyzer
 import com.example.engine.VoiceCommandParser
 import com.example.engine.VoiceEngineState
 import com.example.engine.VoiceSettingCommand
 import com.example.engine.VoiceSpeechEngine
+import com.example.ui.components.MotionPhotoGesture
+import com.example.ui.components.StreakMilestoneEvent
 import com.example.model.AiEngineMode
 import com.example.model.AiHumanTutor
 import com.example.model.CollectibleItem
 import com.example.model.DadAllowanceMission
+import com.example.model.EmeraldStoryChapter
 import com.example.model.GiftRequestItem
+import com.example.model.GuestInviteSession
 import com.example.model.KakaoSessionState
 import com.example.model.KingdomProgressStats
 import com.example.model.LlmSlotConfig
 import com.example.model.LoopRepeatMode
+import com.example.model.MysteryChestReward
 import com.example.model.ParentProfiles
 import com.example.model.PatternDrillItem
 import com.example.model.PronunciationReport
+import com.example.model.RpgBattleAction
+import com.example.model.RpgGamePhase
+import com.example.model.RpgGameUiState
+import com.example.model.RpgPhraseChallenge
+import com.example.model.RpgStoryChoice
+import com.example.model.RpgWordChallenge
 import com.example.model.ScenarioProgress
 import com.example.model.ScorecardEntry
+import com.example.model.SquirrelJobHero
+import com.example.model.SquirrelSkillKind
 import com.example.model.StudyScheduleItem
 import com.example.model.StudyTimeLogEntry
 import com.example.model.TravelScenario
@@ -153,11 +171,16 @@ data class TutorCallState(
     val koreanVoiceInputMode: Boolean = false, // false = EN speaking, true = KR question/voice command!
     val liveSubtitleEn: String = HumanTutorRepository.tutors.first().greetingEn,
     val liveSubtitleKo: String = HumanTutorRepository.tutors.first().greetingKo,
-    val liveCoachingCommentKo: String = "마이크를 눌러 친구처럼 영어로 말하거나, 'KR 질문' 모드로 한국어 표현을 물어보세요!",
+    val liveCoachingCommentKo: String = "마이크를 눌러 회화학습을 시작하세요",
     val liveNaturalRephraseEn: String = "",
     val liveVoiceCommandNotice: String = "",
     val callSeconds: Int = 0,
-    val activeTopicTag: String = "실시간 친구 수다",
+    val activeTopicTag: String = "수다",
+    val sceneLocationLabelKo: String = "뉴욕 타임스스퀘어",
+    val nanoBananaSceneBitmap: Bitmap? = null,
+    val nanoBananaBlinkBitmap: Bitmap? = null,
+    val isGeneratingScene: Boolean = false,
+    val sceneErrorKo: String? = null,
     val turnsInCall: Int = 0
 )
 
@@ -167,6 +190,16 @@ class SpeakQuestViewModel(
     private val voiceEngine: VoiceSpeechEngine,
     private val aiCoachEngine: HybridAiCoachEngine
 ) : ViewModel() {
+
+    private val nanoBananaEngine = NanoBananaMotionEngine()
+    private var sceneGenJob: Job? = null
+
+    private val _streakMilestoneEvent = MutableStateFlow<StreakMilestoneEvent?>(null)
+    val streakMilestoneEvent: StateFlow<StreakMilestoneEvent?> = _streakMilestoneEvent.asStateFlow()
+
+    fun dismissStreakMilestoneEvent() {
+        _streakMilestoneEvent.value = null
+    }
 
     val voiceState: StateFlow<VoiceEngineState> = voiceEngine.state
 
@@ -226,6 +259,24 @@ class SpeakQuestViewModel(
 
     val kakaoSession: StateFlow<KakaoSessionState> = localStore.kakaoSessionFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), KakaoSessionState())
+
+    val selectedSquirrelHeroId: StateFlow<String> = localStore.selectedSquirrelHeroIdFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "hero_luna")
+
+    val clearedRpgChapters: StateFlow<Set<String>> = localStore.clearedRpgChaptersFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
+
+    val unopenedChests: StateFlow<Int> = localStore.unopenedChestsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0)
+
+    val openedTreasures: StateFlow<List<MysteryChestReward>> = localStore.openedTreasuresFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    private val _rpgState = MutableStateFlow(RpgGameUiState())
+    val rpgState: StateFlow<RpgGameUiState> = _rpgState.asStateFlow()
+
+    val guestInviteSession: StateFlow<GuestInviteSession> = localStore.guestInviteSessionFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), GuestInviteSession())
 
     val engineMode: StateFlow<AiEngineMode> = llmSlotStore.engineModeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), AiEngineMode.BUILT_IN_GEMINI)
@@ -951,7 +1002,7 @@ class SpeakQuestViewModel(
 
         viewModelScope.launch {
             localStore.markWordMastered(current.id)
-            val (boss, lvlUp) = localStore.recordLearningAchievement(
+            val result = localStore.recordLearningAchievement(
                 xpDelta = xpGain + if (completed) 150 else 0,
                 coinsDelta = coinGain + if (completed) 100 else 0,
                 wordsDelta = 1,
@@ -960,7 +1011,7 @@ class SpeakQuestViewModel(
                 reviewDelta = if (wasRetry) 1 else 0,
                 perfectDelta = if (completed && st.perfectStreakInSession) 1 else 0
             )
-            notifySpecialMilestones(boss, lvlUp)
+            notifySpecialMilestones(result)
         }
         if (!completed) {
             startSpartaCountdown()
@@ -1078,6 +1129,7 @@ class SpeakQuestViewModel(
     }
 
     private fun initTutorConversation(tutor: AiHumanTutor) {
+        val defaultTopic = if (tutor.cityCountry.contains("Guam", ignoreCase = true)) "괌 바닷가" else "뉴욕 시내"
         val welcomeMsg = TutorChatMessage(
             id = UUID.randomUUID().toString(),
             fromTutor = true,
@@ -1092,7 +1144,9 @@ class SpeakQuestViewModel(
             showKoreanTranslations = _tutorCallState.value.showKoreanTranslations,
             liveSubtitleEn = tutor.greetingEn,
             liveSubtitleKo = tutor.greetingKo,
-            liveCoachingCommentKo = "영상통화 연결됨! 말로 '천천히 말해줘', '자막 꺼줘', '마트에서 이거 빼고 현금으로 할게요 영어로 알려줘' 모두 가능해요!"
+            liveCoachingCommentKo = "EN 말하기 · KR 질문/음성설정",
+            activeTopicTag = defaultTopic,
+            sceneLocationLabelKo = NanoBananaMotionEngine.topicToDisplayLocationKo(defaultTopic)
         )
     }
 
@@ -1102,23 +1156,93 @@ class SpeakQuestViewModel(
         showToast(if (next) "한국어 질문·음성 설정 모드 ON (예: 마트에서 이거 빼고 현금으로...)" else "원어민 영어 회화 말하기 모드 ON")
     }
 
-    fun setTutorConversationTopic(topicKo: String, starterPromptEn: String) {
+    fun setTutorConversationTopic(
+        context: Context,
+        topicKo: String,
+        starterPromptEn: String
+    ) {
         val tutor = _tutorCallState.value.selectedTutor
+        val locationLabel = NanoBananaMotionEngine.topicToDisplayLocationKo(topicKo)
         val msg = TutorChatMessage(
             id = UUID.randomUUID().toString(),
             fromTutor = true,
             textEn = starterPromptEn,
-            translationKo = "주제: $topicKo — 자막을 보고 친구처럼 편하게 대답해 보세요!",
-            coachingTipKo = "단어 하나라도 자신 있게 말하면 선생님이 바로 코멘트하고 교정해 줍니다.",
+            translationKo = "주제: $topicKo ($locationLabel) — 자막을 보고 친구처럼 편하게 대답해 보세요!",
+            coachingTipKo = "배경이 '$locationLabel' 현장으로 전환됩니다. 자신 있게 영어로 말해 보세요!",
             engineBadge = tutor.accentLabel
         )
         _tutorCallState.value = _tutorCallState.value.copy(
             activeTopicTag = topicKo,
+            sceneLocationLabelKo = locationLabel,
+            isThinking = false,
             messages = _tutorCallState.value.messages + msg,
             liveSubtitleEn = starterPromptEn,
-            liveSubtitleKo = "주제: $topicKo — 자연스럽게 영어로 답해 보세요!"
+            liveSubtitleKo = "주제: $topicKo ($locationLabel) — 자연스럽게 영어로 답해 보세요!"
         )
         speakWithActiveTutor(starterPromptEn)
+        synthesizeTutorSceneWithNanoBanana(
+            context = context,
+            topicTag = topicKo,
+            gesture = MotionPhotoGesture.inferFromSpeech(starterPromptEn, isListening = false, isSpeaking = true)
+        )
+    }
+
+    fun synthesizeTutorSceneWithNanoBanana(
+        context: Context,
+        topicTag: String = _tutorCallState.value.activeTopicTag,
+        gesture: MotionPhotoGesture = MotionPhotoGesture.WARM_SMILE
+    ) {
+        val tutor = _tutorCallState.value.selectedTutor
+        val locationLabel = NanoBananaMotionEngine.topicToDisplayLocationKo(topicTag)
+        val cacheKey = nanoBananaEngine.buildCacheKey(tutor.id, topicTag, gesture)
+        val cachedScene = nanoBananaEngine.getCachedScene(cacheKey)
+        val cachedBlink = nanoBananaEngine.getCachedBlink(cacheKey)
+
+        if (cachedScene != null) {
+            _tutorCallState.value = _tutorCallState.value.copy(
+                activeTopicTag = topicTag,
+                sceneLocationLabelKo = locationLabel,
+                nanoBananaSceneBitmap = cachedScene,
+                nanoBananaBlinkBitmap = cachedBlink,
+                isGeneratingScene = false,
+                sceneErrorKo = null
+            )
+            return
+        }
+
+        sceneGenJob?.cancel()
+        val appContext = context.applicationContext
+        _tutorCallState.value = _tutorCallState.value.copy(
+            activeTopicTag = topicTag,
+            sceneLocationLabelKo = locationLabel,
+            isGeneratingScene = true,
+            sceneErrorKo = null
+        )
+
+        sceneGenJob = viewModelScope.launch {
+            val result = nanoBananaEngine.synthesizeTopicSceneAndBlink(
+                context = appContext,
+                basePortraitRes = tutor.portraitRes,
+                tutorId = tutor.id,
+                tutorName = tutor.name,
+                topicTag = topicTag,
+                gesture = gesture,
+                alsoSynthesizeBlink = true
+            )
+            if (result.sceneBitmap != null) {
+                _tutorCallState.value = _tutorCallState.value.copy(
+                    nanoBananaSceneBitmap = result.sceneBitmap,
+                    nanoBananaBlinkBitmap = result.blinkBitmap,
+                    isGeneratingScene = false,
+                    sceneErrorKo = null
+                )
+            } else {
+                _tutorCallState.value = _tutorCallState.value.copy(
+                    isGeneratingScene = false,
+                    sceneErrorKo = result.errorMessage ?: "나노바나나 배경 생성에 실패했습니다."
+                )
+            }
+        }
     }
 
     fun toggleTutorKoreanTranslations() {
@@ -1464,7 +1588,46 @@ class SpeakQuestViewModel(
     fun selectActivePlayer(playerName: String) {
         viewModelScope.launch {
             localStore.updateActivePlayerName(playerName)
-            showToast("현재 학습 도전자: ${playerName} 모드로 전환했어요!")
+            showToast("현재 애칭: ${playerName}")
+        }
+    }
+
+    fun generateAndShareGuestInvite(context: Context) {
+        viewModelScope.launch {
+            val existingCode = guestInviteSession.value.myGeneratedCode
+            val code = existingCode.ifBlank { KakaoGuestInviteService.generateInviteCode() }
+            localStore.saveGeneratedInviteCode(code)
+            val host = parentProfiles.value.daughterName.ifBlank { "원삐" }
+            KakaoGuestInviteService.shareGuestInviteViaKakaoTalk(
+                context = context,
+                code = code,
+                hostNickname = host,
+                cloudflareWorkerUrl = cloudflareWorkerUrl.value
+            )
+            showToast("손님 초대코드 [$code] 생성 및 카톡 독립 실행 링크 전송!")
+        }
+    }
+
+    fun regenerateGuestInviteCode() {
+        viewModelScope.launch {
+            val code = KakaoGuestInviteService.generateInviteCode()
+            localStore.saveGeneratedInviteCode(code)
+            showToast("새 손님 초대코드 발급: $code")
+        }
+    }
+
+    fun acceptGuestInviteCode(rawCode: String, hostNickname: String = "원삐", fromDeepLink: Boolean = false) {
+        val clean = KakaoGuestInviteService.normalizeCode(rawCode)
+        if (clean.length < 4) {
+            showToast("올바른 초대코드를 입력해 주세요 (예: WP-7K2A)")
+            return
+        }
+        viewModelScope.launch {
+            localStore.activateGuestByInviteCode(clean, hostNickname)
+            showToast(
+                if (fromDeepLink) "초대코드 [$clean]로 독립 앱 입장 완료! 별도 로그인 없이 바로 시작!"
+                else "손님($clean) 입장 완료! 원하면 내 카톡과 바로 연동할 수 있어요."
+            )
         }
     }
 
@@ -1763,10 +1926,537 @@ class SpeakQuestViewModel(
         }
     }
 
+    // ==================== WHITE PYGMY SQUIRREL STORY RPG & MYSTERY CHEST ====================
+
+    private val secretTreasurePool: List<Triple<String, String, String>> = listOf(
+        Triple("황금 도토리 왕관 유물", "전설", "비밀 유물"),
+        Triple("에메랄드 별빛 망토", "에픽", "비밀 유물"),
+        Triple("아빠의 깜짝 간식 비밀권", "스페셜", "비밀 쿠폰"),
+        Triple("엄마의 주말 데이트 비밀권", "스페셜", "비밀 쿠폰"),
+        Triple("크리스탈 발음 마법봉", "희귀", "비밀 유물"),
+        Triple("피그미 다람쥐 황금 방패", "에픽", "비밀 유물"),
+        Triple("아이스크림·디저트 깜짝권", "스페셜", "비밀 쿠폰"),
+        Triple("별빛 서고 고대 마법서", "전설", "비밀 유물"),
+        Triple("영화 관람 패밀리 비밀권", "스페셜", "비밀 쿠폰"),
+        Triple("무지개 날개 에메랄드 브로치", "희귀", "비밀 유물")
+    )
+
+    fun openSquirrelHeroPicker() {
+        _rpgState.value = _rpgState.value.copy(phase = RpgGamePhase.HERO_PICKER)
+    }
+
+    fun selectSquirrelHero(hero: SquirrelJobHero) {
+        viewModelScope.launch {
+            localStore.saveSelectedSquirrelHero(hero.id)
+            _rpgState.value = _rpgState.value.copy(phase = RpgGamePhase.IDLE)
+            showToast("${hero.nameKo} (${hero.jobTitleKo}) 흰색 피그미 다람쥐 장착!")
+        }
+    }
+
+    fun closeRpgOverlay() {
+        stopVoiceIo()
+        _rpgState.value = RpgGameUiState(phase = RpgGamePhase.IDLE)
+    }
+
+    fun startRpgChapter(chapterNumber: Int) {
+        val chapter = SquirrelRpgRepository.chapters.firstOrNull { it.number == chapterNumber }
+            ?: SquirrelRpgRepository.chapters.first()
+        val hero = SquirrelRpgRepository.findHeroById(selectedSquirrelHeroId.value)
+        onEnterStudyActivity("왕국 RPG 배틀")
+        _rpgState.value = RpgGameUiState(
+            phase = RpgGamePhase.STORY_DIALOGUE,
+            activeChapter = chapter,
+            heroHp = hero.maxHp,
+            heroMaxHp = hero.maxHp,
+            heroMp = 40,
+            heroShieldActive = hero.skillKind == SquirrelSkillKind.SHIELD_GUARD,
+            heroReviveAvailable = hero.skillKind == SquirrelSkillKind.ROYAL_FEAST,
+            monsterHp = chapter.monster.maxHp,
+            monsterMaxHp = chapter.monster.maxHp,
+            turnNumber = 1,
+            comboCount = 0,
+            floatingBannerKo = "${chapter.titleKo} 입장!",
+            lastBattleLogKo = "${hero.nameKo} (${hero.jobTitleKo}) 모험 시작!"
+        )
+    }
+
+    fun chooseRpgStoryOption(choice: RpgStoryChoice) {
+        val cur = _rpgState.value
+        val newHp = (cur.heroHp + choice.hpBonus).coerceAtMost(cur.heroMaxHp + choice.hpBonus)
+        val newMaxHp = maxOf(cur.heroMaxHp, newHp)
+        val newMp = (cur.heroMp + choice.mpBonus).coerceAtMost(100)
+        if (choice.bonusCoins > 0) {
+            viewModelScope.launch { localStore.grantBonusCoins(choice.bonusCoins) }
+        }
+        _rpgState.value = cur.copy(
+            phase = RpgGamePhase.STORY_OUTCOME,
+            selectedChoiceOutcomeKo = choice.outcomeKo,
+            heroHp = newHp,
+            heroMaxHp = newMaxHp,
+            heroMp = newMp,
+            heroAtkBuffPercent = cur.heroAtkBuffPercent + choice.atkBuffPercent,
+            heroShieldActive = cur.heroShieldActive || choice.startShield,
+            floatingBannerKo = choice.tagKo
+        )
+    }
+
+    fun startChapterBattle() {
+        val cur = _rpgState.value
+        val monster = cur.activeChapter?.monster ?: return
+        _rpgState.value = cur.copy(
+            phase = RpgGamePhase.BATTLE_ACTION,
+            floatingBannerKo = "${monster.nameKo} 출현!",
+            lastBattleLogKo = "수능 빈출 단어+문장 또는 실전 회화로 공격하세요!"
+        )
+    }
+
+    fun chooseRpgBattleAction(action: RpgBattleAction) {
+        val cur = _rpgState.value
+        val hero = SquirrelRpgRepository.findHeroById(selectedSquirrelHeroId.value)
+        when (action) {
+            RpgBattleAction.WORD_STRIKE -> {
+                val challenge = buildCsatWordChallenge(
+                    forceHint = hero.skillKind == SquirrelSkillKind.TIME_REVEAL,
+                    skillAmplified = false
+                )
+                _rpgState.value = cur.copy(
+                    phase = RpgGamePhase.BATTLE_WORD_CHALLENGE,
+                    wordChallenge = challenge,
+                    heroGuarding = false
+                )
+            }
+            RpgBattleAction.PHRASE_CAST -> {
+                val challenge = buildConversationPhraseChallenge(skillAmplified = false)
+                _rpgState.value = cur.copy(
+                    phase = RpgGamePhase.BATTLE_PHRASE_CHALLENGE,
+                    phraseChallenge = challenge,
+                    heroGuarding = false
+                )
+            }
+            RpgBattleAction.CLASS_SKILL -> {
+                if (cur.heroMp < hero.skillMpCost) return
+                val spentMp = (cur.heroMp - hero.skillMpCost).coerceAtLeast(0)
+                when (hero.skillKind) {
+                    SquirrelSkillKind.SHIELD_GUARD -> {
+                        val challenge = buildCsatWordChallenge(forceHint = false, skillAmplified = true)
+                        _rpgState.value = cur.copy(
+                            heroMp = spentMp,
+                            heroShieldActive = true,
+                            phase = RpgGamePhase.BATTLE_WORD_CHALLENGE,
+                            wordChallenge = challenge,
+                            floatingBannerKo = "${hero.skillNameKo} 발동!"
+                        )
+                    }
+                    SquirrelSkillKind.SUN_HEAL, SquirrelSkillKind.ROYAL_FEAST -> {
+                        val healAmt = if (hero.skillKind == SquirrelSkillKind.ROYAL_FEAST) 50 else 45
+                        val newHp = (cur.heroHp + healAmt).coerceAtMost(cur.heroMaxHp)
+                        val buffAdd = if (hero.skillKind == SquirrelSkillKind.ROYAL_FEAST) 20 else 0
+                        val challenge = buildCsatWordChallenge(forceHint = false, skillAmplified = true)
+                        _rpgState.value = cur.copy(
+                            heroHp = newHp,
+                            heroMp = spentMp,
+                            heroAtkBuffPercent = cur.heroAtkBuffPercent + buffAdd,
+                            phase = RpgGamePhase.BATTLE_WORD_CHALLENGE,
+                            wordChallenge = challenge,
+                            floatingBannerKo = "HP +$healAmt 회복!"
+                        )
+                    }
+                    SquirrelSkillKind.MELODY_BOOST, SquirrelSkillKind.COMBO_ARROW -> {
+                        val healAmt = if (hero.skillKind == SquirrelSkillKind.MELODY_BOOST) 20 else 0
+                        val challenge = buildConversationPhraseChallenge(skillAmplified = true)
+                        _rpgState.value = cur.copy(
+                            heroHp = (cur.heroHp + healAmt).coerceAtMost(cur.heroMaxHp),
+                            heroMp = spentMp,
+                            phase = RpgGamePhase.BATTLE_PHRASE_CHALLENGE,
+                            phraseChallenge = challenge,
+                            floatingBannerKo = "${hero.skillNameKo} 발동!"
+                        )
+                    }
+                    SquirrelSkillKind.TIME_REVEAL -> {
+                        val challenge = buildCsatWordChallenge(forceHint = true, skillAmplified = true)
+                        _rpgState.value = cur.copy(
+                            heroMp = spentMp,
+                            monsterStunned = true,
+                            phase = RpgGamePhase.BATTLE_WORD_CHALLENGE,
+                            wordChallenge = challenge,
+                            floatingBannerKo = "시간 정지! 적 1턴 기절!"
+                        )
+                    }
+                    else -> {
+                        val extraBuff = if (hero.skillKind == SquirrelSkillKind.GOLDEN_BREW) 25 else 0
+                        val challenge = buildCsatWordChallenge(forceHint = false, skillAmplified = true)
+                        _rpgState.value = cur.copy(
+                            heroMp = spentMp,
+                            heroAtkBuffPercent = cur.heroAtkBuffPercent + extraBuff,
+                            phase = RpgGamePhase.BATTLE_WORD_CHALLENGE,
+                            wordChallenge = challenge,
+                            floatingBannerKo = "${hero.skillNameKo} 준비!"
+                        )
+                    }
+                }
+            }
+            RpgBattleAction.GUARD_HINT -> {
+                val mpGain = (cur.heroMp + 30).coerceAtMost(100)
+                val guardedState = cur.copy(
+                    heroMp = mpGain,
+                    heroGuarding = true,
+                    floatingBannerKo = "방어 태세 · MP +30!",
+                    lastBattleLogKo = "피해를 절반으로 줄이고 마력을 모았어요!"
+                )
+                resolveMonsterCounterTurn(guardedState, hero)
+            }
+        }
+    }
+
+    private fun buildCsatWordChallenge(forceHint: Boolean, skillAmplified: Boolean): RpgWordChallenge {
+        val tier = vocabGradeTier.value
+        val allPool = (VocabRepository.allWords + harvestedApiWords.value).distinctBy { it.id }
+        // Prioritize high-frequency CSAT words matching current grade tier
+        val tierWords = allPool.filter { it.csatFrequency >= 4 || it.grade == ((6 - tier).coerceIn(1, 3)) }
+            .ifEmpty { allPool }
+        val target = tierWords.random()
+        val sentenceObj = target.examples.firstOrNull()
+        val sentenceEn = sentenceObj?.english ?: target.exampleEn.ifBlank { "Let's master the word ${target.word} in a real sentence." }
+        val sentenceKo = sentenceObj?.korean ?: target.exampleKo.ifBlank { target.meaningKo }
+        val distractors = allPool.filter { it.meaningKo != target.meaningKo }
+            .shuffled()
+            .take(3)
+            .map { it.meaningKo }
+        val options = (distractors + target.meaningKo).shuffled()
+        return RpgWordChallenge(
+            word = target,
+            exampleSentenceEn = sentenceEn,
+            exampleSentenceKo = sentenceKo,
+            options = options,
+            showHint = forceHint,
+            isSkillAmplified = skillAmplified,
+            startedAtMs = System.currentTimeMillis()
+        )
+    }
+
+    private fun buildConversationPhraseChallenge(skillAmplified: Boolean): RpgPhraseChallenge {
+        val scenarios = TravelCurriculumRepository.allScenarios
+        val targetScenario = scenarios.random()
+        val targetSentence = targetScenario.sentences.random()
+        val distractors = scenarios.flatMap { it.sentences }
+            .filter { it.english != targetSentence.english }
+            .shuffled()
+            .take(2)
+            .map { it.english }
+        val options = (distractors + targetSentence.english).shuffled()
+        return RpgPhraseChallenge(
+            promptKorean = targetSentence.korean,
+            targetEnglish = targetSentence.english,
+            options = options,
+            speakingTipKo = targetSentence.speakingTipKo,
+            isSkillAmplified = skillAmplified,
+            startedAtMs = System.currentTimeMillis()
+        )
+    }
+
+    fun listenRpgEnglish(text: String) {
+        voiceEngine.speak(text = text, locale = Locale.US, rate = speechRate.value)
+    }
+
+    fun recordMainFocusWordResult(wordId: String, known: Boolean) {
+        if (known) {
+            _spartaState.value = _spartaState.value.copy(
+                sessionKnownCount = _spartaState.value.sessionKnownCount + 1
+            )
+            viewModelScope.launch {
+                localStore.markWordMastered(wordId)
+                val result = localStore.recordLearningAchievement(
+                    xpDelta = 12,
+                    coinsDelta = 8,
+                    wordsDelta = 1,
+                    castleHpDelta = 2,
+                    missionCompleted = false
+                )
+                notifySpecialMilestones(result)
+            }
+        } else {
+            _spartaState.value = _spartaState.value.copy(
+                sessionUnknownCount = _spartaState.value.sessionUnknownCount + 1
+            )
+        }
+    }
+
+    fun submitRpgWordAnswer(selectedMeaning: String) {
+        val cur = _rpgState.value
+        val ch = cur.wordChallenge ?: return
+        val hero = SquirrelRpgRepository.findHeroById(selectedSquirrelHeroId.value)
+        val correct = selectedMeaning == ch.word.meaningKo
+        val elapsedMs = System.currentTimeMillis() - ch.startedAtMs
+        resolvePlayerAttackResult(
+            cur = cur,
+            hero = hero,
+            isCorrect = correct,
+            isPhrase = false,
+            isVoiceSpoken = false,
+            isSkillAmplified = ch.isSkillAmplified,
+            elapsedMs = elapsedMs,
+            correctFeedbackKo = "${ch.word.word} = ${ch.word.meaningKo}!"
+        )
+    }
+
+    fun submitRpgPhraseAnswer(selectedEnglish: String) {
+        val cur = _rpgState.value
+        val ch = cur.phraseChallenge ?: return
+        val hero = SquirrelRpgRepository.findHeroById(selectedSquirrelHeroId.value)
+        val correct = selectedEnglish == ch.targetEnglish
+        val elapsedMs = System.currentTimeMillis() - ch.startedAtMs
+        resolvePlayerAttackResult(
+            cur = cur,
+            hero = hero,
+            isCorrect = correct,
+            isPhrase = true,
+            isVoiceSpoken = false,
+            isSkillAmplified = ch.isSkillAmplified,
+            elapsedMs = elapsedMs,
+            correctFeedbackKo = "회화 성공! \"${ch.targetEnglish}\""
+        )
+    }
+
+    fun startRpgVoicePhraseAttack() {
+        val cur = _rpgState.value
+        val ch = cur.phraseChallenge ?: return
+        val hero = SquirrelRpgRepository.findHeroById(selectedSquirrelHeroId.value)
+        voiceEngine.startListening(
+            locale = Locale.US,
+            onResult = { spoken, durationMs ->
+                val report = PronunciationAnalyzer.analyze(
+                    targetText = ch.targetEnglish,
+                    recognizedText = spoken,
+                    durationMs = durationMs
+                )
+                val passed = report.overallScore >= 45 || spoken.trim().split(Regex("\\s+")).size >= 2
+                resolvePlayerAttackResult(
+                    cur = _rpgState.value,
+                    hero = hero,
+                    isCorrect = passed,
+                    isPhrase = true,
+                    isVoiceSpoken = true,
+                    isSkillAmplified = ch.isSkillAmplified,
+                    elapsedMs = durationMs,
+                    correctFeedbackKo = "스피킹 크리티컬 (${report.overallScore}점)!"
+                )
+            }
+        )
+    }
+
+    private fun resolvePlayerAttackResult(
+        cur: RpgGameUiState,
+        hero: SquirrelJobHero,
+        isCorrect: Boolean,
+        isPhrase: Boolean,
+        isVoiceSpoken: Boolean,
+        isSkillAmplified: Boolean,
+        elapsedMs: Long,
+        correctFeedbackKo: String
+    ) {
+        val chapter = cur.activeChapter ?: return
+        if (isCorrect) {
+            val newCombo = cur.comboCount + 1
+            var dmg = hero.baseAtk.toFloat()
+            if (hero.skillKind == SquirrelSkillKind.WORD_METEOR && !isPhrase) dmg *= 1.25f
+            if (hero.skillKind == SquirrelSkillKind.MELODY_BOOST && isPhrase) dmg *= 1.30f
+            if (hero.skillKind == SquirrelSkillKind.DRAGON_BREAKER && chapter.monster.isBoss) dmg *= 1.30f
+            if (hero.skillKind == SquirrelSkillKind.COMBO_ARROW && newCombo >= 2) dmg *= 1.35f
+            if (hero.skillKind == SquirrelSkillKind.SHADOW_DOUBLE && elapsedMs <= 5000L) dmg *= 1.65f
+            if (isVoiceSpoken) dmg *= 1.35f
+            if (isSkillAmplified) dmg *= 1.65f
+            if (cur.heroAtkBuffPercent > 0) dmg *= (1f + cur.heroAtkBuffPercent / 100f)
+
+            val finalDmg = dmg.toInt().coerceAtLeast(18)
+            val newMonsterHp = (cur.monsterHp - finalDmg).coerceAtLeast(0)
+            val healPassive = if (hero.skillKind == SquirrelSkillKind.SUN_HEAL) 12 else 0
+            val newHeroHp = (cur.heroHp + healPassive).coerceAtMost(cur.heroMaxHp)
+            val newHeroMp = (cur.heroMp + 22).coerceAtMost(100)
+            val newWordsCount = cur.wordsClearedInBattle + 1
+
+            _spartaState.value = _spartaState.value.copy(
+                sessionKnownCount = _spartaState.value.sessionKnownCount + 1
+            )
+
+            if (newMonsterHp <= 0) {
+                val coinMultiplier = if (hero.skillKind == SquirrelSkillKind.GOLDEN_BREW) 1.35f else 1f
+                val earnedCoins = (chapter.rewardCoins * coinMultiplier).toInt()
+                val earnedXp = chapter.rewardXp
+                val earnedCastle = chapter.castleHpBonus
+                viewModelScope.launch {
+                    val streakHit = localStore.recordRpgChapterVictory(
+                        chapterId = chapter.id,
+                        xpDelta = earnedXp,
+                        coinsDelta = earnedCoins,
+                        castleHpBonus = earnedCastle,
+                        wordsCount = newWordsCount
+                    )
+                    if (streakHit != null) {
+                        val todayWords = localStore.userProgressFlow.first().todayWordsCompleted
+                        _streakMilestoneEvent.value = StreakMilestoneEvent(
+                            newStreakCount = streakHit,
+                            todayWordsCompleted = todayWords
+                        )
+                    }
+                    flushActiveStudyTimeLog(showConfirmation = false)
+                }
+                _rpgState.value = cur.copy(
+                    phase = RpgGamePhase.VICTORY,
+                    heroHp = newHeroHp,
+                    heroMp = newHeroMp,
+                    monsterHp = 0,
+                    comboCount = newCombo,
+                    monsterHitTick = cur.monsterHitTick + 1,
+                    wordsClearedInBattle = newWordsCount,
+                    earnedCoins = earnedCoins,
+                    earnedXp = earnedXp,
+                    earnedCastleHp = earnedCastle,
+                    floatingBannerKo = "-$finalDmg 격파!!",
+                    lastBattleLogKo = correctFeedbackKo,
+                    mysteryChestPendingOpen = true,
+                    revealedChestReward = null,
+                    wordChallenge = null,
+                    phraseChallenge = null
+                )
+                return
+            }
+
+            val postAttack = cur.copy(
+                heroHp = newHeroHp,
+                heroMp = newHeroMp,
+                monsterHp = newMonsterHp,
+                comboCount = newCombo,
+                monsterHitTick = cur.monsterHitTick + 1,
+                wordsClearedInBattle = newWordsCount,
+                floatingBannerKo = if (isSkillAmplified || isVoiceSpoken) "-$finalDmg CRITICAL!" else "-$finalDmg 명중!",
+                lastBattleLogKo = correctFeedbackKo,
+                wordChallenge = null,
+                phraseChallenge = null
+            )
+            resolveMonsterCounterTurn(postAttack, hero)
+        } else {
+            _spartaState.value = _spartaState.value.copy(
+                sessionUnknownCount = _spartaState.value.sessionUnknownCount + 1
+            )
+            val missState = cur.copy(
+                comboCount = 0,
+                floatingBannerKo = "빗나감! 정답 확인",
+                lastBattleLogKo = "정답: $correctFeedbackKo",
+                wordChallenge = null,
+                phraseChallenge = null
+            )
+            resolveMonsterCounterTurn(missState, hero)
+        }
+    }
+
+    private fun resolveMonsterCounterTurn(state: RpgGameUiState, hero: SquirrelJobHero) {
+        val monster = state.activeChapter?.monster ?: return
+        if (state.monsterStunned) {
+            _rpgState.value = state.copy(
+                phase = RpgGamePhase.BATTLE_ACTION,
+                monsterStunned = false,
+                turnNumber = state.turnNumber + 1,
+                lastBattleLogKo = "${state.lastBattleLogKo} · 적이 기절해 공격 못함!"
+            )
+            return
+        }
+        if (state.heroShieldActive) {
+            _rpgState.value = state.copy(
+                phase = RpgGamePhase.BATTLE_ACTION,
+                heroShieldActive = false,
+                heroGuarding = false,
+                turnNumber = state.turnNumber + 1,
+                floatingBannerKo = "방어막으로 피해 0!",
+                lastBattleLogKo = "${monster.nameKo}의 공격을 방어막이 막았어요!"
+            )
+            return
+        }
+        val rawDmg = monster.atk
+        val actualDmg = if (state.heroGuarding) (rawDmg / 2).coerceAtLeast(4) else rawDmg
+        val remainingHp = (state.heroHp - actualDmg).coerceAtLeast(0)
+
+        if (remainingHp <= 0 && state.heroReviveAvailable) {
+            val reviveHp = (state.heroMaxHp * 0.4f).toInt().coerceAtLeast(35)
+            _rpgState.value = state.copy(
+                phase = RpgGamePhase.BATTLE_ACTION,
+                heroHp = reviveHp,
+                heroReviveAvailable = false,
+                heroGuarding = false,
+                heroHitTick = state.heroHitTick + 1,
+                turnNumber = state.turnNumber + 1,
+                floatingBannerKo = "왕실 요리사 부활! HP +$reviveHp",
+                lastBattleLogKo = "위기에서 특제 도토리 요리로 부활했어요!"
+            )
+            return
+        }
+
+        if (remainingHp <= 0) {
+            _rpgState.value = state.copy(
+                phase = RpgGamePhase.DEFEAT,
+                heroHp = 0,
+                heroGuarding = false,
+                heroHitTick = state.heroHitTick + 1,
+                floatingBannerKo = "체력 소진!",
+                lastBattleLogKo = "${monster.nameKo}에게 밀렸어요. 다시 도전해 보세요!"
+            )
+            return
+        }
+
+        _rpgState.value = state.copy(
+            phase = RpgGamePhase.BATTLE_ACTION,
+            heroHp = remainingHp,
+            heroGuarding = false,
+            heroHitTick = state.heroHitTick + 1,
+            turnNumber = state.turnNumber + 1,
+            lastBattleLogKo = "${state.lastBattleLogKo} · ${monster.nameKo} 반격 -$actualDmg"
+        )
+    }
+
+    fun openMysteryTreasureChest() {
+        val pick = secretTreasurePool.random()
+        val today = SimpleDateFormat("M/d HH:mm", Locale.KOREA).format(Date())
+        val reward = MysteryChestReward(
+            id = "chest_${UUID.randomUUID().toString().take(6)}",
+            titleKo = pick.first,
+            rarityKo = pick.second,
+            categoryKo = pick.third,
+            openedDateLabel = today
+        )
+        viewModelScope.launch {
+            localStore.consumeMysteryChestAndSaveReward(reward)
+            _rpgState.value = _rpgState.value.copy(
+                mysteryChestPendingOpen = false,
+                revealedChestReward = reward
+            )
+            showToast("미스터리 보물상자 오픈! [${reward.rarityKo}] ${reward.titleKo} 획득!")
+        }
+    }
+
+    fun advanceOrReplayRpgChapter() {
+        val curNum = _rpgState.value.activeChapter?.number ?: 1
+        val nextNum = if (curNum < 6) curNum + 1 else 1
+        startRpgChapter(nextNum)
+    }
+
+    fun retryCurrentRpgChapter() {
+        val curNum = _rpgState.value.activeChapter?.number ?: 1
+        startRpgChapter(curNum)
+    }
+
+    private fun notifySpecialMilestones(result: LearningAchievementResult) {
+        if (result.streakMilestoneHit != null) {
+            _streakMilestoneEvent.value = StreakMilestoneEvent(
+                newStreakCount = result.streakMilestoneHit,
+                todayWordsCompleted = result.todayWordsCompleted
+            )
+        }
+        notifySpecialMilestones(result.unlockedBoss, result.leveledUp)
+    }
+
     private fun notifySpecialMilestones(bossUnlocked: Boolean, leveledUp: Boolean) {
         when {
             bossUnlocked -> showToast("7회 미션 돌파!! 난이도 상승 + 시험 마왕 보스전이 열렸습니다!")
-            leveledUp -> showToast("레벨 업!! 예습·복습·만점 누적으로 '선물 요청권 +1장' 획득!")
+            leveledUp -> showToast("레벨 업!! 미스터리 보물상자 기운이 모였습니다!")
         }
     }
 

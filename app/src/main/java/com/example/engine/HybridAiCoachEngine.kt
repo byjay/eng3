@@ -167,7 +167,7 @@ class HybridAiCoachEngine(
                     }
                 }
                 val raw = sb.toString().trim()
-                if (raw.isBlank()) null else parseStructuredReply(raw, "실제 Gemini 영상통화 AI")
+                if (raw.isBlank()) null else parseStructuredReply(raw, "실제 Gemini 회화학습 AI")
             }
         } catch (e: TimeoutCancellationException) {
             Log.w(TAG, "Gemini stream timed out", e)

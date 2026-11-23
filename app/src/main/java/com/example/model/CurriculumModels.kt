@@ -72,8 +72,17 @@ data class PatternDrillItem(
 data class ParentProfiles(
     val dadName: String = "아빠 국왕",
     val momName: String = "엄마 왕비",
-    val daughterName: String = "빅뚱",
+    val daughterName: String = "원삐",
     val parentPin: String = "1234"
+)
+
+data class GuestInviteSession(
+    val isGuestMode: Boolean = false,
+    val inviteCode: String = "",
+    val hostNickname: String = "원삐",
+    val guestNickname: String = "",
+    val myGeneratedCode: String = "",
+    val kakaoLinked: Boolean = false
 )
 
 data class GiftRequestItem(
@@ -220,7 +229,7 @@ data class CollectibleItem(
 enum class AiEngineMode(val labelKo: String, val descKo: String) {
     BUILT_IN_GEMINI(
         "실제 Gemini AI (기본)",
-        "API 키 없이 즉시 원어민 선생님과 실시간 영상통화"
+        "API 키 없이 즉시 원어민 선생님과 실시간 회화학습"
     ),
     EXTERNAL_10_SLOT_ROTATOR(
         "10슬롯 LLM 자동 순환",
@@ -325,7 +334,7 @@ data class StudyTimeLogEntry(
     val dateIso: String,
     val startTimeLabel: String,
     val endTimeLabel: String,
-    val playerName: String, // "빅뚱" or "스몰뚱"
+    val playerName: String, // "원삐", "투삐", or "손님"
     val activityTypeKo: String,
     val methodKo: String,
     val durationSec: Int,

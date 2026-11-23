@@ -77,7 +77,7 @@ object VoiceCommandParser {
         ) {
             return VoiceSettingCommand.SetHandsFree(
                 true,
-                "연속 영상통화 모드를 켰어! 내가 말 끝나면 바로 네 차례야!"
+                "연속 회화학습 모드를 켰어! 내가 말 끝나면 바로 네 차례야!"
             )
         }
 
@@ -116,7 +116,7 @@ object VoiceCommandParser {
             if (matchedTutor != null) {
                 return VoiceSettingCommand.SwitchTutor(
                     matchedTutor,
-                    "${matchedTutor.koreanNickname}으로 영상통화를 바로 연결할게!"
+                    "${matchedTutor.koreanNickname}으로 회화학습을 바로 연결할게!"
                 )
             }
         }

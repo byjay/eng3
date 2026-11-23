@@ -203,8 +203,8 @@ object VocabRepository {
             )
             else -> VocabExample(
                 labelKo = "왕국 수호 응용문",
-                english = "With great $w, Big-Ttung and Small-Ttung defeated the exam monster effortlessly!",
-                korean = "멋진 '$m' 덕분에 빅뚱과 스몰뚱은 시험 괴물을 가뿐히 물리쳤어!",
+                english = "With great $w, One-Ppi and Two-Ppi defeated the exam monster effortlessly!",
+                korean = "멋진 '$m' 덕분에 원삐와 투삐는 시험 괴물을 가뿐히 물리쳤어!",
                 ipaHint = r.ipa
             )
         }

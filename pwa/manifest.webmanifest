@@ -1,0 +1,12 @@
+{
+  "name": "아빠가딸들을 위한 학습도구",
+  "short_name": "다람쥐영어왕국",
+  "description": "흰색 피그미 다람쥐 RPG · 수능 빈출 단어·문장 · 미국 친구 라이브 회화학습",
+  "start_url": "./index.html?source=pwa",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF8F1",
+  "theme_color": "#148F68",
+  "lang": "ko-KR",
+  "categories": ["education", "games"]
+}

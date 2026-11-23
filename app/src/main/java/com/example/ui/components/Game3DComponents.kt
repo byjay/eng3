@@ -43,6 +43,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -220,9 +221,10 @@ fun GameHudBar(
             HudBadgeItem(
                 icon = Icons.Default.LocalFireDepartment,
                 tint = CoralOrange,
-                value = "${progress.streakCount}일",
-                label = "스트릭",
-                onClick = {}
+                value = "${progress.streakCount}회",
+                label = "목표 스트릭",
+                onClick = {},
+                tag = "hud_streak_badge"
             )
             HudBadgeItem(
                 icon = Icons.Default.MonetizationOn,
@@ -294,21 +296,6 @@ fun VoiceWaveformOrb3D(
     modifier: Modifier = Modifier,
     tag: String = "voice_mic_orb"
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "voiceOrbPulse")
-    val pulse by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(650, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
-    val dynamicScale = when {
-        isListening -> (1.0f + (rmsDb / 28f)).coerceIn(1.0f, 1.32f)
-        isSpeaking -> pulse
-        else -> 1.0f
-    }
     val mainColor = when {
         isListening -> SpartaRed
         isSpeaking -> SkyQuestBlue
@@ -325,12 +312,10 @@ fun VoiceWaveformOrb3D(
         contentAlignment = Alignment.Center
     ) {
         if (isListening || isSpeaking) {
-            Box(
-                modifier = Modifier
-                    .size(82.dp)
-                    .scale(dynamicScale)
-                    .clip(CircleShape)
-                    .background(mainColor.copy(alpha = 0.22f))
+            ActiveVoicePulseHalo(
+                isListening = isListening,
+                rmsDb = rmsDb,
+                mainColor = mainColor
             )
         }
         Box(
@@ -362,6 +347,39 @@ fun VoiceWaveformOrb3D(
             )
         }
     }
+}
+
+@Composable
+private fun ActiveVoicePulseHalo(
+    isListening: Boolean,
+    rmsDb: Float,
+    mainColor: Color
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "voiceOrbPulse")
+    val pulseState = infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(650, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+    Box(
+        modifier = Modifier
+            .size(82.dp)
+            .graphicsLayer {
+                val sc = if (isListening) {
+                    (1.0f + (rmsDb / 28f)).coerceIn(1.0f, 1.30f)
+                } else {
+                    pulseState.value
+                }
+                scaleX = sc
+                scaleY = sc
+            }
+            .clip(CircleShape)
+            .background(mainColor.copy(alpha = 0.22f))
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

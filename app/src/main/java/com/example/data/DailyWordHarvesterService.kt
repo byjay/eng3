@@ -245,7 +245,7 @@ object DailyWordHarvesterService {
                 VocabExample("상황 핵심 회화", "Your idea sounds really $word and helpful for our trip!", "네 아이디어가 우리 여행에 정말 '$word($shortDef)' 하고 도움 되겠다!"),
                 VocabExample("수능 독해 지문", "The passage highlights why a $word approach leads to better scores.", "지문은 왜 '$word' 접근법이 더 좋은 성적으로 이어지는지 강조한다."),
                 VocabExample("원어민 친구 수다", "Honestly, I feel much more $word after practicing with you.", "솔직히 너랑 연습하고 나니까 훨씬 '$word' 느낌이 들어."),
-                VocabExample("왕국 수호 미션", "A $word Big-Ttung and Small-Ttung team always wins the seven-mission boss battle!", "'$word' 빅뚱·스몰뚱 팀은 언제나 7회 보스전에서 승리해!")
+                VocabExample("왕국 수호 미션", "A $word One-Ppi and Two-Ppi team always wins the seven-mission boss battle!", "'$word' 원삐·투삐 팀은 언제나 7회 보스전에서 승리해!")
             )
             else -> listOf(
                 VocabExample("상황 핵심 회화", "We talked about this $word during our family dinner last night.", "어젯밤 가족 저녁 식사 때 이 '$word($shortDef)'에 대해 이야기했어."),

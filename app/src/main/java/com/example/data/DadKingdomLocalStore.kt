@@ -8,9 +8,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.model.DadAllowanceMission
 import com.example.model.GiftRequestItem
+import com.example.model.GuestInviteSession
 import com.example.model.KakaoFriend
 import com.example.model.KakaoSessionState
 import com.example.model.KingdomProgressStats
+import com.example.model.MysteryChestReward
 import com.example.model.ParentProfiles
 import com.example.model.ScorecardEntry
 import com.example.model.StudyScheduleItem
@@ -26,6 +28,13 @@ import java.util.Date
 import java.util.Locale
 
 private val Context.dadKingdomDataStore by preferencesDataStore(name = "dad_daughter_kingdom_store")
+
+data class LearningAchievementResult(
+    val unlockedBoss: Boolean,
+    val leveledUp: Boolean,
+    val streakMilestoneHit: Int? = null,
+    val todayWordsCompleted: Int = 0
+)
 
 class DadKingdomLocalStore(private val context: Context) {
 
@@ -77,11 +86,53 @@ class DadKingdomLocalStore(private val context: Context) {
     private val levelTestDoneKey = booleanPreferencesKey("level_test_done")
     private val cloudflareWorkerUrlKey = stringPreferencesKey("cloudflare_worker_url")
     private val studyTimeLogsKey = stringPreferencesKey("study_time_logs_json")
+    private val guestInviteCodeKey = stringPreferencesKey("guest_invite_code")
+    private val guestHostKey = stringPreferencesKey("guest_host_nickname")
+    private val guestModeKey = booleanPreferencesKey("guest_mode_active")
+    private val myGeneratedInviteCodeKey = stringPreferencesKey("my_generated_invite_code")
+
+    // White Pygmy Squirrel RPG Hero + Story Chapters + Mystery Chests (no spoilers!)
+    private val selectedSquirrelHeroKey = stringPreferencesKey("selected_squirrel_hero_id")
+    private val clearedRpgChaptersKey = stringPreferencesKey("cleared_rpg_chapters_json")
+    private val unopenedChestsKey = intPreferencesKey("unopened_mystery_chests")
+    private val openedTreasuresKey = stringPreferencesKey("opened_mystery_treasures_json")
 
     private fun todayIso(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
+    val guestInviteSessionFlow: Flow<GuestInviteSession> = context.dadKingdomDataStore.data.map { prefs ->
+        val isGuest = prefs[guestModeKey] ?: false
+        val code = prefs[guestInviteCodeKey] ?: ""
+        val host = prefs[guestHostKey] ?: "원삐"
+        val myCode = prefs[myGeneratedInviteCodeKey] ?: ""
+        val kakaoLinked = !(prefs[kakaoTokenKey].isNullOrBlank())
+        GuestInviteSession(
+            isGuestMode = isGuest,
+            inviteCode = code,
+            hostNickname = host,
+            guestNickname = if (isGuest) "손님($code)" else "",
+            myGeneratedCode = myCode,
+            kakaoLinked = kakaoLinked
+        )
+    }
+
     val studyLogsFlow: Flow<List<StudyTimeLogEntry>> = context.dadKingdomDataStore.data.map { prefs ->
         parseStudyLogs(prefs[studyTimeLogsKey])
+    }
+
+    val selectedSquirrelHeroIdFlow: Flow<String> = context.dadKingdomDataStore.data.map { prefs ->
+        prefs[selectedSquirrelHeroKey] ?: "hero_luna"
+    }
+
+    val clearedRpgChaptersFlow: Flow<Set<String>> = context.dadKingdomDataStore.data.map { prefs ->
+        parseStringList(prefs[clearedRpgChaptersKey]).toSet()
+    }
+
+    val unopenedChestsFlow: Flow<Int> = context.dadKingdomDataStore.data.map { prefs ->
+        (prefs[unopenedChestsKey] ?: 0).coerceAtLeast(0)
+    }
+
+    val openedTreasuresFlow: Flow<List<MysteryChestReward>> = context.dadKingdomDataStore.data.map { prefs ->
+        parseOpenedTreasures(prefs[openedTreasuresKey])
     }
 
     val harvestedWordsFlow: Flow<List<com.example.model.VocabWord>> = context.dadKingdomDataStore.data.map { prefs ->
@@ -106,10 +157,14 @@ class DadKingdomLocalStore(private val context: Context) {
 
     private fun sanitizePlayerName(raw: String?): String {
         val trimmed = raw?.trim().orEmpty()
-        return if (trimmed.isBlank() || trimmed.contains("공주") || trimmed.contains("우리 딸") || trimmed.contains("우리딸")) {
-            "빅뚱"
-        } else {
-            trimmed
+        return when {
+            trimmed.isBlank() ||
+                trimmed.contains("공주") ||
+                trimmed.contains("우리 딸") ||
+                trimmed.contains("우리딸") ||
+                trimmed.contains("빅뚱") -> "원삐"
+            trimmed.contains("스몰뚱") -> "투삐"
+            else -> trimmed
         }
     }
 
@@ -144,18 +199,21 @@ class DadKingdomLocalStore(private val context: Context) {
 
     val userProgressFlow: Flow<UserProgress> = context.dadKingdomDataStore.data.map { prefs ->
         val items = parseStringList(prefs[unlockedItemsKey]).ifEmpty { listOf("badge_starter") }
+        val today = todayIso()
+        val storedDate = prefs[lastStudyDateKey] ?: today
+        val effectiveTodayWords = if (storedDate == today) (prefs[todayWordsKey] ?: 0) else 0
         UserProgress(
             userId = "local_player",
             displayName = sanitizePlayerName(prefs[daughterNameKey]),
             selectedGrade = prefs[selectedGradeKey] ?: 1,
             selectedTeacherId = prefs[selectedTeacherKey] ?: "emma_uk",
-            dailyGoal = prefs[dailyGoalKey] ?: 30,
-            streakCount = prefs[streakKey] ?: 1,
+            dailyGoal = prefs[dailyGoalKey] ?: 10,
+            streakCount = prefs[streakKey] ?: 0,
             totalXp = prefs[totalXpKey] ?: 150,
             coins = prefs[coinsKey] ?: 250,
             hearts = prefs[heartsKey] ?: 5,
-            todayWordsCompleted = prefs[todayWordsKey] ?: 0,
-            lastStudyDate = prefs[lastStudyDateKey] ?: todayIso(),
+            todayWordsCompleted = effectiveTodayWords,
+            lastStudyDate = storedDate,
             unlockedItems = items
         )
     }
@@ -226,6 +284,24 @@ class DadKingdomLocalStore(private val context: Context) {
     suspend fun updateActivePlayerName(playerName: String) {
         context.dadKingdomDataStore.edit { prefs ->
             prefs[daughterNameKey] = sanitizePlayerName(playerName).take(24)
+            if (playerName == "원삐" || playerName == "투삐") {
+                prefs[guestModeKey] = false
+            }
+        }
+    }
+
+    suspend fun saveGeneratedInviteCode(code: String) {
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[myGeneratedInviteCodeKey] = code
+        }
+    }
+
+    suspend fun activateGuestByInviteCode(code: String, hostNickname: String) {
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[guestModeKey] = true
+            prefs[guestInviteCodeKey] = code
+            prefs[guestHostKey] = hostNickname.ifBlank { "원삐" }
+            prefs[daughterNameKey] = "손님($code)"
         }
     }
 
@@ -252,15 +328,33 @@ class DadKingdomLocalStore(private val context: Context) {
         reviewDelta: Int = 0,
         perfectDelta: Int = 0,
         newHearts: Int? = null
-    ): Pair<Boolean, Boolean> { // Pair(unlockedBoss, leveledUp)
+    ): LearningAchievementResult {
         var unlockedBoss = false
         var leveledUp = false
+        var streakMilestoneHit: Int? = null
+        var updatedTodayWords = 0
+        val today = todayIso()
         context.dadKingdomDataStore.edit { prefs ->
             prefs[totalXpKey] = ((prefs[totalXpKey] ?: 150) + xpDelta).coerceAtLeast(0)
             prefs[coinsKey] = ((prefs[coinsKey] ?: 250) + coinsDelta).coerceAtLeast(0)
-            prefs[todayWordsKey] = ((prefs[todayWordsKey] ?: 0) + wordsDelta).coerceAtLeast(0)
+
+            val prevDate = prefs[lastStudyDateKey] ?: today
+            val oldTodayWords = if (prevDate == today) (prefs[todayWordsKey] ?: 0) else 0
+            val newTodayWords = (oldTodayWords + wordsDelta).coerceAtLeast(0)
+            updatedTodayWords = newTodayWords
+            prefs[todayWordsKey] = newTodayWords
+
+            if (wordsDelta > 0) {
+                val milestonesCrossed = (newTodayWords / 10) - (oldTodayWords / 10)
+                if (milestonesCrossed > 0) {
+                    val nextStreak = (prefs[streakKey] ?: 0) + milestonesCrossed
+                    prefs[streakKey] = nextStreak
+                    streakMilestoneHit = nextStreak
+                }
+            }
+
             prefs[castleHpKey] = ((prefs[castleHpKey] ?: 40) + castleHpDelta).coerceIn(0, 100)
-            prefs[lastStudyDateKey] = todayIso()
+            prefs[lastStudyDateKey] = today
             if (newHearts != null) {
                 prefs[heartsKey] = newHearts.coerceIn(1, 5)
             }
@@ -295,7 +389,12 @@ class DadKingdomLocalStore(private val context: Context) {
                 leveledUp = true
             }
         }
-        return unlockedBoss to leveledUp
+        return LearningAchievementResult(
+            unlockedBoss = unlockedBoss,
+            leveledUp = leveledUp,
+            streakMilestoneHit = streakMilestoneHit,
+            todayWordsCompleted = updatedTodayWords
+        )
     }
 
     suspend fun clearBossBattle() {
@@ -430,8 +529,8 @@ class DadKingdomLocalStore(private val context: Context) {
         ),
         DadAllowanceMission(
             id = "mission_royal_voice",
-            titleKo = "마법 통신탑 해방: 원어민 영상통화 5턴 수다",
-            descriptionKo = "진짜 영상통화 화면에서 원어민 선생님과 영어 질문·수다 5번 성공하기!",
+            titleKo = "마법 통신탑 해방: 원어민 회화학습 5턴 수다",
+            descriptionKo = "원어민 회화학습 화면에서 선생님과 영어 질문·수다 5번 성공하기!",
             rewardWon = 2000,
             castleHpBonus = 12,
             categoryKo = "엄마 왕비 퀘스트"
@@ -476,7 +575,7 @@ class DadKingdomLocalStore(private val context: Context) {
     private fun defaultSchedules(): List<StudyScheduleItem> = listOf(
         StudyScheduleItem("sch_1", "월~금", "오후 8:00", "성벽 방어: 수능 빈출·랜덤 영단어 + 예문 4개", "ABC 순서 없이 읽고·듣고·말하기 15분"),
         StudyScheduleItem("sch_2", "화·목", "오후 8:30", "1~3문장 패턴 교체 & 반복 듣기 도장", "자기소개 및 마트/카페 실전 문장 3회 반복"),
-        StudyScheduleItem("sch_3", "토요일", "오전 10:30", "원어민 선생님과 진짜 영상통화 수다", "한국어로 궁금한 문장 물어보고 바로 발음 교정"),
+        StudyScheduleItem("sch_3", "토요일", "오전 10:30", "원어민 선생님과 LIVE 회화학습", "한국어로 궁금한 문장 물어보고 바로 발음 교정"),
         StudyScheduleItem("sch_4", "일요일", "오후 7:00", "아빠 국왕·엄마 왕비 주간 정산식", "성적표 확인 · 용돈 승인 · 선물 요청서 제출")
     )
 
@@ -806,6 +905,98 @@ class DadKingdomLocalStore(private val context: Context) {
                     wordsStudied = o.optInt("wordsStudied", 0).coerceAtLeast(0),
                     knownCount = o.optInt("knownCount", 0).coerceAtLeast(0),
                     unknownCount = o.optInt("unknownCount", 0).coerceAtLeast(0)
+                )
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun saveSelectedSquirrelHero(heroId: String) {
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[selectedSquirrelHeroKey] = heroId
+        }
+    }
+
+    suspend fun recordRpgChapterVictory(
+        chapterId: String,
+        xpDelta: Int,
+        coinsDelta: Int,
+        castleHpBonus: Int,
+        wordsCount: Int
+    ): Int? {
+        var streakMilestoneHit: Int? = null
+        val today = todayIso()
+        context.dadKingdomDataStore.edit { prefs ->
+            val cleared = parseStringList(prefs[clearedRpgChaptersKey]).toMutableSet()
+            cleared.add(chapterId)
+            prefs[clearedRpgChaptersKey] = serializeStringList(cleared.toList())
+            prefs[totalXpKey] = (prefs[totalXpKey] ?: 0) + xpDelta
+            prefs[coinsKey] = (prefs[coinsKey] ?: 250) + coinsDelta
+            prefs[castleHpKey] = ((prefs[castleHpKey] ?: 40) + castleHpBonus).coerceAtMost(100)
+            val prevDate = prefs[lastStudyDateKey] ?: today
+            val oldTodayWords = if (prevDate == today) (prefs[todayWordsKey] ?: 0) else 0
+            val newTodayWords = (oldTodayWords + wordsCount).coerceAtLeast(0)
+            prefs[todayWordsKey] = newTodayWords
+            prefs[lastStudyDateKey] = today
+            if (wordsCount > 0) {
+                val crossed = (newTodayWords / 10) - (oldTodayWords / 10)
+                if (crossed > 0) {
+                    val nextStreak = (prefs[streakKey] ?: 0) + crossed
+                    prefs[streakKey] = nextStreak
+                    streakMilestoneHit = nextStreak
+                }
+            }
+            prefs[unopenedChestsKey] = (prefs[unopenedChestsKey] ?: 0) + 1
+        }
+        return streakMilestoneHit
+    }
+
+    suspend fun grantBonusCoins(coinsDelta: Int) {
+        if (coinsDelta <= 0) return
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[coinsKey] = (prefs[coinsKey] ?: 250) + coinsDelta
+        }
+    }
+
+    suspend fun consumeMysteryChestAndSaveReward(reward: MysteryChestReward) {
+        context.dadKingdomDataStore.edit { prefs ->
+            val current = (prefs[unopenedChestsKey] ?: 0)
+            if (current > 0) {
+                prefs[unopenedChestsKey] = current - 1
+            }
+            val existing = parseOpenedTreasures(prefs[openedTreasuresKey])
+            val updated = (listOf(reward) + existing).take(60)
+            prefs[openedTreasuresKey] = serializeOpenedTreasures(updated)
+        }
+    }
+
+    private fun serializeOpenedTreasures(list: List<MysteryChestReward>): String {
+        val arr = JSONArray()
+        list.forEach { item ->
+            arr.put(
+                JSONObject().apply {
+                    put("id", item.id)
+                    put("titleKo", item.titleKo)
+                    put("rarityKo", item.rarityKo)
+                    put("categoryKo", item.categoryKo)
+                    put("openedDateLabel", item.openedDateLabel)
+                }
+            )
+        }
+        return arr.toString()
+    }
+
+    private fun parseOpenedTreasures(json: String?): List<MysteryChestReward> {
+        if (json.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val arr = JSONArray(json)
+            (0 until arr.length()).map { idx ->
+                val o = arr.getJSONObject(idx)
+                MysteryChestReward(
+                    id = o.optString("id"),
+                    titleKo = o.optString("titleKo"),
+                    rarityKo = o.optString("rarityKo", "희귀"),
+                    categoryKo = o.optString("categoryKo", "비밀 보물"),
+                    openedDateLabel = o.optString("openedDateLabel", "")
                 )
             }
         }.getOrDefault(emptyList())

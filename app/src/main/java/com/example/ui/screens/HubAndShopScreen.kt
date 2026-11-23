@@ -34,7 +34,9 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
@@ -73,14 +75,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.HumanTutorRepository
+import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.filled.Inventory2
 import com.example.model.AiEngineMode
 import com.example.model.CollectibleItem
 import com.example.model.DadAllowanceMission
 import com.example.model.GiftRequestItem
+import com.example.model.GuestInviteSession
 import com.example.model.KakaoSessionState
 import com.example.model.KingdomProgressStats
 import com.example.model.LlmSlotConfig
+import com.example.model.MysteryChestReward
 import com.example.model.ParentProfiles
 import com.example.model.ScorecardEntry
 import com.example.model.StudyScheduleItem
@@ -113,6 +118,9 @@ fun HubAndShopScreen(
     vocabGradeTier: Int,
     masteredWordsCount: Int,
     harvestedApiCount: Int,
+    clearedRpgChaptersCount: Int,
+    unopenedChests: Int,
+    openedTreasures: List<MysteryChestReward>,
     giftRequests: List<GiftRequestItem>,
     dadMissions: List<DadAllowanceMission>,
     scorecards: List<ScorecardEntry>,
@@ -120,11 +128,13 @@ fun HubAndShopScreen(
     studyLogs: List<StudyTimeLogEntry>,
     activeStudyElapsedSec: Int,
     kakaoSession: KakaoSessionState,
+    guestInviteSession: GuestInviteSession,
     cloudflareWorkerUrl: String,
     cloudflareStatusKo: String,
     engineMode: AiEngineMode,
     llmSlots: List<LlmSlotConfig>,
     slotTestResults: Map<Int, String>,
+    onOpenMysteryChest: () -> Unit,
     onSaveParentProfiles: (ParentProfiles) -> Unit,
     onCreateGiftRequest: (targetParent: String, titleKo: String, reasonKo: String) -> Unit,
     onApproveGiftWithPin: (giftId: String, pin: String) -> Boolean,
@@ -140,6 +150,9 @@ fun HubAndShopScreen(
     onLaunchKakaoLogin: () -> Unit,
     onRefreshKakaoFriends: () -> Unit,
     onLogoutKakao: () -> Unit,
+    onGenerateAndShareGuestInvite: () -> Unit,
+    onRegenerateInviteCode: () -> Unit,
+    onAcceptGuestInviteCode: (String) -> Unit,
     onRegisterCloudflareLevel: (String) -> Unit,
     onBuyCollectible: (CollectibleItem) -> Unit,
     onRefillHearts: () -> Unit,
@@ -147,8 +160,8 @@ fun HubAndShopScreen(
     onSaveLlmSlot: (LlmSlotConfig) -> Unit,
     onTestLlmSlot: (LlmSlotConfig) -> Unit
 ) {
-    // 0 = 아빠·선물, 1 = 통계·로그, 2 = 용돈·점수, 3 = 카카오·CF·AI
-    var activeSubTab by remember { mutableIntStateOf(0) }
+    // 0 = 가족·보물, 1 = 통계·검증, 2 = 용돈·점수, 3 = 카카오·CF·AI
+    var activeSubTab by remember { mutableIntStateOf(1) }
 
     // Parent PIN Dialog State (shared for Gift approval & Allowance Mission approval)
     var pinDialogTitle by remember { mutableStateOf<String?>(null) }
@@ -219,8 +232,8 @@ fun HubAndShopScreen(
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 val tabs = listOf(
-                    Triple(0, "아빠·선물", TrophyGold to TrophyGoldShadow),
-                    Triple(1, "통계·로그", SkyQuestBlue to SkyQuestBlueShadow),
+                    Triple(1, "달력·검증", SkyQuestBlue to SkyQuestBlueShadow),
+                    Triple(0, "가족·보물", TrophyGold to TrophyGoldShadow),
                     Triple(2, "용돈·점수", AdventureEmerald to AdventureEmeraldShadow),
                     Triple(3, "카카오·AI", RoyalPurple to RoyalPurpleShadow)
                 )
@@ -244,18 +257,21 @@ fun HubAndShopScreen(
             }
         }
 
-        // ==================== TAB 1: EXACT STUDY TIME LOGS & STATISTICS ====================
+        // ==================== TAB 1: MONTHLY STUDY CALENDAR & CSAT VERIFICATION TABLE ====================
         if (activeSubTab == 1) {
             item {
                 StudyStatsOverviewCards(
                     logs = studyLogs,
                     activeStudyElapsedSec = activeStudyElapsedSec,
-                    onFlushCurrentLog = onFlushStudyLog
+                    onFlushCurrentLog = onFlushStudyLog,
+                    masteredWordsCount = masteredWordsCount,
+                    vocabGradeTier = vocabGradeTier,
+                    clearedRpgChapters = clearedRpgChaptersCount
                 )
             }
         }
 
-        // ==================== TAB 0: PARENTS (DAD & MOM) + GIFT REQUESTS ====================
+        // ==================== TAB 0: PARENTS (DAD & MOM) + GUEST INVITE + SPOILER-FREE MYSTERY TREASURE VAULT ====================
         if (activeSubTab == 0) {
             item {
                 ParentRegistrationCard(
@@ -265,108 +281,151 @@ fun HubAndShopScreen(
             }
 
             item {
-                GiftRequestComposerCard(
-                    parents = parents,
-                    kingdomStats = kingdomStats,
-                    onSubmitGift = onCreateGiftRequest
+                GuestInviteStandaloneCard(
+                    session = guestInviteSession,
+                    kakaoSession = kakaoSession,
+                    onShareKakaoInvite = onGenerateAndShareGuestInvite,
+                    onRegenerateCode = onRegenerateInviteCode,
+                    onEnterGuestCode = onAcceptGuestInviteCode,
+                    onLinkPersonalKakao = onLaunchKakaoLogin
                 )
             }
 
+            // Sealed Mystery Treasure Chests (ZERO spoilers or item previews before unlocking!)
             item {
-                Text(
-                    text = "왕실 선물 요청함 (${giftRequests.size}건)",
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
-
-            if (giftRequests.isEmpty()) {
-                item {
-                    Elevated3DCard {
-                        Text(
-                            text = "아직 등록된 선물 요청이 없어요! 예습·복습·만점을 모아 선물 요청권을 얻고 아빠나 엄마께 신청해 보세요.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            } else {
-                items(giftRequests, key = { it.id }) { gift ->
-                    val isDad = gift.targetParent == "아빠"
-                    val parentLabel = if (isDad) parents.dadName else parents.momName
-                    Elevated3DCard(
-                        accentShadow = if (gift.isApproved) AdventureEmeraldShadow.copy(alpha = 0.4f)
-                        else TrophyGoldShadow.copy(alpha = 0.4f)
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                Elevated3DCard(accentShadow = TrophyGoldShadow.copy(alpha = 0.45f)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Inventory2,
+                                    contentDescription = null,
+                                    tint = TrophyGoldShadow,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "비밀 보물 창고",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = AdventureEmerald.copy(alpha = 0.14f)
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (isDad) SkyQuestBlue.copy(alpha = 0.16f) else CoralOrange.copy(alpha = 0.16f)
+                                Text(
+                                    text = "획득 ${openedTreasures.size}개",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = AdventureEmeraldShadow,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        if (unopenedChests > 0) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color(0xFF1D2A38),
+                                border = BorderStroke(1.5.dp, TrophyGold),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Text(
-                                        text = "받는 분: $parentLabel (${gift.targetParent})",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = if (isDad) SkyQuestBlueShadow else CoralOrangeShadow,
-                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                                    )
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (gift.isApproved) AdventureEmerald else TrophyGold
-                                ) {
-                                    Text(
-                                        text = if (gift.isApproved) "왕실 승인 완료!" else "승인 대기 중",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                        color = if (gift.isApproved) Color.White else Color(0xFF3E2C00),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Help,
+                                            contentDescription = "비밀 보물상자",
+                                            tint = TrophyGold,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Text(
+                                            text = "??? 미개봉 보물상자 ${unopenedChests}개 도착",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = TrophyGold
+                                        )
+                                    }
+                                    Tactile3DButton(
+                                        text = "??? 보물상자 열기",
+                                        icon = Icons.Default.AutoAwesome,
+                                        containerColor = TrophyGold,
+                                        shadowColor = TrophyGoldShadow,
+                                        contentColor = Color(0xFF3E2C00),
+                                        height = 46.dp,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        tag = "hub_open_mystery_chest",
+                                        onClick = onOpenMysteryChest
                                     )
                                 }
                             }
-
-                            Text(
-                                text = gift.giftTitleKo,
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
-                            )
-                            Text(
-                                text = "사유: ${gift.reasonKo} · 신청 Lv.${gift.requiredLevel} (${gift.createdDateLabel})",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Tactile3DButton(
-                                    text = "카톡 요청장 전송",
-                                    icon = Icons.Default.Share,
-                                    containerColor = KakaoYellow,
-                                    shadowColor = Color(0xFFD1BC00),
-                                    contentColor = KakaoBrown,
-                                    height = 44.dp,
-                                    modifier = Modifier.weight(1f),
-                                    tag = "gift_kakao_share_${gift.id}",
-                                    onClick = { onShareGiftToKakao(gift) }
+                                Text(
+                                    text = "미션·RPG 챕터를 달성하면 비밀 보물상자가 나타납니다.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(12.dp)
                                 )
-                                if (!gift.isApproved) {
-                                    Tactile3DButton(
-                                        text = "부모님 PIN 승인",
-                                        icon = Icons.Default.LockOpen,
-                                        containerColor = AdventureEmerald,
-                                        shadowColor = AdventureEmeraldShadow,
-                                        height = 44.dp,
-                                        modifier = Modifier.weight(1f),
-                                        tag = "gift_pin_approve_${gift.id}",
-                                        onClick = {
-                                            pinDialogTitle = "${parentLabel} 선물 승인: ${gift.giftTitleKo}"
-                                            pinInput = ""
-                                            pinAction = { entered -> onApproveGiftWithPin(gift.id, entered) }
+                            }
+                        }
+
+                        if (openedTreasures.isNotEmpty()) {
+                            openedTreasures.forEach { treasure ->
+                                val tintColor = when (treasure.rarityKo) {
+                                    "전설" -> TrophyGoldShadow
+                                    "영웅" -> RoyalPurple
+                                    "희귀" -> SkyQuestBlue
+                                    else -> AdventureEmerald
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = tintColor.copy(alpha = 0.09f),
+                                    border = BorderStroke(1.dp, tintColor.copy(alpha = 0.3f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = treasure.titleKo,
+                                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                                            )
+                                            Text(
+                                                text = "${treasure.categoryKo} · ${treasure.openedDateLabel}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
-                                    )
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = tintColor
+                                        ) {
+                                            Text(
+                                                text = treasure.rarityKo,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                                color = Color.White,
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -605,8 +664,20 @@ fun HubAndShopScreen(
             }
         }
 
-        // ==================== TAB 3: KAKAO LOGIN & FRIENDS + CLOUDFLARE + 3D SHOP + 10-SLOT LLM ====================
+        // ==================== TAB 3: GUEST INVITE + KAKAO LOGIN & FRIENDS + CLOUDFLARE + 3D SHOP + 10-SLOT LLM ====================
         if (activeSubTab == 3) {
+            // 0. Guest Invite & Independent Standalone App Launch Card
+            item {
+                GuestInviteStandaloneCard(
+                    session = guestInviteSession,
+                    kakaoSession = kakaoSession,
+                    onShareKakaoInvite = onGenerateAndShareGuestInvite,
+                    onRegenerateCode = onRegenerateInviteCode,
+                    onEnterGuestCode = onAcceptGuestInviteCode,
+                    onLinkPersonalKakao = onLaunchKakaoLogin
+                )
+            }
+
             // 1. Kakao OAuth2 Login & Friends Sync Card
             item {
                 Elevated3DCard(accentShadow = Color(0xFFD1BC00)) {
@@ -720,90 +791,40 @@ fun HubAndShopScreen(
                 )
             }
 
-            // 3. 3D Coin Shop & Heart Refill
+            // 3. Kingdom Coins & Heart Refill (Item Catalog Hidden — Mystery Chest Only!)
             item {
                 Elevated3DCard(accentShadow = TrophyGoldShadow.copy(alpha = 0.4f)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.MonetizationOn,
-                                    contentDescription = null,
-                                    tint = TrophyGoldShadow,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Column {
-                                    Text("보유 왕국 코인", style = MaterialTheme.typography.labelMedium)
-                                    Text(
-                                        "${progress.coins} 코인",
-                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
-                                    )
-                                }
-                            }
-                            Tactile3DButton(
-                                text = "하트 풀충전 (50)",
-                                icon = Icons.Default.Favorite,
-                                containerColor = SpartaRed,
-                                shadowColor = SpartaRedShadow,
-                                height = 44.dp,
-                                enabled = progress.coins >= 50 && progress.hearts < 5,
-                                tag = "shop_refill_hearts_button",
-                                onClick = onRefillHearts
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.MonetizationOn,
+                                contentDescription = null,
+                                tint = TrophyGoldShadow,
+                                modifier = Modifier.size(28.dp)
                             )
-                        }
-                        Text(
-                            text = "3D 왕국 보물 상점 (구매 시 성채 HP +5%)",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        HumanTutorRepository.collectibleShopItems.forEach { item ->
-                            val owned = item.id in progress.unlockedItems
-                            val accent = Color(item.colorHex)
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = if (owned) Icons.Default.CheckCircle else Icons.Default.EmojiEvents,
-                                        contentDescription = item.titleKo,
-                                        tint = accent,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                    Spacer(Modifier.width(10.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = item.titleKo,
-                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                                        )
-                                        Text(
-                                            text = item.bonusLabel,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Tactile3DButton(
-                                        text = if (owned) "보유" else "${item.costCoins}",
-                                        containerColor = if (owned) AdventureEmerald else accent,
-                                        shadowColor = if (owned) AdventureEmeraldShadow else accent.copy(alpha = 0.7f),
-                                        height = 38.dp,
-                                        enabled = !owned && progress.coins >= item.costCoins,
-                                        tag = "buy_item_${item.id}",
-                                        onClick = { onBuyCollectible(item) }
-                                    )
-                                }
+                            Spacer(Modifier.width(6.dp))
+                            Column {
+                                Text("보유 왕국 코인", style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    "${progress.coins} 코인",
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
+                                )
                             }
                         }
+                        Tactile3DButton(
+                            text = "하트 풀충전 (50)",
+                            icon = Icons.Default.Favorite,
+                            containerColor = SpartaRed,
+                            shadowColor = SpartaRedShadow,
+                            height = 44.dp,
+                            enabled = progress.coins >= 50 && progress.hearts < 5,
+                            tag = "shop_refill_hearts_button",
+                            onClick = onRefillHearts
+                        )
                     }
                 }
             }
@@ -821,7 +842,7 @@ fun HubAndShopScreen(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "영상통화 AI 엔진 선택",
+                                text = "회화학습 AI 엔진 선택",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                         }
@@ -886,31 +907,44 @@ private fun ParentRegistrationCard(
 ) {
     var dadName by remember(parents.dadName) { mutableStateOf(parents.dadName) }
     var momName by remember(parents.momName) { mutableStateOf(parents.momName) }
-    var daughterName by remember(parents.daughterName) { mutableStateOf(parents.daughterName) }
+    var selectedNickname by remember(parents.daughterName) {
+        mutableStateOf(
+            when {
+                parents.daughterName.startsWith("손님") -> parents.daughterName
+                parents.daughterName == "투삐" -> "투삐"
+                else -> "원삐"
+            }
+        )
+    }
     var pin by remember(parents.parentPin) { mutableStateOf(parents.parentPin) }
 
     Elevated3DCard(accentShadow = SkyQuestBlueShadow.copy(alpha = 0.35f)) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "아빠 국왕 · 엄마 왕비 · 빅뚱·스몰뚱 등록",
+                text = "애칭 선택 (원삐 · 투삐) & 부모님 PIN",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
             )
-            // Quick 빅뚱 / 스몰뚱 toggle chips
+            // Nickname-only toggle chips (no real name input)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("빅뚱", "스몰뚱").forEach { preset ->
-                    val active = daughterName == preset
+                listOf("원삐", "투삐").forEach { nickname ->
+                    val active = selectedNickname == nickname
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = if (active) TrophyGold else MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(
+                            if (active) 1.5.dp else 1.dp,
+                            if (active) TrophyGoldShadow else MaterialTheme.colorScheme.outline
+                        ),
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { daughterName = preset }
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { selectedNickname = nickname }
+                            .testTag("select_nickname_$nickname")
                     ) {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 8.dp)) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 10.dp)) {
                             Text(
-                                text = "$preset 선택",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                text = nickname,
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
                                 color = if (active) Color(0xFF3E2C00) else MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -933,25 +967,16 @@ private fun ParentRegistrationCard(
                     modifier = Modifier.weight(1f)
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = daughterName,
-                    onValueChange = { daughterName = it },
-                    label = { Text("도전자 이름 (빅뚱/스몰뚱)") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = pin,
-                    onValueChange = { if (it.length <= 6) pin = it },
-                    label = { Text("부모님 PIN (4자리)") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            OutlinedTextField(
+                value = pin,
+                onValueChange = { if (it.length <= 6) pin = it },
+                label = { Text("부모님 PIN (4자리)") },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
             Tactile3DButton(
-                text = "가족 왕국 정보 저장",
+                text = "저장",
                 icon = Icons.Default.Save,
                 containerColor = SkyQuestBlue,
                 shadowColor = SkyQuestBlueShadow,
@@ -963,12 +988,213 @@ private fun ParentRegistrationCard(
                         ParentProfiles(
                             dadName = dadName.ifBlank { "아빠 국왕" },
                             momName = momName.ifBlank { "엄마 왕비" },
-                            daughterName = daughterName.ifBlank { "빅뚱" },
+                            daughterName = selectedNickname.ifBlank { "원삐" },
                             parentPin = pin.ifBlank { "1234" }
                         )
                     )
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun GuestInviteStandaloneCard(
+    session: GuestInviteSession,
+    kakaoSession: KakaoSessionState,
+    onShareKakaoInvite: () -> Unit,
+    onRegenerateCode: () -> Unit,
+    onEnterGuestCode: (String) -> Unit,
+    onLinkPersonalKakao: () -> Unit
+) {
+    var codeInput by remember { mutableStateOf("") }
+
+    Elevated3DCard(accentShadow = Color(0xFFD1BC00)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.PersonAdd,
+                        contentDescription = null,
+                        tint = KakaoBrown,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "애플 PWA · 안드로이드 바로설치 초대",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                    )
+                }
+                if (session.myGeneratedCode.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = KakaoYellow,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(onClick = onRegenerateCode)
+                            .testTag("regenerate_guest_code_badge")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = session.myGeneratedCode,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                color = KakaoBrown
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "새 초대코드",
+                                tint = KakaoBrown,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Dual-Platform Smart Distribution Summary (iOS PWA vs Android Direct App Install)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SkyQuestBlue.copy(alpha = 0.10f),
+                    border = BorderStroke(1.dp, SkyQuestBlue.copy(alpha = 0.28f)),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        Text(
+                            text = "Apple · iOS (PWA)",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                            color = SkyQuestBlueShadow
+                        )
+                        Text(
+                            text = "사파리 공유 -> 홈화면 추가 3초 실행",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = AdventureEmerald.copy(alpha = 0.10f),
+                    border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.28f)),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        Text(
+                            text = "Android 바로설치",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                            color = AdventureEmeraldShadow
+                        )
+                        Text(
+                            text = "독립앱 즉시 실행 / APK 원터치 설치",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Active guest badge + 1-tap personal Kakao link (no separate login required)
+            if (session.isGuestMode) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = AdventureEmerald.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${session.guestNickname.ifBlank { "손님" }} · ${session.inviteCode}",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold),
+                                color = AdventureEmeraldShadow
+                            )
+                            Text(
+                                text = if (kakaoSession.isLoggedIn) "카톡 연동됨 (${kakaoSession.nickname})"
+                                else "로그인 없이 이용 중 · 개인 카톡 연결 가능",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (!kakaoSession.isLoggedIn) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = KakaoYellow,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable(onClick = onLinkPersonalKakao)
+                                    .testTag("guest_link_personal_kakao_btn")
+                            ) {
+                                Text(
+                                    text = "카톡 연동",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                    color = KakaoBrown,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Host action: send KakaoTalk smart invite (iOS PWA + Android direct install)
+            Tactile3DButton(
+                text = "카톡 통합 초대 보내기 (iOS PWA · 안드로이드 앱)",
+                icon = Icons.Default.Share,
+                containerColor = KakaoYellow,
+                shadowColor = Color(0xFFD1BC00),
+                contentColor = KakaoBrown,
+                height = 46.dp,
+                modifier = Modifier.fillMaxWidth(),
+                tag = "send_kakao_guest_invite_button",
+                onClick = onShareKakaoInvite
+            )
+
+            // Guest action: enter invite code without login
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = codeInput,
+                    onValueChange = { codeInput = it.uppercase().take(12) },
+                    label = { Text("손님 초대코드 (로그인 불필요)") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("guest_invite_code_input")
+                )
+                Tactile3DButton(
+                    text = "입장",
+                    icon = Icons.Default.Login,
+                    containerColor = AdventureEmerald,
+                    shadowColor = AdventureEmeraldShadow,
+                    height = 48.dp,
+                    enabled = codeInput.trim().length >= 4,
+                    tag = "guest_invite_enter_button",
+                    onClick = {
+                        onEnterGuestCode(codeInput)
+                        codeInput = ""
+                    }
+                )
+            }
         }
     }
 }
@@ -1237,7 +1463,7 @@ private fun ScheduleCreatorCard(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("일정 내용 (예: 원어민 영상통화 10분)") },
+                label = { Text("일정 내용 (예: 원어민 회화학습 10분)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
