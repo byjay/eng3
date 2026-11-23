@@ -1,0 +1,6 @@
+{
+  "name": "아빠가딸들을 위한 학습도구",
+  "description": "아빠와 딸들이 성을 구하고 왕국을 지키는 영어 학습 게임! 고1~3 고등학교 교과 영단어 및 단어별 3~5개 예문 읽기·듣기·말하기, 성적표·학습 일정·아빠 직접 용돈 미션, 100대 여행 회화, 10인 원어민 AI 선생님 실시간 대화, 카카오톡 로그인·친구 연동 지원.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

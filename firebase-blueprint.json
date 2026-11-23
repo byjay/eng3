@@ -1,0 +1,254 @@
+{
+  "entities": {
+    "UserProgress": {
+      "title": "UserProgress",
+      "description": "Authenticated learner profile, 3D game HUD currency (XP, coins, hearts, streak), grade target, active human AI tutor, and unlocked collectible items.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Learner display name."
+        },
+        "selectedGrade": {
+          "type": "integer",
+          "description": "Target CSAT high school grade (1, 2, or 3)."
+        },
+        "selectedTeacherId": {
+          "type": "string",
+          "description": "Active human AI tutor ID."
+        },
+        "dailyGoal": {
+          "type": "integer",
+          "description": "Daily forced Sparta vocabulary target (minimum 30)."
+        },
+        "streakCount": {
+          "type": "integer",
+          "description": "Consecutive study days."
+        },
+        "totalXp": {
+          "type": "integer",
+          "description": "Total experience points earned."
+        },
+        "coins": {
+          "type": "integer",
+          "description": "Game coins earned from missions to unlock 3D collectible rewards."
+        },
+        "hearts": {
+          "type": "integer",
+          "description": "Remaining Sparta drill hearts (0 to 5)."
+        },
+        "todayWordsCompleted": {
+          "type": "integer",
+          "description": "CSAT words mastered today."
+        },
+        "lastStudyDate": {
+          "type": "string",
+          "description": "ISO date YYYY-MM-DD of the most recent study activity."
+        },
+        "unlockedItems": {
+          "type": "array",
+          "description": "Bounded list (max 30) of unlocked 3D collectible badge/item IDs."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "selectedGrade",
+        "selectedTeacherId",
+        "dailyGoal",
+        "streakCount",
+        "totalXp",
+        "coins",
+        "hearts",
+        "todayWordsCompleted",
+        "lastStudyDate",
+        "unlockedItems",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WordMastery": {
+      "title": "WordMastery",
+      "description": "Per-word CSAT Sparta mastery statistics and speaking score.",
+      "type": "object",
+      "properties": {
+        "wordId": {
+          "type": "string",
+          "description": "Curriculum word identifier."
+        },
+        "grade": {
+          "type": "integer",
+          "description": "CSAT grade level (1, 2, or 3)."
+        },
+        "correctCount": {
+          "type": "integer",
+          "description": "Total correct passes."
+        },
+        "missCount": {
+          "type": "integer",
+          "description": "Total misses."
+        },
+        "speakingBestScore": {
+          "type": "integer",
+          "description": "Best pronunciation score (0 to 100)."
+        },
+        "mastered": {
+          "type": "boolean",
+          "description": "Whether the word passed both Sparta quiz and shadowing speaking drill."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "wordId",
+        "grade",
+        "correctCount",
+        "missCount",
+        "speakingBestScore",
+        "mastered",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ScenarioProgress": {
+      "title": "ScenarioProgress",
+      "description": "Completion progress across the 100 traveler scenarios and twist roleplays.",
+      "type": "object",
+      "properties": {
+        "scenarioId": {
+          "type": "string",
+          "description": "Travel scenario identifier (sc_001 to sc_100)."
+        },
+        "zoneId": {
+          "type": "integer",
+          "description": "Travel zone index (1 to 10)."
+        },
+        "completedSentencesCount": {
+          "type": "integer",
+          "description": "Completed sentences in this scenario (0 to 30)."
+        },
+        "twistCleared": {
+          "type": "boolean",
+          "description": "Whether the dynamic travel twist mission was cleared."
+        },
+        "bestFluencyScore": {
+          "type": "integer",
+          "description": "Best pronunciation and fluency score (0 to 100)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "scenarioId",
+        "zoneId",
+        "completedSentencesCount",
+        "twistCleared",
+        "bestFluencyScore",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StudySessionLog": {
+      "title": "StudySessionLog",
+      "description": "Immutable training session record capturing accuracy, WPM, XP, and coins earned.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["SPARTA_VOCAB", "TRAVEL_100", "AI_TUTOR"],
+          "description": "Learning mission mode."
+        },
+        "teacherId": {
+          "type": "string",
+          "description": "AI human tutor who coached the session."
+        },
+        "accuracyPercent": {
+          "type": "integer",
+          "description": "Pronunciation and response accuracy percentage (0 to 100)."
+        },
+        "wpm": {
+          "type": "integer",
+          "description": "Measured words per minute fluency metric."
+        },
+        "xpEarned": {
+          "type": "integer",
+          "description": "XP awarded."
+        },
+        "coinsEarned": {
+          "type": "integer",
+          "description": "Game coins awarded."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "mode",
+        "teacherId",
+        "accuracyPercent",
+        "wpm",
+        "xpEarned",
+        "coinsEarned",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProgress"
+      },
+      "description": "User profile, game currency, streak, and unlocked collectible items."
+    },
+    "/users/{userId}/wordMastery/{wordId}": {
+      "schema": {
+        "$ref": "#/entities/WordMastery"
+      },
+      "description": "Per-word CSAT G1-G3 Sparta mastery tracking."
+    },
+    "/users/{userId}/scenarioProgress/{scenarioId}": {
+      "schema": {
+        "$ref": "#/entities/ScenarioProgress"
+      },
+      "description": "Progress across 100 traveler scenarios and twist missions."
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": {
+        "$ref": "#/entities/StudySessionLog"
+      },
+      "description": "Immutable session telemetry for fluency, WPM, XP, and coins."
+    }
+  }
+}

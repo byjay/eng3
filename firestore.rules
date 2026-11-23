@@ -1,0 +1,202 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable hardened helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidUserProgress(data, userId) {
+      return data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.selectedGrade is int && data.selectedGrade >= 1 && data.selectedGrade <= 3 &&
+             data.selectedTeacherId is string && data.selectedTeacherId.size() >= 1 && data.selectedTeacherId.size() <= 40 &&
+             data.dailyGoal is int && data.dailyGoal >= 30 && data.dailyGoal <= 120 &&
+             data.streakCount is int && data.streakCount >= 0 && data.streakCount <= 10000 &&
+             data.totalXp is int && data.totalXp >= 0 && data.totalXp <= 10000000 &&
+             data.coins is int && data.coins >= 0 && data.coins <= 10000000 &&
+             data.hearts is int && data.hearts >= 0 && data.hearts <= 5 &&
+             data.todayWordsCompleted is int && data.todayWordsCompleted >= 0 && data.todayWordsCompleted <= 500 &&
+             data.lastStudyDate is string && data.lastStudyDate.size() <= 20 &&
+             data.unlockedItems is list && data.unlockedItems.size() <= 30 &&
+             (data.unlockedItems.size() == 0 || data.unlockedItems[0] is string) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidWordMastery(data, wordId) {
+      return data.wordId is string && data.wordId == wordId && data.wordId.size() <= 64 &&
+             data.grade is int && data.grade >= 1 && data.grade <= 3 &&
+             data.correctCount is int && data.correctCount >= 0 && data.correctCount <= 10000 &&
+             data.missCount is int && data.missCount >= 0 && data.missCount <= 10000 &&
+             data.speakingBestScore is int && data.speakingBestScore >= 0 && data.speakingBestScore <= 100 &&
+             data.mastered is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidScenarioProgress(data, scenarioId) {
+      return data.scenarioId is string && data.scenarioId == scenarioId && data.scenarioId.size() <= 64 &&
+             data.zoneId is int && data.zoneId >= 1 && data.zoneId <= 10 &&
+             data.completedSentencesCount is int && data.completedSentencesCount >= 0 && data.completedSentencesCount <= 30 &&
+             data.twistCleared is bool &&
+             data.bestFluencyScore is int && data.bestFluencyScore >= 0 && data.bestFluencyScore <= 100 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidStudySessionLog(data) {
+      return data.mode is string && data.mode in ['SPARTA_VOCAB', 'TRAVEL_100', 'AI_TUTOR'] &&
+             data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 40 &&
+             data.accuracyPercent is int && data.accuracyPercent >= 0 && data.accuracyPercent <= 100 &&
+             data.wpm is int && data.wpm >= 0 && data.wpm <= 400 &&
+             data.xpEarned is int && data.xpEarned >= 0 && data.xpEarned <= 10000 &&
+             data.coinsEarned is int && data.coinsEarned >= 0 && data.coinsEarned <= 10000 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    // 1. User Progress & Game Economy Profile
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'displayName', 'selectedGrade', 'selectedTeacherId',
+                         'dailyGoal', 'streakCount', 'totalXp', 'coins', 'hearts',
+                         'todayWordsCompleted', 'lastStudyDate', 'unlockedItems',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'selectedGrade', 'selectedTeacherId',
+                         'dailyGoal', 'streakCount', 'totalXp', 'coins', 'hearts',
+                         'todayWordsCompleted', 'lastStudyDate', 'unlockedItems',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidUserProgress(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProgress(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'selectedGrade', 'selectedTeacherId',
+                         'dailyGoal', 'streakCount', 'totalXp', 'coins', 'hearts',
+                         'todayWordsCompleted', 'lastStudyDate', 'unlockedItems',
+                         'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // 2. CSAT Vocabulary Mastery Subcollection
+      match /wordMastery/{wordId} {
+        allow get: if isOwner(userId) && isValidId(wordId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(wordId) &&
+                         incoming().keys().hasAll([
+                           'wordId', 'grade', 'correctCount', 'missCount',
+                           'speakingBestScore', 'mastered', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'wordId', 'grade', 'correctCount', 'missCount',
+                           'speakingBestScore', 'mastered', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidWordMastery(incoming(), wordId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(wordId) &&
+                         isValidWordMastery(incoming(), wordId) &&
+                         incoming().wordId == existing().wordId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'grade', 'correctCount', 'missCount',
+                           'speakingBestScore', 'mastered', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(wordId);
+      }
+
+      // 3. Travel 100 Scenarios Progress Subcollection
+      match /scenarioProgress/{scenarioId} {
+        allow get: if isOwner(userId) && isValidId(scenarioId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(scenarioId) &&
+                         incoming().keys().hasAll([
+                           'scenarioId', 'zoneId', 'completedSentencesCount',
+                           'twistCleared', 'bestFluencyScore', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'scenarioId', 'zoneId', 'completedSentencesCount',
+                           'twistCleared', 'bestFluencyScore', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidScenarioProgress(incoming(), scenarioId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(scenarioId) &&
+                         isValidScenarioProgress(incoming(), scenarioId) &&
+                         incoming().scenarioId == existing().scenarioId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'zoneId', 'completedSentencesCount', 'twistCleared',
+                           'bestFluencyScore', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(scenarioId);
+      }
+
+      // 4. Immutable Study Session Telemetry Subcollection
+      match /sessions/{sessionId} {
+        allow get: if isOwner(userId) && isValidId(sessionId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(sessionId) &&
+                         incoming().keys().hasAll([
+                           'mode', 'teacherId', 'accuracyPercent', 'wpm',
+                           'xpEarned', 'coinsEarned', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'mode', 'teacherId', 'accuracyPercent', 'wpm',
+                           'xpEarned', 'coinsEarned', 'createdAt'
+                         ]) &&
+                         isValidStudySessionLog(incoming());
+
+        allow update: if false;
+        allow delete: if isOwner(userId) && isValidId(sessionId);
+      }
+    }
+  }
+}
