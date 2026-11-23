@@ -54,6 +54,7 @@ import com.example.engine.VoiceSpeechEngine
 import com.example.firebase.configureAppCheck
 import com.example.model.RpgGamePhase
 import com.example.ui.components.StreakMilestoneConfettiOverlay
+import com.example.ui.components.WeeklyStudyReportModal
 import com.example.ui.screens.AiTutorCallScreen
 import com.example.ui.screens.HubAndShopScreen
 import com.example.ui.screens.SpartaVocabScreen
@@ -170,12 +171,15 @@ private fun FamilyKingdomApp(
     )
 
     var currentTab by rememberSaveable { mutableStateOf(FamilyKingdomTab.KINGDOM) }
+    var showWeeklyReportModal by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val progress by viewModel.userProgress.collectAsStateWithLifecycle()
+    val weeklyStudyReport by viewModel.weeklyStudyReport.collectAsStateWithLifecycle()
     val kingdomStats by viewModel.kingdomStats.collectAsStateWithLifecycle()
     val parents by viewModel.parentProfiles.collectAsStateWithLifecycle()
     val masteredWordIds by viewModel.masteredWordIds.collectAsStateWithLifecycle()
+    val weakWordIds by viewModel.weakWordIds.collectAsStateWithLifecycle()
     val harvestedApiWords by viewModel.harvestedApiWords.collectAsStateWithLifecycle()
     val vocabGradeTier by viewModel.vocabGradeTier.collectAsStateWithLifecycle()
     val scenarioProgress by viewModel.scenarioProgressState.collectAsStateWithLifecycle()
@@ -325,6 +329,8 @@ private fun FamilyKingdomApp(
                         parents = parents,
                         vocabGradeTier = vocabGradeTier,
                         masteredWordsCount = masteredWordIds.size,
+                        weakWordIds = weakWordIds,
+                        harvestedApiWords = harvestedApiWords,
                         harvestedApiCount = harvestedApiWords.size,
                         harvestStatusKo = harvestStatusKo,
                         todayStudySeconds = todayStudySec,
@@ -372,6 +378,9 @@ private fun FamilyKingdomApp(
                         },
                         onRecordFocusWordResult = { wordId, known ->
                             viewModel.recordMainFocusWordResult(wordId, known)
+                        },
+                        onOpenWeeklyReport = {
+                            showWeeklyReportModal = true
                         }
                     )
                 }
@@ -459,6 +468,7 @@ private fun FamilyKingdomApp(
                         onSynthesizeNanoBanana = { tag, gesture ->
                             viewModel.synthesizeTutorSceneWithNanoBanana(context, tag, gesture)
                         },
+                        onSelectEngineMode = { mode -> viewModel.setAiEngineMode(mode) },
                         onToggleKoreanSubtitles = { viewModel.toggleTutorKoreanTranslations() },
                         onToggleKoreanVoiceMode = { viewModel.toggleKoreanVoiceInputMode() },
                         onSetSpeechRate = { rate -> viewModel.setSpeechRateMultiplier(rate) },
@@ -466,7 +476,8 @@ private fun FamilyKingdomApp(
                         onStartListening = { viewModel.startTutorLiveListening() },
                         onStopVoice = { viewModel.stopVoiceIo() },
                         onSendTypedMessage = { text -> viewModel.sendUserMessageToTutor(text) },
-                        onReplayTutorText = { text -> viewModel.speakWithActiveTutor(text) }
+                        onReplayTutorText = { text -> viewModel.speakWithActiveTutor(text) },
+                        onSpeakSlowWord = { word -> viewModel.speakSlowWord(word) }
                     )
                 }
 
@@ -576,6 +587,16 @@ private fun FamilyKingdomApp(
                 event = activeStreakEvent,
                 hero = activeSquirrelHero,
                 onDismiss = { viewModel.dismissStreakMilestoneEvent() }
+            )
+        }
+
+        // Weekly Study Report Modal (Today's Words Scorecard + Cumulative Streak + Achievement Charts)
+        if (showWeeklyReportModal) {
+            WeeklyStudyReportModal(
+                report = weeklyStudyReport,
+                playerName = parents.daughterName,
+                activeHero = activeSquirrelHero,
+                onDismiss = { showWeeklyReportModal = false }
             )
         }
     }

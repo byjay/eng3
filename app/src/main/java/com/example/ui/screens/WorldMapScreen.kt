@@ -81,6 +81,7 @@ import com.example.model.SquirrelJobHero
 import com.example.model.TravelZone
 import com.example.model.UserProgress
 import com.example.model.VocabStudyTrack
+import com.example.model.VocabWord
 import com.example.ui.components.DailyGoalStreakCardSection
 import com.example.ui.components.Elevated3DCard
 import com.example.ui.components.GameHudBar
@@ -107,6 +108,8 @@ fun WorldMapScreen(
     parents: ParentProfiles,
     vocabGradeTier: Int,
     masteredWordsCount: Int,
+    weakWordIds: Set<String>,
+    harvestedApiWords: List<VocabWord>,
     harvestedApiCount: Int,
     harvestStatusKo: String,
     todayStudySeconds: Int,
@@ -130,9 +133,21 @@ fun WorldMapScreen(
     onHarvestDailyWords: () -> Unit,
     onRefillHearts: () -> Unit,
     onSpeakFocusEnglish: (String) -> Unit,
-    onRecordFocusWordResult: (wordId: String, known: Boolean) -> Unit
+    onRecordFocusWordResult: (wordId: String, known: Boolean) -> Unit,
+    onOpenWeeklyReport: () -> Unit
 ) {
     var focusMood by remember { mutableStateOf(SquirrelMoodState.IDLE) }
+    var isWrongReviewMode by remember { mutableStateOf(false) }
+    var reviewAllClearBanner by remember { mutableStateOf(false) }
+    val wrongWords = remember(weakWordIds, harvestedApiWords) {
+        (VocabRepository.allWords + harvestedApiWords)
+            .distinctBy { it.id }
+            .filter { it.id in weakWordIds }
+    }
+    if (isWrongReviewMode && wrongWords.isEmpty()) {
+        isWrongReviewMode = false
+        reviewAllClearBanner = true
+    }
     val missionsInCycle = kingdomStats.missionClearCount % 7
     val levelPoints = kingdomStats.previewCount + kingdomStats.reviewCount * 2 + kingdomStats.perfectScoreCount * 3
     val levelFraction = ((levelPoints % 6) / 6f).coerceIn(0.08f, 1f)
@@ -166,7 +181,8 @@ fun WorldMapScreen(
             GameHudBar(
                 progress = progress,
                 onCoinsClick = onOpenFamilyGiftHub,
-                onHeartsClick = onRefillHearts
+                onHeartsClick = onRefillHearts,
+                onStreakClick = onOpenWeeklyReport
             )
         }
 
@@ -299,7 +315,7 @@ fun WorldMapScreen(
             }
         }
 
-        // 2-A. MAIN FOCUSED VOCABULARY STUDY MODE (수능 빈출 단어 + 실전 문장 즉시 집중 학습)
+        // 2-A. MAIN FOCUSED VOCABULARY STUDY MODE (수능 빈출 단어 + 오답 집중 복습 모드)
         item {
             MainFocusedVocabStudyCard(
                 vocabGradeTier = vocabGradeTier,
@@ -307,12 +323,41 @@ fun WorldMapScreen(
                 streakCount = progress.streakCount,
                 todayWordsCompleted = progress.todayWordsCompleted,
                 activeHero = activeSquirrelHero,
+                wrongWords = wrongWords,
+                isReviewMode = isWrongReviewMode,
+                reviewAllClearBanner = reviewAllClearBanner,
+                onToggleReviewMode = { enabled ->
+                    reviewAllClearBanner = false
+                    isWrongReviewMode = enabled && wrongWords.isNotEmpty()
+                },
+                onDismissAllClear = { reviewAllClearBanner = false },
                 onSpeakEnglish = onSpeakFocusEnglish,
                 onRecordResult = { wordId, known ->
                     focusMood = if (known) SquirrelMoodState.HAPPY_CHEER else SquirrelMoodState.LISTENING_TILT
                     onRecordFocusWordResult(wordId, known)
                 },
-                onOpenFullVocab = { onStartVocabTrack(VocabStudyTrack.CSAT_FREQUENCY) }
+                onOpenFullVocab = { onStartVocabTrack(VocabStudyTrack.CSAT_FREQUENCY) },
+                onOpenWeeklyReport = onOpenWeeklyReport
+            )
+        }
+
+        // 2-A2. DEDICATED WRONG ANSWER NOTEBOOK SECTION ('오답 노트' + '복습 모드' 버튼)
+        item {
+            WrongAnswerNotebookCard(
+                wrongWords = wrongWords,
+                isReviewModeActive = isWrongReviewMode,
+                onEnterReviewMode = {
+                    if (wrongWords.isNotEmpty()) {
+                        reviewAllClearBanner = false
+                        isWrongReviewMode = !isWrongReviewMode
+                    }
+                },
+                onStartSpartaWeakReview = { onStartVocabTrack(VocabStudyTrack.SMART_REVIEW) },
+                onSpeakWord = onSpeakFocusEnglish,
+                onMarkMastered = { wordId ->
+                    focusMood = SquirrelMoodState.HAPPY_CHEER
+                    onRecordFocusWordResult(wordId, true)
+                }
             )
         }
 
@@ -823,7 +868,7 @@ private fun FairytaleExpeditionTile(
 /**
  * Main Screen Focused Vocabulary Study Mode (메인 화면 집중 단어 학습 모드):
  * - Instant CSAT high-frequency word + real English example sentence right on Home
- * - Native pronunciation TTS, tap-to-reveal meaning, Known / Review Again quick flow
+ * - Dedicated Wrong-Answer Review Mode ('복습 모드') serving ONLY archived wrong words!
  */
 @Composable
 private fun MainFocusedVocabStudyCard(
@@ -832,24 +877,33 @@ private fun MainFocusedVocabStudyCard(
     streakCount: Int,
     todayWordsCompleted: Int,
     activeHero: SquirrelJobHero,
+    wrongWords: List<VocabWord>,
+    isReviewMode: Boolean,
+    reviewAllClearBanner: Boolean,
+    onToggleReviewMode: (Boolean) -> Unit,
+    onDismissAllClear: () -> Unit,
     onSpeakEnglish: (String) -> Unit,
     onRecordResult: (wordId: String, known: Boolean) -> Unit,
-    onOpenFullVocab: () -> Unit
+    onOpenFullVocab: () -> Unit,
+    onOpenWeeklyReport: () -> Unit
 ) {
-    val focusDeck = remember(vocabGradeTier) {
+    val normalDeck = remember(vocabGradeTier) {
         val all = VocabRepository.allWords
         val preferred = all.filter { it.csatFrequency >= 4 }
         (if (preferred.isNotEmpty()) preferred else all).take(40)
     }
-    var currentIdx by remember { mutableIntStateOf(0) }
+    val activeDeck = if (isReviewMode && wrongWords.isNotEmpty()) wrongWords else normalDeck
+    var currentIdx by remember(isReviewMode) { mutableIntStateOf(0) }
     var showMeaning by remember { mutableStateOf(false) }
     var sessionStreak by remember { mutableIntStateOf(0) }
 
-    val word = focusDeck[currentIdx % focusDeck.size]
+    val word = activeDeck[currentIdx % activeDeck.size]
     val sentenceEn = word.examples.firstOrNull()?.english ?: word.exampleEn
     val sentenceKo = word.examples.firstOrNull()?.korean ?: word.exampleKo
 
-    Elevated3DCard(accentShadow = SkyQuestBlueShadow.copy(alpha = 0.42f)) {
+    Elevated3DCard(
+        accentShadow = if (isReviewMode) CoralOrangeShadow.copy(alpha = 0.48f) else SkyQuestBlueShadow.copy(alpha = 0.42f)
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -862,35 +916,42 @@ private fun MainFocusedVocabStudyCard(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = SkyQuestBlue.copy(alpha = 0.14f)
+                        color = if (isReviewMode) CoralOrange.copy(alpha = 0.18f) else SkyQuestBlue.copy(alpha = 0.14f)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.LocalFireDepartment,
+                                imageVector = if (isReviewMode) Icons.Default.Refresh else Icons.Default.LocalFireDepartment,
                                 contentDescription = null,
-                                tint = SkyQuestBlueShadow,
+                                tint = if (isReviewMode) CoralOrangeShadow else SkyQuestBlueShadow,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = "집중 단어 학습 모드",
+                                text = if (isReviewMode) "오답 집중 복습 모드" else "집중 단어 학습 모드",
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold),
-                                color = SkyQuestBlueShadow
+                                color = if (isReviewMode) CoralOrangeShadow else SkyQuestBlueShadow
                             )
                         }
                     }
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = AdventureEmerald.copy(alpha = 0.14f)
+                        color = if (isReviewMode) CoralOrange else AdventureEmerald.copy(alpha = 0.14f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                if (isReviewMode) onToggleReviewMode(false)
+                                else if (wrongWords.isNotEmpty()) onToggleReviewMode(true)
+                            }
+                            .testTag("main_focus_review_mode_toggle")
                     ) {
                         Text(
-                            text = "연속 ${sessionStreak}단어",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = AdventureEmeraldShadow,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                            text = if (isReviewMode) "남은 오답 ${wrongWords.size}개 · 해제" else if (wrongWords.isNotEmpty()) "복습 모드 (${wrongWords.size})" else "연속 ${sessionStreak}단어",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                            color = if (isReviewMode) Color.White else if (wrongWords.isNotEmpty()) CoralOrangeShadow else AdventureEmeraldShadow,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
@@ -906,17 +967,48 @@ private fun MainFocusedVocabStudyCard(
                 )
             }
 
+            if (reviewAllClearBanner) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = AdventureEmerald.copy(alpha = 0.16f),
+                    border = BorderStroke(1.2.dp, AdventureEmerald),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onDismissAllClear)
+                        .testTag("wrong_note_all_clear_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "오답 노트 올클리어! 틀렸던 단어를 전부 정복했어요!",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                            color = AdventureEmeraldShadow
+                        )
+                        Text(
+                            text = "확인",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = AdventureEmeraldShadow
+                        )
+                    }
+                }
+            }
+
             // Daily Goal Streak Counter & 10-Word Progress Tracker
             DailyGoalStreakCardSection(
                 streakCount = streakCount,
-                todayWordsCompleted = todayWordsCompleted
+                todayWordsCompleted = todayWordsCompleted,
+                onOpenWeeklyReport = onOpenWeeklyReport
             )
 
             // Word & Real CSAT Sentence Panel
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = Color(0xFFF6F2E9),
-                border = BorderStroke(1.dp, Color(0xFFE2DACB)),
+                color = if (isReviewMode) Color(0xFFFFF4EE) else Color(0xFFF6F2E9),
+                border = BorderStroke(1.2.dp, if (isReviewMode) CoralOrange.copy(alpha = 0.5f) else Color(0xFFE2DACB)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -935,14 +1027,18 @@ private fun MainFocusedVocabStudyCard(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "${word.ipa} · ${word.partOfSpeech} · 수능 빈출 ★${word.csatFrequency}",
+                                text = if (isReviewMode) {
+                                    "오답 집중 복습 (${(currentIdx % activeDeck.size) + 1}/${activeDeck.size}) · ${word.ipa}"
+                                } else {
+                                    "${word.ipa} · ${word.partOfSpeech} · 수능 빈출 ★${word.csatFrequency}"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isReviewMode) CoralOrangeShadow else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         Surface(
                             shape = CircleShape,
-                            color = SkyQuestBlue,
+                            color = if (isReviewMode) CoralOrange else SkyQuestBlue,
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
@@ -1022,13 +1118,13 @@ private fun MainFocusedVocabStudyCard(
                 }
             }
 
-            // Instant Action Buttons (Review vs Mastered)
+            // Instant Action Buttons (Auto-saves to Wrong Answer Notebook on '다시 복습'!)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Tactile3DButton(
-                    text = "다시 복습",
+                    text = if (isReviewMode) "한 번 더 복습" else "다시 복습 (오답저장)",
                     icon = Icons.Default.Refresh,
                     containerColor = CoralOrange,
                     shadowColor = CoralOrangeShadow,
@@ -1038,24 +1134,224 @@ private fun MainFocusedVocabStudyCard(
                     onClick = {
                         onRecordResult(word.id, false)
                         showMeaning = false
-                        currentIdx = (currentIdx + 1) % focusDeck.size
+                        currentIdx = (currentIdx + 1) % activeDeck.size
                     }
                 )
                 Tactile3DButton(
-                    text = "완벽 암기!",
+                    text = if (isReviewMode) "오답 정복!" else "완벽 암기!",
                     icon = Icons.Default.CheckCircle,
                     containerColor = AdventureEmerald,
                     shadowColor = AdventureEmeraldShadow,
                     height = 46.dp,
-                    modifier = Modifier.weight(1.2f),
+                    modifier = Modifier.weight(1.15f),
                     tag = "main_focus_known_btn",
                     onClick = {
                         onRecordResult(word.id, true)
                         sessionStreak += 1
                         showMeaning = false
-                        currentIdx = (currentIdx + 1) % focusDeck.size
+                        currentIdx = if (isReviewMode) 0 else (currentIdx + 1) % activeDeck.size
                     }
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Dedicated Wrong Answer Notebook Section ('오답 노트') + Review Mode ('복습 모드') button:
+ * - Automatically stores words marked wrong / '다시 복습' in Focused Vocabulary Study Mode
+ * - Lets learner launch focused Review Mode to study ONLY wrong words until all are mastered
+ */
+@Composable
+private fun WrongAnswerNotebookCard(
+    wrongWords: List<VocabWord>,
+    isReviewModeActive: Boolean,
+    onEnterReviewMode: () -> Unit,
+    onStartSpartaWeakReview: () -> Unit,
+    onSpeakWord: (String) -> Unit,
+    onMarkMastered: (String) -> Unit
+) {
+    var showAllWords by remember { mutableStateOf(false) }
+    val visibleWords = if (showAllWords) wrongWords else wrongWords.take(4)
+
+    Elevated3DCard(accentShadow = CoralOrangeShadow.copy(alpha = 0.36f)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = CoralOrange.copy(alpha = 0.16f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "오답 노트",
+                            tint = CoralOrangeShadow,
+                            modifier = Modifier
+                                .padding(6.dp)
+                                .size(18.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "오답 노트",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                        )
+                        Text(
+                            text = "틀린 단어가 자동으로 보관되어 언제든 다시 복습해요",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (wrongWords.isNotEmpty()) CoralOrange else AdventureEmerald.copy(alpha = 0.16f)
+                ) {
+                    Text(
+                        text = if (wrongWords.isNotEmpty()) "${wrongWords.size}단어 보관" else "0단어 클린",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                        color = if (wrongWords.isNotEmpty()) Color.White else AdventureEmeraldShadow,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            if (wrongWords.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = AdventureEmerald.copy(alpha = 0.08f),
+                    border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "현재 보관된 오답 단어가 없어요! 위 집중 단어 학습에서 '다시 복습 (오답저장)'을 누르면 여기에 자동 보관됩니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Tactile3DButton(
+                        text = if (isReviewModeActive) "복습 모드 진행 중 ✓" else "복습 모드 (${wrongWords.size}단어)",
+                        icon = Icons.Default.Refresh,
+                        containerColor = if (isReviewModeActive) AdventureEmerald else CoralOrange,
+                        shadowColor = if (isReviewModeActive) AdventureEmeraldShadow else CoralOrangeShadow,
+                        height = 46.dp,
+                        modifier = Modifier.weight(1.2f),
+                        tag = "wrong_note_review_mode_btn",
+                        onClick = onEnterReviewMode
+                    )
+                    Tactile3DButton(
+                        text = "스파르타 약점",
+                        icon = Icons.Default.LocalFireDepartment,
+                        containerColor = RoyalPurple,
+                        shadowColor = RoyalPurpleShadow,
+                        height = 46.dp,
+                        modifier = Modifier.weight(0.95f),
+                        tag = "wrong_note_sparta_review_btn",
+                        onClick = onStartSpartaWeakReview
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    visibleWords.forEach { w ->
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xFFFFF8F5),
+                            border = BorderStroke(1.dp, CoralOrange.copy(alpha = 0.32f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("wrong_note_item_${w.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = w.word,
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = w.ipa,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Text(
+                                        text = w.meaningKo,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = CoralOrangeShadow
+                                    )
+                                }
+                                Surface(
+                                    shape = CircleShape,
+                                    color = SkyQuestBlue.copy(alpha = 0.14f),
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .clickable { onSpeakWord("${w.word}. ${w.exampleEn}") }
+                                        .testTag("wrong_note_speak_${w.id}")
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                            contentDescription = "${w.word} 발음 듣기",
+                                            tint = SkyQuestBlueShadow,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = AdventureEmerald,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable { onMarkMastered(w.id) }
+                                        .testTag("wrong_note_clear_${w.id}")
+                                ) {
+                                    Text(
+                                        text = "암기 완료",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (wrongWords.size > 4) {
+                    Text(
+                        text = if (showAllWords) "오답 목록 접기 ▴" else "보관된 오답 ${wrongWords.size}개 모두 보기 ▾",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = CoralOrangeShadow,
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showAllWords = !showAllWords }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .testTag("wrong_note_expand_toggle")
+                    )
+                }
             }
         }
     }

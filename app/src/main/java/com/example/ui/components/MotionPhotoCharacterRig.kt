@@ -207,53 +207,61 @@ fun LiveMotionPhotoFriendView(
     val blinkImageBitmap = remember(nanoBananaBlinkBitmap) { nanoBananaBlinkBitmap?.asImageBitmap() }
     val effectiveCropZoom = if (sceneImageBitmap != null) 1.0f else extraCropZoom
 
-    // Topic ambient atmospheric color grade (instant 0ms visual cue whenever topic changes!)
+    // Topic ambient studio lighting grade (instant 0ms visual transformation whenever topic changes — zero quota error!)
     val topicKey = remember(activeTopicTag) { NanoBananaMotionEngine.normalizeTopicKey(activeTopicTag) }
     val topicAtmosphereBrush = remember(topicKey) {
         when (topicKey) {
             "airport" -> Brush.verticalGradient(
-                listOf(Color(0xFF0EA5E9).copy(alpha = 0.20f), Color.Transparent, Color(0xFF0F172A).copy(alpha = 0.25f))
+                listOf(Color(0xFF0284C7).copy(alpha = 0.28f), Color(0xFF38BDF8).copy(alpha = 0.08f), Color(0xFF0F172A).copy(alpha = 0.34f))
             )
             "cafe" -> Brush.verticalGradient(
-                listOf(Color(0xFFD97706).copy(alpha = 0.24f), Color.Transparent, Color(0xFF451A03).copy(alpha = 0.22f))
+                listOf(Color(0xFFB45309).copy(alpha = 0.30f), Color(0xFFF59E0B).copy(alpha = 0.10f), Color(0xFF451A03).copy(alpha = 0.32f))
             )
             "mart" -> Brush.verticalGradient(
-                listOf(Color(0xFF10B981).copy(alpha = 0.20f), Color.Transparent, Color(0xFF064E3B).copy(alpha = 0.18f))
+                listOf(Color(0xFF059669).copy(alpha = 0.26f), Color(0xFF34D399).copy(alpha = 0.08f), Color(0xFF064E3B).copy(alpha = 0.28f))
             )
             "intro" -> Brush.verticalGradient(
-                listOf(Color(0xFF22C55E).copy(alpha = 0.18f), Color.Transparent, Color(0xFFEAB308).copy(alpha = 0.16f))
+                listOf(Color(0xFF16A34A).copy(alpha = 0.24f), Color(0xFFFACC15).copy(alpha = 0.09f), Color(0xFF14532D).copy(alpha = 0.24f))
             )
             "guam_beach" -> Brush.verticalGradient(
-                listOf(Color(0xFF06B6D4).copy(alpha = 0.18f), Color.Transparent, Color.Transparent)
+                listOf(Color(0xFF06B6D4).copy(alpha = 0.22f), Color.Transparent, Color(0xFF0C4A6E).copy(alpha = 0.20f))
             )
             else -> Brush.verticalGradient(
-                listOf(Color.Transparent, Color.Transparent)
+                listOf(Color(0xFF1E3A8A).copy(alpha = 0.10f), Color.Transparent, Color(0xFF0F172A).copy(alpha = 0.16f))
             )
         }
     }
 
+    // Full-bleed natural front-camera framing: overscan >= 1.14f + strictly bounded micro-tilt
+    // guarantees ZERO black triangular edges at screen corners while feeling like a live FaceTime call!
     val motionModifier = Modifier
         .fillMaxSize()
         .graphicsLayer {
             val breath = breathPhaseState.value
             val talk = if (isSpeaking) talkPulseState.value else 0f
-            val baseScale = 1.07f * effectiveCropZoom * scaleState.value
+            val baseScale = 1.14f * effectiveCropZoom * scaleState.value
+            val clampedTiltZ = (sin(breath * 0.65f) * 0.45f + tiltState.value * 0.16f).coerceIn(-0.95f, 0.95f)
+            val clampedRotY = (rotYState.value * 0.35f + sin(breath) * 0.8f).coerceIn(-2.4f, 2.4f)
+            val clampedRotX = (rotXState.value * 0.30f + talk * 1.1f).coerceIn(-2.2f, 2.2f)
+            val clampedTx = (sin(breath * 0.8f) * 3.5f + rotYState.value * 1.1f).coerceIn(-12f, 12f)
+            val clampedTy = (cos(breath) * 3.0f + bounceYState.value * 0.55f - talk * 3.2f).coerceIn(-14f, 14f)
+
             scaleX = baseScale
-            scaleY = baseScale * (1f + talk * 0.011f)
-            translationX = sin(breath) * 4.5f
-            translationY = cos(breath) * 3.8f + bounceYState.value - (talk * 4.2f)
-            rotationZ = sin(breath * 0.7f) * 1.1f + tiltState.value
-            rotationY = rotYState.value + sin(breath) * 1.8f
-            rotationX = rotXState.value + (talk * 1.8f)
-            cameraDistance = 18f * density
-            transformOrigin = TransformOrigin(0.5f, 0.44f)
+            scaleY = baseScale * (1f + talk * 0.008f)
+            translationX = clampedTx
+            translationY = clampedTy
+            rotationZ = clampedTiltZ
+            rotationY = clampedRotY
+            rotationX = clampedRotX
+            cameraDistance = 24f * density
+            transformOrigin = TransformOrigin(0.5f, 0.42f)
         }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // Crossfade smoothly between base NYC/Guam portrait and Nano Banana 2.1 topic-edited portrait
+        // Crossfade smoothly between base portrait and Nano Banana 2.1 photorealistic human portrait
         Crossfade(
             targetState = sceneImageBitmap to portraitRes,
-            animationSpec = tween(420),
+            animationSpec = tween(480),
             label = "topicSceneCrossfade"
         ) { (aiBitmap, fallbackRes) ->
             if (aiBitmap != null) {
@@ -284,22 +292,28 @@ fun LiveMotionPhotoFriendView(
                     .graphicsLayer {
                         val breath = breathPhaseState.value
                         val talk = if (isSpeaking) talkPulseState.value else 0f
-                        val baseScale = 1.07f * effectiveCropZoom * scaleState.value
+                        val baseScale = 1.14f * effectiveCropZoom * scaleState.value
+                        val clampedTiltZ = (sin(breath * 0.65f) * 0.45f + tiltState.value * 0.16f).coerceIn(-0.95f, 0.95f)
+                        val clampedRotY = (rotYState.value * 0.35f + sin(breath) * 0.8f).coerceIn(-2.4f, 2.4f)
+                        val clampedRotX = (rotXState.value * 0.30f + talk * 1.1f).coerceIn(-2.2f, 2.2f)
+                        val clampedTx = (sin(breath * 0.8f) * 3.5f + rotYState.value * 1.1f).coerceIn(-12f, 12f)
+                        val clampedTy = (cos(breath) * 3.0f + bounceYState.value * 0.55f - talk * 3.2f).coerceIn(-14f, 14f)
+
                         alpha = smoothBlinkState.value
                         scaleX = baseScale
-                        scaleY = baseScale * (1f + talk * 0.011f)
-                        translationX = sin(breath) * 4.5f
-                        translationY = cos(breath) * 3.8f + bounceYState.value - (talk * 4.2f)
-                        rotationZ = sin(breath * 0.7f) * 1.1f + tiltState.value
-                        rotationY = rotYState.value + sin(breath) * 1.8f
-                        rotationX = rotXState.value + (talk * 1.8f)
-                        cameraDistance = 18f * density
-                        transformOrigin = TransformOrigin(0.5f, 0.44f)
+                        scaleY = baseScale * (1f + talk * 0.008f)
+                        translationX = clampedTx
+                        translationY = clampedTy
+                        rotationZ = clampedTiltZ
+                        rotationY = clampedRotY
+                        rotationX = clampedRotX
+                        cameraDistance = 24f * density
+                        transformOrigin = TransformOrigin(0.5f, 0.42f)
                     }
             )
         }
 
-        // Subtle topic-matched lighting grade (instant visual change when switching topics!)
+        // Subtle topic-matched ambient color grade (instant visual cue while real-human scene loads)
         if (sceneImageBitmap == null) {
             Box(
                 modifier = Modifier

@@ -20,12 +20,14 @@ import com.example.data.VocabRepository
 import com.example.engine.HybridAiCoachEngine
 import com.example.engine.NanoBananaMotionEngine
 import com.example.engine.PronunciationAnalyzer
+import com.example.engine.SuggestedReplyOption
 import com.example.engine.VoiceCommandParser
 import com.example.engine.VoiceEngineState
 import com.example.engine.VoiceSettingCommand
 import com.example.engine.VoiceSpeechEngine
 import com.example.ui.components.MotionPhotoGesture
 import com.example.ui.components.StreakMilestoneEvent
+import com.example.ui.components.WeeklyStudyReportData
 import com.example.model.AiEngineMode
 import com.example.model.AiHumanTutor
 import com.example.model.CollectibleItem
@@ -173,6 +175,11 @@ data class TutorCallState(
     val liveSubtitleKo: String = HumanTutorRepository.tutors.first().greetingKo,
     val liveCoachingCommentKo: String = "마이크를 눌러 회화학습을 시작하세요",
     val liveNaturalRephraseEn: String = "",
+    val liveGrammarFixKo: String = "",
+    val activeEngineBadgeKo: String = "무료 오픈소스+스킬 코치",
+    val dynamicSuggestedReplies: List<SuggestedReplyOption> = HybridAiCoachEngine.defaultSuggestedRepliesForTopic("수다"),
+    val collectedUpgrades: List<Pair<String, String>> = emptyList(),
+    val pronunciationScoresInCall: List<Int> = emptyList(),
     val liveVoiceCommandNotice: String = "",
     val callSeconds: Int = 0,
     val activeTopicTag: String = "수다",
@@ -205,6 +212,9 @@ class SpeakQuestViewModel(
 
     val userProgress: StateFlow<UserProgress> = localStore.userProgressFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UserProgress())
+
+    val weeklyStudyReport: StateFlow<WeeklyStudyReportData> = localStore.weeklyStudyReportFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), WeeklyStudyReportData())
 
     val kingdomStats: StateFlow<KingdomProgressStats> = localStore.kingdomStatsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), KingdomProgressStats())
@@ -279,7 +289,7 @@ class SpeakQuestViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), GuestInviteSession())
 
     val engineMode: StateFlow<AiEngineMode> = llmSlotStore.engineModeFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), AiEngineMode.BUILT_IN_GEMINI)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), AiEngineMode.FREE_OPEN_SOURCE_AUTO)
 
     val llmSlots: StateFlow<List<LlmSlotConfig>> = llmSlotStore.slotsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
@@ -459,7 +469,10 @@ class SpeakQuestViewModel(
                     lastWasMiss = true,
                     lastFeedbackKo = "'${word.word}' 애매해요(△) — 해마·연상법 힌트를 보고 2문제 뒤 다시 확인합니다!"
                 )
-                viewModelScope.launch { localStore.markWordWeak(word.id) }
+                viewModelScope.launch {
+                    localStore.markWordWeak(word.id)
+                    localStore.recordDailyWordOutcome(word.id, word.word, word.meaningKo, known = false)
+                }
                 speakWithActiveTutor(word.word)
             }
             WordKnowledgeStatus.UNKNOWN -> {
@@ -475,7 +488,10 @@ class SpeakQuestViewModel(
                     lastWasMiss = true,
                     lastFeedbackKo = "'${word.word}' 몰라요(X) — 지금 해마학습법·단어연상법으로 각인하고 바로 복습 대기열에 넣었어요!"
                 )
-                viewModelScope.launch { localStore.markWordWeak(word.id) }
+                viewModelScope.launch {
+                    localStore.markWordWeak(word.id)
+                    localStore.recordDailyWordOutcome(word.id, word.word, word.meaningKo, known = false)
+                }
                 speakWithActiveTutor(word.exampleEn)
             }
         }
@@ -1002,6 +1018,7 @@ class SpeakQuestViewModel(
 
         viewModelScope.launch {
             localStore.markWordMastered(current.id)
+            localStore.recordDailyWordOutcome(current.id, current.word, current.meaningKo, known = true)
             val result = localStore.recordLearningAchievement(
                 xpDelta = xpGain + if (completed) 150 else 0,
                 coinsDelta = coinGain + if (completed) 100 else 0,
@@ -1144,7 +1161,9 @@ class SpeakQuestViewModel(
             showKoreanTranslations = _tutorCallState.value.showKoreanTranslations,
             liveSubtitleEn = tutor.greetingEn,
             liveSubtitleKo = tutor.greetingKo,
-            liveCoachingCommentKo = "EN 말하기 · KR 질문/음성설정",
+            liveCoachingCommentKo = "EN 말하기 · KR 질문/음성설정 · 단어 탭하면 느리게 듣기!",
+            activeEngineBadgeKo = engineMode.value.labelKo,
+            dynamicSuggestedReplies = HybridAiCoachEngine.defaultSuggestedRepliesForTopic(defaultTopic),
             activeTopicTag = defaultTopic,
             sceneLocationLabelKo = NanoBananaMotionEngine.topicToDisplayLocationKo(defaultTopic)
         )
@@ -1168,23 +1187,25 @@ class SpeakQuestViewModel(
             fromTutor = true,
             textEn = starterPromptEn,
             translationKo = "주제: $topicKo ($locationLabel) — 자막을 보고 친구처럼 편하게 대답해 보세요!",
-            coachingTipKo = "배경이 '$locationLabel' 현장으로 전환됩니다. 자신 있게 영어로 말해 보세요!",
+            coachingTipKo = "배경 조명이 '$locationLabel' 현장으로 즉시 전환됐어요. 자신 있게 영어로 말해 보세요!",
             engineBadge = tutor.accentLabel
         )
         _tutorCallState.value = _tutorCallState.value.copy(
             activeTopicTag = topicKo,
             sceneLocationLabelKo = locationLabel,
             isThinking = false,
+            isGeneratingScene = false,
+            sceneErrorKo = null,
+            nanoBananaSceneBitmap = null,
+            nanoBananaBlinkBitmap = null,
             messages = _tutorCallState.value.messages + msg,
             liveSubtitleEn = starterPromptEn,
-            liveSubtitleKo = "주제: $topicKo ($locationLabel) — 자연스럽게 영어로 답해 보세요!"
+            liveSubtitleKo = "주제: $topicKo ($locationLabel) — 자연스럽게 영어로 답해 보세요!",
+            liveCoachingCommentKo = "아래 추천 힌트를 탭하거나 마이크로 직접 말해 보세요!",
+            liveGrammarFixKo = "",
+            dynamicSuggestedReplies = HybridAiCoachEngine.defaultSuggestedRepliesForTopic(topicKo)
         )
         speakWithActiveTutor(starterPromptEn)
-        synthesizeTutorSceneWithNanoBanana(
-            context = context,
-            topicTag = topicKo,
-            gesture = MotionPhotoGesture.inferFromSpeech(starterPromptEn, isListening = false, isSpeaking = true)
-        )
     }
 
     fun synthesizeTutorSceneWithNanoBanana(
@@ -1239,8 +1260,9 @@ class SpeakQuestViewModel(
             } else {
                 _tutorCallState.value = _tutorCallState.value.copy(
                     isGeneratingScene = false,
-                    sceneErrorKo = result.errorMessage ?: "나노바나나 배경 생성에 실패했습니다."
+                    sceneErrorKo = null
                 )
+                showToast(result.errorMessage ?: "HD 스튜디오 배경으로 자동 표시됩니다.")
             }
         }
     }
@@ -1309,6 +1331,7 @@ class SpeakQuestViewModel(
                 history = st.messages + userMsg,
                 mode = engineMode.value,
                 slots = llmSlots.value,
+                activeTopicTag = st.activeTopicTag,
                 onStreamChunk = { partial ->
                     _tutorCallState.value = _tutorCallState.value.copy(
                         liveSubtitleEn = partial,
@@ -1336,9 +1359,23 @@ class SpeakQuestViewModel(
                 isStreaming = false
             )
 
-            val nextTurns = _tutorCallState.value.turnsInCall + 1
-            _tutorCallState.value = _tutorCallState.value.copy(
-                messages = _tutorCallState.value.messages.map { m ->
+            val currentCall = _tutorCallState.value
+            val nextTurns = currentCall.turnsInCall + 1
+            val updatedUpgrades = if (reply.naturalRephraseEn.isNotBlank()) {
+                (listOf(trimmed to reply.naturalRephraseEn) + currentCall.collectedUpgrades)
+                    .distinctBy { it.second }
+                    .take(15)
+            } else {
+                currentCall.collectedUpgrades
+            }
+            val updatedScores = if (coachingReport != null) {
+                currentCall.pronunciationScoresInCall + coachingReport.overallScore
+            } else {
+                currentCall.pronunciationScoresInCall
+            }
+
+            _tutorCallState.value = currentCall.copy(
+                messages = currentCall.messages.map { m ->
                     if (m.id == streamingId) finalTutorMsg else m
                 },
                 isThinking = false,
@@ -1347,6 +1384,13 @@ class SpeakQuestViewModel(
                 liveSubtitleKo = reply.translationKo,
                 liveCoachingCommentKo = reply.coachingTipKo,
                 liveNaturalRephraseEn = reply.naturalRephraseEn,
+                liveGrammarFixKo = reply.grammarFixKo,
+                activeEngineBadgeKo = reply.engineBadge,
+                dynamicSuggestedReplies = reply.suggestedReplies.ifEmpty {
+                    HybridAiCoachEngine.defaultSuggestedRepliesForTopic(currentCall.activeTopicTag)
+                },
+                collectedUpgrades = updatedUpgrades,
+                pronunciationScoresInCall = updatedScores,
                 turnsInCall = nextTurns
             )
 
@@ -1415,6 +1459,16 @@ class SpeakQuestViewModel(
             pitch = tutor.ttsPitch,
             rate = (tutor.ttsRate * rateMultiplier).coerceIn(0.55f, 1.4f),
             onDone = onDone
+        )
+    }
+
+    fun speakSlowWord(word: String) {
+        val tutor = _tutorCallState.value.selectedTutor
+        voiceEngine.speak(
+            text = word,
+            locale = tutor.locale,
+            pitch = tutor.ttsPitch,
+            rate = 0.78f
         )
     }
 
@@ -2159,12 +2213,16 @@ class SpeakQuestViewModel(
     }
 
     fun recordMainFocusWordResult(wordId: String, known: Boolean) {
+        val matchedWord = VocabRepository.allWords.firstOrNull { it.id == wordId }
+        val wordText = matchedWord?.word ?: wordId
+        val meaningText = matchedWord?.meaningKo ?: "수능 빈출 영단어"
         if (known) {
             _spartaState.value = _spartaState.value.copy(
                 sessionKnownCount = _spartaState.value.sessionKnownCount + 1
             )
             viewModelScope.launch {
                 localStore.markWordMastered(wordId)
+                localStore.recordDailyWordOutcome(wordId, wordText, meaningText, known = true)
                 val result = localStore.recordLearningAchievement(
                     xpDelta = 12,
                     coinsDelta = 8,
@@ -2178,6 +2236,10 @@ class SpeakQuestViewModel(
             _spartaState.value = _spartaState.value.copy(
                 sessionUnknownCount = _spartaState.value.sessionUnknownCount + 1
             )
+            viewModelScope.launch {
+                localStore.markWordWeak(wordId)
+                localStore.recordDailyWordOutcome(wordId, wordText, meaningText, known = false)
+            }
         }
     }
 

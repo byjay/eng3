@@ -227,17 +227,21 @@ data class CollectibleItem(
 )
 
 enum class AiEngineMode(val labelKo: String, val descKo: String) {
+    FREE_OPEN_SOURCE_AUTO(
+        "무료 오픈소스+AI 자동 (추천)",
+        "키 없는 무료 오픈소스 LLM → 10슬롯(Groq/OpenRouter) → Gemini → LLM 없는 스킬엔진 4중 무중단"
+    ),
     BUILT_IN_GEMINI(
-        "실제 Gemini AI (기본)",
-        "API 키 없이 즉시 원어민 선생님과 실시간 회화학습"
+        "내장 Gemini + 무료 폴백",
+        "내장 Gemini AI 우선 호출, 한도 초과 시 무료 오픈소스·온디바이스 스킬로 즉시 전환"
     ),
     EXTERNAL_10_SLOT_ROTATOR(
-        "10슬롯 LLM 자동 순환",
-        "Groq 무료 API 등 최대 10개 키를 라운드 로빈·자동 폴백 순환"
+        "10슬롯 무료 LLM 순환",
+        "Groq·OpenRouter·Cerebras·HuggingFace·Ollama 등 최대 10개 무료 오픈소스 API 라운드로빈"
     ),
     OFFLINE_ONLY(
-        "100% 오프라인 초경량 엔진",
-        "인터넷·LLM 없이 기기 내장 발음/패턴 코치로 초고속 반응"
+        "LLM 없이 0ms 스킬 엔진",
+        "API·인터넷·LLM 0%! 멀티턴 롤플레이·문법교정·55+ 실전표현 온디바이스 즉시 회화"
     )
 }
 

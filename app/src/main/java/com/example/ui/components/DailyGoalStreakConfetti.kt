@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material3.Icon
@@ -79,6 +80,7 @@ data class StreakMilestoneEvent(
 fun DailyGoalStreakCardSection(
     streakCount: Int,
     todayWordsCompleted: Int,
+    onOpenWeeklyReport: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val wordsInStep = todayWordsCompleted % DAILY_STREAK_WORD_STEP
@@ -188,13 +190,45 @@ fun DailyGoalStreakCardSection(
                         "다음 스트릭 마일스톤까지 ${remainingWords}단어 남았어요!"
                     },
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
                 )
-                Text(
-                    text = "오늘 총 ${todayWordsCompleted}단어",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = AdventureEmeraldShadow
-                )
+                if (onOpenWeeklyReport != null) {
+                    Spacer(Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = SkyQuestBlue.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, SkyQuestBlue.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable(onClick = onOpenWeeklyReport)
+                            .testTag("open_weekly_report_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BarChart,
+                                contentDescription = "주간 학습 리포트 보기",
+                                tint = SkyQuestBlue,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "주간 리포트",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                color = SkyQuestBlue
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "오늘 총 ${todayWordsCompleted}단어",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = AdventureEmeraldShadow
+                    )
+                }
             }
         }
     }

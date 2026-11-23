@@ -18,12 +18,16 @@ import com.example.model.ScorecardEntry
 import com.example.model.StudyScheduleItem
 import com.example.model.StudyTimeLogEntry
 import com.example.model.UserProgress
+import com.example.ui.components.DailyStudyMetric
+import com.example.ui.components.TodayWordResultEntry
+import com.example.ui.components.WeeklyStudyReportData
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -97,7 +101,49 @@ class DadKingdomLocalStore(private val context: Context) {
     private val unopenedChestsKey = intPreferencesKey("unopened_mystery_chests")
     private val openedTreasuresKey = stringPreferencesKey("opened_mystery_treasures_json")
 
+    // Weekly Study Report (Per-Day Metrics + Today's Studied Words Scorecard)
+    private val dailyWordMetricsKey = stringPreferencesKey("daily_word_metrics_json")
+    private val todayWordResultsKey = stringPreferencesKey("today_word_results_json")
+
     private fun todayIso(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+    val weeklyStudyReportFlow: Flow<WeeklyStudyReportData> = context.dadKingdomDataStore.data.map { prefs ->
+        val today = todayIso()
+        val storedDate = prefs[lastStudyDateKey] ?: today
+        val todayWordsCompleted = if (storedDate == today) (prefs[todayWordsKey] ?: 0) else 0
+        val streakCount = prefs[streakKey] ?: 0
+        val dailyGoal = (prefs[dailyGoalKey] ?: 10).coerceAtLeast(10)
+
+        val metricsMap = parseDailyWordMetrics(prefs[dailyWordMetricsKey])
+        val dayFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val koWeekdays = arrayOf("일", "월", "화", "수", "목", "금", "토")
+
+        val rolling7Days = (6 downTo 0).map { daysAgo ->
+            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -daysAgo) }
+            val dateStr = dayFmt.format(cal.time)
+            val labelKo = koWeekdays[(cal.get(Calendar.DAY_OF_WEEK) - 1).coerceIn(0, 6)]
+            val stored = metricsMap[dateStr]
+            val known = if (daysAgo == 0) maxOf(stored?.first ?: 0, todayWordsCompleted) else (stored?.first ?: 0)
+            val review = stored?.second ?: 0
+            DailyStudyMetric(
+                dateIso = dateStr,
+                dayLabelKo = labelKo,
+                isToday = daysAgo == 0,
+                knownCount = known,
+                reviewCount = review
+            )
+        }
+
+        val todayWords = parseTodayWordResults(prefs[todayWordResultsKey]).filter { it.dateIso == today }
+
+        WeeklyStudyReportData(
+            dailyMetrics = rolling7Days,
+            todayWordResults = todayWords,
+            cumulativeStreakCount = streakCount,
+            todayWordsCompleted = todayWordsCompleted,
+            dailyGoalTarget = dailyGoal
+        )
+    }
 
     val guestInviteSessionFlow: Flow<GuestInviteSession> = context.dadKingdomDataStore.data.map { prefs ->
         val isGuest = prefs[guestModeKey] ?: false
@@ -426,6 +472,104 @@ class DadKingdomLocalStore(private val context: Context) {
             weak.add(wordId)
             prefs[weakWordsKey] = serializeStringList(weak.toList())
         }
+    }
+
+    suspend fun recordDailyWordOutcome(
+        wordId: String,
+        word: String,
+        meaningKo: String,
+        known: Boolean
+    ) {
+        val today = todayIso()
+        context.dadKingdomDataStore.edit { prefs ->
+            val metricsMap = parseDailyWordMetrics(prefs[dailyWordMetricsKey]).toMutableMap()
+            val prev = metricsMap[today] ?: (0 to 0)
+            metricsMap[today] = if (known) {
+                (prev.first + 1) to prev.second
+            } else {
+                prev.first to (prev.second + 1)
+            }
+            // Keep latest 14 days sorted
+            val trimmedMetrics = metricsMap.entries.sortedByDescending { it.key }.take(14)
+                .associate { it.key to it.value }
+            prefs[dailyWordMetricsKey] = serializeDailyWordMetrics(trimmedMetrics)
+
+            val existingResults = parseTodayWordResults(prefs[todayWordResultsKey])
+                .filter { it.dateIso == today && it.wordId != wordId }
+            val updatedEntry = TodayWordResultEntry(
+                wordId = wordId,
+                word = word,
+                meaningKo = meaningKo,
+                known = known,
+                dateIso = today,
+                timestampMs = System.currentTimeMillis()
+            )
+            prefs[todayWordResultsKey] = serializeTodayWordResults((listOf(updatedEntry) + existingResults).take(80))
+        }
+    }
+
+    private fun serializeDailyWordMetrics(map: Map<String, Pair<Int, Int>>): String {
+        val obj = JSONObject()
+        map.forEach { (date, counts) ->
+            obj.put(
+                date,
+                JSONObject().apply {
+                    put("known", counts.first)
+                    put("review", counts.second)
+                }
+            )
+        }
+        return obj.toString()
+    }
+
+    private fun parseDailyWordMetrics(json: String?): Map<String, Pair<Int, Int>> {
+        if (json.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val obj = JSONObject(json)
+            val result = mutableMapOf<String, Pair<Int, Int>>()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val date = keys.next()
+                val item = obj.optJSONObject(date) ?: continue
+                result[date] = item.optInt("known", 0).coerceAtLeast(0) to item.optInt("review", 0).coerceAtLeast(0)
+            }
+            result
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun serializeTodayWordResults(list: List<TodayWordResultEntry>): String {
+        val arr = JSONArray()
+        list.forEach { e ->
+            arr.put(
+                JSONObject().apply {
+                    put("wordId", e.wordId)
+                    put("word", e.word)
+                    put("meaningKo", e.meaningKo)
+                    put("known", e.known)
+                    put("dateIso", e.dateIso)
+                    put("timestampMs", e.timestampMs)
+                }
+            )
+        }
+        return arr.toString()
+    }
+
+    private fun parseTodayWordResults(json: String?): List<TodayWordResultEntry> {
+        if (json.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val arr = JSONArray(json)
+            (0 until arr.length()).map { idx ->
+                val o = arr.getJSONObject(idx)
+                TodayWordResultEntry(
+                    wordId = o.optString("wordId"),
+                    word = o.optString("word"),
+                    meaningKo = o.optString("meaningKo"),
+                    known = o.optBoolean("known", true),
+                    dateIso = o.optString("dateIso"),
+                    timestampMs = o.optLong("timestampMs", 0L)
+                )
+            }
+        }.getOrDefault(emptyList())
     }
 
     suspend fun markScenarioCleared(scenarioId: String) {

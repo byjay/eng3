@@ -203,6 +203,7 @@ fun GameHudBar(
     progress: UserProgress,
     onCoinsClick: () -> Unit,
     onHeartsClick: () -> Unit,
+    onStreakClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -223,7 +224,7 @@ fun GameHudBar(
                 tint = CoralOrange,
                 value = "${progress.streakCount}회",
                 label = "목표 스트릭",
-                onClick = {},
+                onClick = onStreakClick,
                 tag = "hud_streak_badge"
             )
             HudBadgeItem(

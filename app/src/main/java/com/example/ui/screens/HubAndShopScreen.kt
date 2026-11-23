@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1565,6 +1566,7 @@ private fun LlmSlotEditorCard(
     onTest: (LlmSlotConfig) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var providerName by remember(slot.providerName) { mutableStateOf(slot.providerName) }
     var baseUrl by remember(slot.baseUrl) { mutableStateOf(slot.baseUrl) }
     var modelId by remember(slot.modelId) { mutableStateOf(slot.modelId) }
     var apiKey by remember(slot.apiKey) { mutableStateOf(slot.apiKey) }
@@ -1588,17 +1590,17 @@ private fun LlmSlotEditorCard(
                     Icon(
                         imageVector = Icons.Default.Key,
                         contentDescription = null,
-                        tint = if (enabled && apiKey.isNotBlank()) AdventureEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (enabled && (apiKey.isNotBlank() || baseUrl.contains("pollinations") || baseUrl.contains("10.0.2.2") || baseUrl.contains("localhost"))) AdventureEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "슬롯 #${slot.slotIndex + 1} · ${slot.providerName}",
+                            text = "슬롯 #${slot.slotIndex + 1} · $providerName",
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
-                            text = if (apiKey.isBlank()) "키 미입력 (${slot.modelId})" else "키 설정됨 · ${slot.lastStatus}",
+                            text = if (apiKey.isBlank()) "${slot.lastStatus} (${modelId})" else "무료 키 설정됨 · ${modelId}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1611,6 +1613,43 @@ private fun LlmSlotEditorCard(
             }
 
             if (expanded) {
+                Text(
+                    text = "원터치 무료 오픈소스 LLM 프리셋 채우기:",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = SkyQuestBlueShadow
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val presets = listOf(
+                        Triple("Pollinations(키불필요)", "https://text.pollinations.ai/openai", "openai"),
+                        Triple("Groq 무료(300t/s)", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+                        Triple("OpenRouter 무료", "https://openrouter.ai/api/v1", "openrouter/free"),
+                        Triple("Cerebras 무료", "https://api.cerebras.ai/v1", "llama-3.3-70b"),
+                        Triple("HuggingFace 무료", "https://router.huggingface.co/v1", "Qwen/Qwen2.5-72B-Instruct"),
+                        Triple("Ollama 로컬", "http://10.0.2.2:11434/v1", "llama3.2")
+                    )
+                    items(presets) { (name, url, model) ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SkyQuestBlue.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, SkyQuestBlue.copy(alpha = 0.4f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    providerName = name
+                                    baseUrl = url
+                                    modelId = model
+                                    enabled = true
+                                }
+                        ) {
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = SkyQuestBlueShadow,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1640,7 +1679,7 @@ private fun LlmSlotEditorCard(
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
-                    label = { Text("API Key") },
+                    label = { Text("API Key (Pollinations·Ollama는 비워도 됨)") },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -1654,6 +1693,7 @@ private fun LlmSlotEditorCard(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val updated = slot.copy(
+                        providerName = providerName.trim(),
                         baseUrl = baseUrl.trim(),
                         modelId = modelId.trim(),
                         apiKey = apiKey.trim(),

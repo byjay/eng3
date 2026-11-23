@@ -315,6 +315,70 @@
       50% { rotate: 180deg; transform: rotateY(180deg); }
       100% { rotate: 360deg; transform: rotateY(360deg); }
     }
+
+    /* ==================== WEEKLY STUDY REPORT MODAL & CHARTS ==================== */
+    .report-modal-card {
+      position: relative; z-index: 2;
+      width: 100%; max-width: 460px; max-height: 88vh;
+      background: #FBF8F1; border: 2px solid var(--gold); border-radius: 26px;
+      overflow: hidden; display: flex; flex-direction: column;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      animation: congratsPop 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    .report-header {
+      background: linear-gradient(120deg, #0E6F52, #148F68, #1D4ED8);
+      color: #fff; padding: 14px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .report-body {
+      padding: 14px; overflow-y: auto; flex: 1;
+    }
+    .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .kpi-tile {
+      background: #fff; border: 1.2px solid var(--outline); border-radius: 14px;
+      padding: 10px 6px; text-align: center;
+    }
+    .chart-box {
+      background: #fff; border: 1.2px solid var(--outline); border-radius: 18px;
+      padding: 12px; margin-bottom: 12px;
+    }
+    .donut-wrap {
+      display: flex; align-items: center; gap: 14px; margin-top: 8px;
+    }
+    .donut-ring {
+      width: 104px; height: 104px; border-radius: 50%; flex: 0 0 104px;
+      display: flex; align-items: center; justify-content: center;
+      background: conic-gradient(var(--emerald) 0deg, var(--emerald) var(--known-deg, 0deg), #EA580C var(--known-deg, 0deg), #EA580C var(--total-deg, 0deg), #EDE7DA var(--total-deg, 0deg));
+      transition: background 0.45s ease;
+    }
+    .donut-hole {
+      width: 72px; height: 72px; border-radius: 50%; background: #fff;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .week-bars {
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+      align-items: end; height: 126px; padding-top: 16px; position: relative;
+      border-bottom: 1px solid var(--outline);
+    }
+    .week-goal-line {
+      position: absolute; left: 0; right: 0; top: 36px;
+      border-top: 1.5px dashed rgba(180, 123, 0, 0.65);
+      pointer-events: none;
+    }
+    .week-col {
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%;
+    }
+    .week-bar-slot {
+      width: 22px; height: 96px; border-radius: 7px; background: #F6F2E9;
+      display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;
+    }
+    .week-bar-known { background: var(--emerald); width: 100%; transition: height 0.4s ease; }
+    .week-bar-review { background: #EA580C; width: 100%; transition: height 0.4s ease; }
+    .word-log-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px; border-radius: 12px; margin-top: 6px;
+      font-size: 13px; border: 1px solid var(--outline); background: #FAFAF8;
+    }
   </style>
 </head>
 <body>
@@ -430,21 +494,42 @@
       </div>
       <div class="row" style="font-size: 11px; font-weight: 700; color: var(--muted);">
         <span id="dailyGoalHintText">다음 스트릭 마일스톤까지 10단어 남았어요!</span>
-        <span id="dailyTotalWordsLabel" style="color: var(--emerald-dark);">오늘 총 0단어</span>
+        <button class="chip" style="background: #EFF6FF; color: #1D4ED8; border-color: #93C5FD; padding: 4px 10px;" onclick="openWeeklyReportModal()">📊 주간 리포트</button>
       </div>
+    </div>
+
+    <div id="reviewModeBanner" class="hidden" style="background:#FFF3E8; border:1.5px solid #FB923C; border-radius:12px; padding:8px 10px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:800; color:#C2410C;">
+      <span id="reviewModeBannerText">🔥 오답 집중 복습 모드 진행 중</span>
+      <button class="chip" style="padding:3px 9px; background:#fff; border-color:#FB923C; color:#C2410C;" onclick="toggleWrongReviewMode(false)">해제</button>
     </div>
 
     <div id="wordTitle" style="font-size: 24px; font-weight: 900; margin-bottom: 4px;"></div>
     <div id="wordSentence" style="font-size: 14px; background: #F5F1E8; padding: 10px; border-radius: 12px; margin-bottom: 10px;"></div>
-    <div class="grid-2" style="margin-bottom: 10px;">
+    <div class="grid-2" style="margin-bottom: 8px;">
       <button class="btn btn-blue" onclick="speakCurrentSentence()">원어민 듣기</button>
-      <button class="btn btn-emerald" onclick="masterCurrentWordQuick()">완벽 암기! (+1)</button>
+      <button class="btn btn-emerald" id="btnMasterQuick" onclick="masterCurrentWordQuick()">완벽 암기! (+1)</button>
     </div>
-    <div style="margin-bottom: 8px;">
-      <button class="btn btn-coral" onclick="startVoiceSpeaking()">음성 회화 말하기</button>
+    <div class="grid-2" style="margin-bottom: 8px;">
+      <button class="btn btn-coral" onclick="markCurrentWordWrongQuick()">다시 복습 (오답저장)</button>
+      <button class="btn btn-gold" onclick="startVoiceSpeaking()">음성 회화 말하기</button>
     </div>
     <div id="voiceFeedback" style="font-size: 12px; color: var(--emerald-dark); margin-bottom: 6px; min-height: 16px;"></div>
     <div id="optionsContainer"></div>
+  </div>
+
+  <!-- 2-B. DEDICATED WRONG ANSWER NOTEBOOK SECTION ('오답 노트' + '복습 모드' 버튼) -->
+  <div class="card" id="wrongNotebookCard">
+    <div class="row" style="margin-bottom: 8px;">
+      <div>
+        <strong style="font-size: 15px; display: block;">📕 오답 노트</strong>
+        <span style="font-size: 11px; color: var(--muted);">틀린 단어가 자동 보관되어 오답만 집중 복습할 수 있어요</span>
+      </div>
+      <span id="wrongCountBadge" style="font-size: 11px; font-weight: 900; background: #EA580C; color: #fff; padding: 4px 10px; border-radius: 999px;">0단어 보관</span>
+    </div>
+    <div style="margin-bottom: 10px;">
+      <button id="btnWrongReviewMode" class="btn btn-coral" onclick="toggleWrongReviewMode()">🔁 복습 모드 (오답만 집중 학습)</button>
+    </div>
+    <div id="wrongWordsList"></div>
   </div>
 
   <!-- Pure CSS Congratulations Confetti Overlay -->
@@ -468,6 +553,80 @@
         </div>
       </div>
       <button class="btn btn-emerald" onclick="dismissConfettiCelebration()">계속 학습하기</button>
+    </div>
+  </div>
+
+  <!-- Weekly Study Report Modal (Today's Word Grades + Cumulative Streak + Charts) -->
+  <div id="weeklyReportModal" class="confetti-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="weeklyReportTitle">
+    <div class="report-modal-card">
+      <div class="report-header">
+        <div>
+          <strong id="weeklyReportTitle" style="font-size: 17px; display: block;">📊 주간 학습 리포트</strong>
+          <span id="weeklyReportSub" style="font-size: 11px; opacity: 0.9;">최근 7일 성취 및 오늘 단어 성적표</span>
+        </div>
+        <button onclick="closeWeeklyReportModal()" style="border:none; background:rgba(255,255,255,0.2); color:#fff; width:34px; height:34px; border-radius:50%; font-weight:900; cursor:pointer;">✕</button>
+      </div>
+      <div class="report-body">
+        <div class="kpi-grid">
+          <div class="kpi-tile" style="background:#FFF3E8; border-color:#FDBA74;">
+            <div style="font-size:11px; font-weight:800; color:#C2410C;">누적 스트릭</div>
+            <div id="repKpiStreak" style="font-size:20px; font-weight:900; margin:2px 0;">🔥 0회</div>
+            <div style="font-size:10px; color:var(--muted);">10단어 달성</div>
+          </div>
+          <div class="kpi-tile" style="background:#EFF6FF; border-color:#93C5FD;">
+            <div style="font-size:11px; font-weight:800; color:#1D4ED8;">오늘 성적</div>
+            <div id="repKpiGrade" style="font-size:20px; font-weight:900; margin:2px 0;">도전 중</div>
+            <div id="repKpiAcc" style="font-size:10px; color:var(--muted);">정답률 0%</div>
+          </div>
+          <div class="kpi-tile" style="background:#ECFDF5; border-color:#6EE7B7;">
+            <div style="font-size:11px; font-weight:800; color:var(--emerald-dark);">오늘 완료</div>
+            <div id="repKpiToday" style="font-size:20px; font-weight:900; margin:2px 0;">0단어</div>
+            <div id="repKpiWeek" style="font-size:10px; color:var(--muted);">주간 0단어</div>
+          </div>
+        </div>
+
+        <div class="chart-box">
+          <div class="row">
+            <strong style="font-size:14px;">오늘의 성취 차트</strong>
+            <span id="repGoalPctPill" style="font-size:11px; font-weight:800; color:var(--emerald-dark); background:#ECFDF5; padding:3px 8px; border-radius:999px;">일일 목표 0%</span>
+          </div>
+          <div class="donut-wrap">
+            <div id="repDonutRing" class="donut-ring">
+              <div class="donut-hole">
+                <strong id="repDonutAcc" style="font-size:18px;">0%</strong>
+                <span style="font-size:10px; color:var(--muted);">정답률</span>
+              </div>
+            </div>
+            <div style="flex:1; font-size:12px;">
+              <div class="row" style="margin-bottom:4px;"><span>🟢 완벽 암기</span><strong id="repKnownCnt" style="color:var(--emerald-dark);">0단어</strong></div>
+              <div class="row" style="margin-bottom:4px;"><span>🟠 다시 복습</span><strong id="repReviewCnt" style="color:#C2410C;">0단어</strong></div>
+              <div class="row"><span>🏆 10단어 목표</span><strong id="repGoalCnt" style="color:var(--gold-dark);">0/10</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-box">
+          <div class="row" style="margin-bottom:4px;">
+            <strong style="font-size:14px;">최근 7일 주간 학습 차트</strong>
+            <span style="font-size:10px; font-weight:800; color:var(--gold-dark);">점선: 10단어 목표</span>
+          </div>
+          <div class="week-bars" id="repWeekBars">
+            <div class="week-goal-line"></div>
+          </div>
+          <div id="repWeekLabels" style="display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-top:6px; text-align:center; font-size:11px; font-weight:700; color:var(--muted);"></div>
+        </div>
+
+        <div class="chart-box" style="margin-bottom:0;">
+          <div class="row">
+            <strong style="font-size:14px;">오늘 학습한 단어 성적표</strong>
+            <span id="repTodayLogCount" style="font-size:11px; font-weight:800; color:#1D4ED8;">0건</span>
+          </div>
+          <div id="repTodayWordsList"></div>
+        </div>
+      </div>
+      <div style="padding:12px 14px; background:#fff; border-top:1px solid var(--outline);">
+        <button class="btn btn-emerald" onclick="closeWeeklyReportModal()">확인 · 계속 학습하기</button>
+      </div>
     </div>
   </div>
 
@@ -584,9 +743,13 @@
       chests: rawSaved.chests || 0,
       dailyGoalStreak: rawSaved.dailyGoalStreak || 0,
       todayWords: rawSaved.lastWordDate === todayKey ? (rawSaved.todayWords || 0) : 0,
-      lastWordDate: todayKey
+      lastWordDate: todayKey,
+      weeklyHistory: rawSaved.weeklyHistory || {},
+      todayWordLog: rawSaved.lastWordDate === todayKey ? (rawSaved.todayWordLog || []) : [],
+      wrongWords: Array.isArray(rawSaved.wrongWords) ? rawSaved.wrongWords : []
     };
     let curIdx = 0;
+    let isWrongReviewMode = false;
 
     function savePwaState() {
       state.lastWordDate = getTodayIso();
@@ -600,10 +763,104 @@
       document.getElementById('dailyStreakBadge').textContent = '🔥 ' + state.dailyGoalStreak + '회 달성';
       document.getElementById('dailyWordsStepLabel').textContent = shownWords + '/10 단어';
       document.getElementById('dailyGoalProgressFill').style.width = ((shownWords / 10) * 100) + '%';
-      document.getElementById('dailyTotalWordsLabel').textContent = '오늘 총 ' + state.todayWords + '단어';
       document.getElementById('dailyGoalHintText').textContent = (state.todayWords > 0 && stepWords === 0)
-        ? '10단어 목표 달성! 다음 스트릭까지 10단어'
-        : ('다음 스트릭 마일스톤까지 ' + remaining + '단어 남았어요!');
+        ? '10단어 달성! 오늘 총 ' + state.todayWords + '단어'
+        : ('다음 스트릭까지 ' + remaining + '단어 (오늘 ' + state.todayWords + '단어)');
+    }
+
+    function recordWordOutcomeLog(wordObj, known) {
+      const today = getTodayIso();
+      if (state.lastWordDate !== today) {
+        state.todayWords = 0;
+        state.todayWordLog = [];
+        state.lastWordDate = today;
+      }
+      if (!state.weeklyHistory[today]) state.weeklyHistory[today] = { known: 0, review: 0 };
+      if (known) state.weeklyHistory[today].known += 1;
+      else state.weeklyHistory[today].review += 1;
+      state.todayWordLog = [{ w: wordObj.w, m: wordObj.m, known }]
+        .concat(state.todayWordLog.filter(x => x.w !== wordObj.w))
+        .slice(0, 50);
+    }
+
+    function openWeeklyReportModal() {
+      const today = getTodayIso();
+      const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+      const days = [];
+      let weeklyKnownTotal = 0;
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        const rec = state.weeklyHistory[iso] || { known: 0, review: 0 };
+        const known = i === 0 ? Math.max(rec.known || 0, state.todayWords) : (rec.known || 0);
+        const review = rec.review || 0;
+        weeklyKnownTotal += known;
+        days.push({ iso, label: i === 0 ? '오늘' : dayNames[d.getDay()], isToday: i === 0, known, review });
+      }
+      const todayDay = days[days.length - 1];
+      const totalAttempts = todayDay.known + todayDay.review;
+      const acc = totalAttempts > 0 ? Math.round((todayDay.known / totalAttempts) * 100) : 0;
+      const grade = totalAttempts === 0 ? '도전 중' : (acc >= 95 && todayDay.known >= 10 ? 'S+' : (acc >= 90 ? 'A+' : (acc >= 80 ? 'A' : (acc >= 65 ? 'B+' : 'B'))));
+      const goalPct = Math.min(100, Math.round((todayDay.known / 10) * 100));
+
+      document.getElementById('weeklyReportSub').textContent = state.player + ' · 최근 7일 성취 및 오늘 단어 성적표';
+      document.getElementById('repKpiStreak').textContent = '🔥 ' + state.dailyGoalStreak + '회';
+      document.getElementById('repKpiGrade').textContent = grade;
+      document.getElementById('repKpiAcc').textContent = '정답률 ' + acc + '%';
+      document.getElementById('repKpiToday').textContent = todayDay.known + '단어';
+      document.getElementById('repKpiWeek').textContent = '주간 ' + weeklyKnownTotal + '단어';
+      document.getElementById('repGoalPctPill').textContent = '일일 목표 ' + goalPct + '%';
+      document.getElementById('repDonutAcc').textContent = acc + '%';
+      document.getElementById('repKnownCnt').textContent = todayDay.known + '단어';
+      document.getElementById('repReviewCnt').textContent = todayDay.review + '단어';
+      document.getElementById('repGoalCnt').textContent = Math.min(todayDay.known, 10) + '/10';
+
+      const knownDeg = totalAttempts > 0 ? Math.round((todayDay.known / totalAttempts) * 360) : 0;
+      const totalDeg = totalAttempts > 0 ? 360 : 0;
+      const ring = document.getElementById('repDonutRing');
+      ring.style.setProperty('--known-deg', knownDeg + 'deg');
+      ring.style.setProperty('--total-deg', totalDeg + 'deg');
+
+      const maxVal = Math.max(10, ...days.map(x => x.known + x.review)) + 1;
+      const barsEl = document.getElementById('repWeekBars');
+      const labelsEl = document.getElementById('repWeekLabels');
+      barsEl.innerHTML = '<div class="week-goal-line"></div>';
+      labelsEl.innerHTML = '';
+      days.forEach(d => {
+        const knownPct = Math.round((d.known / maxVal) * 100);
+        const revPct = Math.round((d.review / maxVal) * 100);
+        const col = document.createElement('div');
+        col.className = 'week-col';
+        col.innerHTML = '<div class="week-bar-slot" style="' + (d.isToday ? 'background:#FFF4DC;' : '') + '">' +
+          '<div class="week-bar-review" style="height:' + revPct + '%"></div>' +
+          '<div class="week-bar-known" style="height:' + knownPct + '%"></div>' +
+          '</div>';
+        barsEl.appendChild(col);
+
+        const lbl = document.createElement('div');
+        lbl.innerHTML = '<div style="color:' + (d.isToday ? 'var(--emerald-dark)' : 'var(--muted)') + ';font-weight:900;">' + d.known + '</div>' +
+          '<div style="' + (d.isToday ? 'background:#EA580C;color:#fff;border-radius:6px;padding:1px 4px;' : '') + '">' + d.label + '</div>';
+        labelsEl.appendChild(lbl);
+      });
+
+      const listEl = document.getElementById('repTodayWordsList');
+      document.getElementById('repTodayLogCount').textContent = state.todayWordLog.length + '건';
+      if (state.todayWordLog.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center;font-size:12px;color:var(--muted);padding:12px;">아직 오늘 기록된 단어가 없어요! 첫 단어를 학습해 보세요.</div>';
+      } else {
+        listEl.innerHTML = state.todayWordLog.map(item =>
+          '<div class="word-log-row">' +
+          '<div><strong>' + item.w + '</strong><div style="font-size:11px;color:var(--muted);">' + item.m + '</div></div>' +
+          '<span style="font-size:11px;font-weight:900;color:#fff;padding:4px 9px;border-radius:999px;background:' + (item.known ? 'var(--emerald)' : '#EA580C') + ';">' + (item.known ? '완벽 암기' : '다시 복습') + '</span>' +
+          '</div>'
+        ).join('');
+      }
+      document.getElementById('weeklyReportModal').classList.remove('hidden');
+    }
+
+    function closeWeeklyReportModal() {
+      document.getElementById('weeklyReportModal').classList.add('hidden');
     }
 
     function launchCssConfettiCelebration(newStreak, todayWords) {
@@ -643,12 +900,80 @@
       document.getElementById('confettiStage').innerHTML = '';
     }
 
-    function recordCompletedWord() {
-      const today = getTodayIso();
-      if (state.lastWordDate !== today) {
-        state.todayWords = 0;
-        state.lastWordDate = today;
+    function getActiveDeck() {
+      if (isWrongReviewMode) {
+        const list = CSAT_BANK.filter(item => state.wrongWords.includes(item.w));
+        if (list.length > 0) return list;
+        isWrongReviewMode = false;
       }
+      return CSAT_BANK;
+    }
+
+    function addWrongWord(wordKey) {
+      if (!state.wrongWords.includes(wordKey)) {
+        state.wrongWords = [wordKey].concat(state.wrongWords);
+      }
+    }
+
+    function removeWrongWord(wordKey) {
+      state.wrongWords = state.wrongWords.filter(w => w !== wordKey);
+    }
+
+    function toggleWrongReviewMode(forceState) {
+      const target = typeof forceState === 'boolean' ? forceState : !isWrongReviewMode;
+      if (target && state.wrongWords.length === 0) {
+        document.getElementById('voiceFeedback').textContent = '보관된 오답 단어가 없어요! 틀린 단어가 자동으로 저장됩니다.';
+        return;
+      }
+      isWrongReviewMode = target;
+      curIdx = 0;
+      renderQuestion();
+      if (isWrongReviewMode) {
+        document.getElementById('wordTitle').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function renderWrongNotebook() {
+      const wrongObjs = CSAT_BANK.filter(item => state.wrongWords.includes(item.w));
+      const badge = document.getElementById('wrongCountBadge');
+      const btn = document.getElementById('btnWrongReviewMode');
+      const listEl = document.getElementById('wrongWordsList');
+      badge.textContent = wrongObjs.length > 0 ? (wrongObjs.length + '단어 보관') : '0단어 클린';
+      badge.style.background = wrongObjs.length > 0 ? '#EA580C' : 'var(--emerald)';
+      btn.textContent = isWrongReviewMode
+        ? ('✓ 복습 모드 진행 중 (' + wrongObjs.length + '단어 남음 · 해제)')
+        : ('🔁 복습 모드 (' + wrongObjs.length + '단어 집중 학습)');
+      btn.className = isWrongReviewMode ? 'btn btn-emerald' : 'btn btn-coral';
+
+      if (wrongObjs.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center;font-size:12px;color:var(--muted);padding:10px;background:#ECFDF5;border-radius:12px;">보관된 오답 단어가 없어요! 틀리거나 "다시 복습"을 누른 단어가 자동 보관됩니다.</div>';
+        return;
+      }
+      listEl.innerHTML = wrongObjs.map(item =>
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:12px;background:#FFF7ED;border:1px solid #FDBA74;margin-bottom:6px;">' +
+        '<div style="flex:1;"><strong style="font-size:14px;">' + item.w + '</strong><div style="font-size:12px;color:#C2410C;font-weight:700;">' + item.m + '</div></div>' +
+        '<button class="chip" style="padding:5px 9px;" onclick="speakText(\'' + item.w.replace(/'/g, '') + '. ' + item.s.replace(/'/g, '') + '\')">🔊</button>' +
+        '<button class="chip" style="padding:5px 9px;background:var(--emerald);color:#fff;border-color:var(--emerald);" onclick="graduateWrongWord(\'' + item.w + '\')">암기완료</button>' +
+        '</div>'
+      ).join('');
+    }
+
+    function graduateWrongWord(wordKey) {
+      const obj = CSAT_BANK.find(x => x.w === wordKey);
+      if (obj) recordCompletedWord(obj);
+      removeWrongWord(wordKey);
+      savePwaState();
+      if (isWrongReviewMode && state.wrongWords.length === 0) {
+        isWrongReviewMode = false;
+        document.getElementById('voiceFeedback').textContent = '🎉 오답 노트 올클리어! 틀린 단어를 모두 정복했어요!';
+      }
+      renderQuestion();
+    }
+
+    function recordCompletedWord(wordObj) {
+      const q = wordObj || getActiveDeck()[curIdx % getActiveDeck().length];
+      removeWrongWord(q.w);
+      recordWordOutcomeLog(q, true);
       const prevWords = state.todayWords;
       state.todayWords += 1;
       state.solved += 1;
@@ -666,8 +991,26 @@
     }
 
     function masterCurrentWordQuick() {
+      const deck = getActiveDeck();
+      const q = deck[curIdx % deck.length];
       triggerSquirrelMood('sq-cheer');
-      recordCompletedWord();
+      recordCompletedWord(q);
+      if (isWrongReviewMode && state.wrongWords.length === 0) {
+        isWrongReviewMode = false;
+        document.getElementById('voiceFeedback').textContent = '🎉 오답 노트 올클리어! 모든 오답을 마스터했어요!';
+      }
+      curIdx = isWrongReviewMode ? 0 : (curIdx + 1);
+      renderQuestion();
+    }
+
+    function markCurrentWordWrongQuick() {
+      const deck = getActiveDeck();
+      const q = deck[curIdx % deck.length];
+      triggerSquirrelMood('sq-hurt');
+      addWrongWord(q.w);
+      recordWordOutcomeLog(q, false);
+      savePwaState();
+      document.getElementById('voiceFeedback').textContent = '📕 "' + q.w + '" 오답 노트에 자동 보관됨!';
       curIdx += 1;
       renderQuestion();
     }
@@ -686,11 +1029,19 @@
     }
 
     function renderQuestion() {
-      const q = CSAT_BANK[curIdx % CSAT_BANK.length];
+      const deck = getActiveDeck();
+      const q = deck[curIdx % deck.length];
+      const banner = document.getElementById('reviewModeBanner');
+      banner.classList.toggle('hidden', !isWrongReviewMode);
+      if (isWrongReviewMode) {
+        document.getElementById('reviewModeBannerText').textContent = '🔥 오답 집중 복습 모드 · 남은 오답 ' + deck.length + '개';
+      }
+      document.getElementById('btnMasterQuick').textContent = isWrongReviewMode ? '오답 정복! (+1)' : '완벽 암기! (+1)';
       document.getElementById('wordTitle').textContent = q.w;
       document.getElementById('wordSentence').textContent = q.s;
       document.getElementById('mysteryChestSection').classList.toggle('hidden', state.chests <= 0);
       updateDailyStreakUi();
+      renderWrongNotebook();
       const container = document.getElementById('optionsContainer');
       container.innerHTML = '';
       [...q.opts].sort(() => Math.random() - 0.5).forEach((opt) => {
@@ -701,11 +1052,20 @@
           if (opt === q.m) {
             btn.classList.add('correct');
             triggerSquirrelMood('sq-cheer');
-            recordCompletedWord();
-            setTimeout(() => { curIdx += 1; renderQuestion(); }, 550);
+            recordCompletedWord(q);
+            if (isWrongReviewMode && state.wrongWords.length === 0) {
+              isWrongReviewMode = false;
+              document.getElementById('voiceFeedback').textContent = '🎉 오답 노트 올클리어! 틀린 단어를 모두 정복했어요!';
+            }
+            setTimeout(() => { curIdx = isWrongReviewMode ? 0 : (curIdx + 1); renderQuestion(); }, 550);
           } else {
             btn.classList.add('wrong');
             triggerSquirrelMood('sq-hurt');
+            addWrongWord(q.w);
+            recordWordOutcomeLog(q, false);
+            savePwaState();
+            renderWrongNotebook();
+            document.getElementById('voiceFeedback').textContent = '📕 오답! "' + q.w + '" 오답 노트에 자동 보관되었어요.';
           }
         };
         container.appendChild(btn);
@@ -713,7 +1073,8 @@
     }
 
     function speakCurrentSentence() {
-      const q = CSAT_BANK[curIdx % CSAT_BANK.length];
+      const deck = getActiveDeck();
+      const q = deck[curIdx % deck.length];
       speakText(q.w + '. ' + q.s);
     }
 

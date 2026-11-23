@@ -90,11 +90,14 @@ class NanoBananaMotionEngine {
             cachedScene
         } else {
             val editInstruction = buildString {
-                append("Edit this portrait of $tutorName for a live smartphone video call. ")
-                append("PRESERVE the exact same young person's face, eyes, hairstyle, skin tone, clothing, and warm Pixar-like 3D realism. ")
-                append("Change the background seamlessly to: $sceneLocationEn. ")
-                append("Adjust their natural pose and facial expression to: $gesturePromptEn. ")
-                append("Natural eye-level front camera framing, matching ambient lighting on face and hair. ")
+                append("Transform this reference character ($tutorName) into a 100% GENUINE, PHOTOREALISTIC REAL-LIFE HUMAN PERSON ")
+                append("captured on a candid front-facing smartphone video call (FaceTime/WhatsApp real camera look, 35mm f/1.8 natural depth of field). ")
+                append("Keep their friendly young adult identity, hair color, hairstyle, and casual outfit inspired by the reference, ")
+                append("but render REAL natural human facial proportions, authentic skin texture with subtle pores, natural eyelashes, realistic eyes with natural daylight catchlights, and lifelike hair strands. ")
+                append("STRICTLY REAL PHOTOGRAPHY: NO 3D CGI, NO Pixar style, NO Disney cartoon, NO anime, NO plastic/doll skin. ")
+                append("Place them naturally in this real-world background: $sceneLocationEn. ")
+                append("Natural pose and facial expression: $gesturePromptEn. ")
+                append("Eye-level handheld smartphone selfie framing, matching real natural ambient daylight on face and hair. ")
                 append("CRITICAL RULES: NO microphone, NO headset, NO earphones, NO text, NO logos, NO UI bars, NO watermarks.")
             }
             val gen = runImageEdit(baseBitmap, editInstruction)
@@ -111,9 +114,9 @@ class NanoBananaMotionEngine {
             cachedBlink
         } else {
             val blinkPrompt =
-                "Keep EVERYTHING in this exact image identical — exact same person, head angle, smile, hair, outfit, lighting, and background — " +
-                    "EXCEPT gently close both of their eyes naturally mid-blink with soft natural eyelashes. " +
-                    "Do not change anything else. No text, no UI."
+                "Keep EVERYTHING in this exact real photograph identical — exact same real human person, head angle, smile, skin texture, hair, outfit, lighting, and background — " +
+                    "EXCEPT gently close both of their eyes naturally mid-blink with soft realistic eyelids and eyelashes. " +
+                    "Stay 100% photorealistic real camera photography. Do not change anything else. No text, no UI."
             val blinkGen = runImageEdit(sceneBitmap, blinkPrompt)
             if (blinkGen.first != null) {
                 blinkCache[cacheKey] = blinkGen.first!!
@@ -152,12 +155,21 @@ class NanoBananaMotionEngine {
             }
         } catch (e: TimeoutCancellationException) {
             Log.e(TAG, "Nano Banana image edit timed out", e)
-            null to "나노바나나 배경·표정 생성 시간이 초과되었습니다 (60초)."
+            null to "실사 배경 생성 시간이 초과되어 기본 HD 배경으로 유지합니다."
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Nano Banana image edit failed", e)
-            null to (e.localizedMessage ?: "나노바나나 이미지 생성에 실패했습니다.")
+            val raw = e.localizedMessage.orEmpty()
+            val friendly = when {
+                raw.contains("quota", ignoreCase = true) ||
+                    raw.contains("limit: 0", ignoreCase = true) ||
+                    raw.contains("billing", ignoreCase = true) ||
+                    raw.contains("429") ->
+                    "무료 플랜에서는 AI 실사 이미지 생성이 제한되어, 즉시 HD 스튜디오 배경으로 자동 전환됩니다."
+                else -> "네트워크 상태로 인해 HD 스튜디오 배경 모드로 전환했습니다."
+            }
+            null to friendly
         }
     }
 
