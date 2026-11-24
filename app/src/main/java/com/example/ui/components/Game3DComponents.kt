@@ -32,13 +32,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MonetizationOn
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.MicNone
+import androidx.compose.material.icons.outlined.MonetizationOn
+import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -166,7 +166,7 @@ fun Tactile3DButton(
 @Composable
 fun Elevated3DCard(
     modifier: Modifier = Modifier,
-    accentShadow: Color = Color(0xFFD5DFEA),
+    accentShadow: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.32f),
     surfaceColor: Color = MaterialTheme.colorScheme.surface,
     tiltDegrees: Float = 0f,
     contentPadding: PaddingValues = PaddingValues(16.dp),
@@ -220,7 +220,7 @@ fun GameHudBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             HudBadgeItem(
-                icon = Icons.Default.LocalFireDepartment,
+                icon = Icons.Outlined.LocalFireDepartment,
                 tint = CoralOrange,
                 value = "${progress.streakCount}회",
                 label = "목표 스트릭",
@@ -228,22 +228,22 @@ fun GameHudBar(
                 tag = "hud_streak_badge"
             )
             HudBadgeItem(
-                icon = Icons.Default.MonetizationOn,
-                tint = TrophyGoldShadow,
+                icon = Icons.Outlined.MonetizationOn,
+                tint = TrophyGold,
                 value = "${progress.coins}",
                 label = "코인",
                 onClick = onCoinsClick,
                 tag = "hud_coins_button"
             )
             HudBadgeItem(
-                icon = Icons.Default.Bolt,
+                icon = Icons.Outlined.Bolt,
                 tint = SkyQuestBlue,
                 value = "${progress.totalXp}",
                 label = "XP",
                 onClick = {}
             )
             HudBadgeItem(
-                icon = Icons.Default.Favorite,
+                icon = Icons.Outlined.FavoriteBorder,
                 tint = SpartaRed,
                 value = "${progress.hearts}/5",
                 label = "하트",
@@ -341,10 +341,10 @@ fun VoiceWaveformOrb3D(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (isListening) Icons.Default.Stop else Icons.Default.Mic,
+                imageVector = if (isListening) Icons.Outlined.Stop else Icons.Outlined.MicNone,
                 contentDescription = if (isListening) "녹음 중지" else "말하기 시작",
                 tint = Color.White,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(30.dp)
             )
         }
     }
@@ -448,7 +448,7 @@ fun PronunciationReportCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                            imageVector = Icons.AutoMirrored.Outlined.VolumeUp,
                             contentDescription = "원어민 발음 비교 듣기",
                             tint = SkyQuestBlue,
                             modifier = Modifier.size(18.dp)
@@ -470,9 +470,9 @@ fun PronunciationReportCard(
                 ) {
                     report.tokens.forEach { token ->
                         val (bg, fg) = when (token.status) {
-                            TokenStatus.EXACT -> AdventureEmerald.copy(alpha = 0.16f) to AdventureEmeraldShadow
-                            TokenStatus.CLOSE -> TrophyGold.copy(alpha = 0.25f) to Color(0xFF8A6200)
-                            TokenStatus.MISSED -> SpartaRed.copy(alpha = 0.16f) to SpartaRedShadow
+                            TokenStatus.EXACT -> AdventureEmerald.copy(alpha = 0.16f) to AdventureEmerald
+                            TokenStatus.CLOSE -> TrophyGold.copy(alpha = 0.22f) to TrophyGold
+                            TokenStatus.MISSED -> SpartaRed.copy(alpha = 0.18f) to SpartaRed
                         }
                         Surface(
                             shape = RoundedCornerShape(10.dp),

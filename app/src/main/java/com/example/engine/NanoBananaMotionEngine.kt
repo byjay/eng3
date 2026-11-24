@@ -201,6 +201,7 @@ class NanoBananaMotionEngine {
                 t.contains("소개") || t.contains("intro") || t.contains("학교") || t.contains("school") -> "intro"
                 t.contains("식당") || t.contains("레스토랑") || t.contains("restaurant") || t.contains("음식") -> "restaurant"
                 t.contains("호텔") || t.contains("hotel") -> "hotel"
+                t.contains("길찾기") || t.contains("direction") || t.contains("subway") || t.contains("지하철") -> "directions"
                 t.contains("괌") || t.contains("바다") || t.contains("beach") || t.contains("ocean") -> "guam_beach"
                 else -> "nyc_street"
             }
@@ -214,6 +215,7 @@ class NanoBananaMotionEngine {
                 "intro" -> "뉴욕 센트럴파크"
                 "restaurant" -> "뉴욕 브런치 식당"
                 "hotel" -> "럭셔리 호텔 로비"
+                "directions" -> "뉴욕 거리 길찾기"
                 "guam_beach" -> "괌 투몬 바닷가"
                 else -> "뉴욕 타임스스퀘어"
             }
@@ -227,6 +229,7 @@ class NanoBananaMotionEngine {
                 "intro" -> "sunlit New York Central Park green lawn with golden-hour sunlight filtering through lush trees and city skyline softly blurred in the distance"
                 "restaurant" -> "a lively warm New York bistro restaurant table with soft fairy lights and cozy sunlit ambiance"
                 "hotel" -> "an upscale sunlit modern hotel lobby with marble pillars, warm lamps, and tropical plants in soft bokeh"
+                "directions" -> "a sunny Manhattan street corner with green street signs and subway entrance softly blurred in creamy bokeh"
                 "guam_beach" -> "tropical turquoise Tumon Beach in Guam with bright blue ocean waves, palm trees, and sunny white sand"
                 else -> "vibrant sunlit New York City Times Square street with yellow cabs and colorful city lights softly blurred in bokeh"
             }

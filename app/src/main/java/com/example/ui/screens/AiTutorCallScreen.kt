@@ -1,7 +1,11 @@
 package com.example.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.speech.RecognizerIntent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -40,27 +44,37 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ClosedCaption
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Flight
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.HeadsetMic
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.LocalCafe
-import androidx.compose.material.icons.filled.Mood
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.SwitchAccount
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.WavingHand
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ClosedCaption
+import androidx.compose.material.icons.outlined.Directions
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.HeadsetMic
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Hotel
+import androidx.compose.material.icons.outlined.Keyboard
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.LocalCafe
+import androidx.compose.material.icons.outlined.MicNone
+import androidx.compose.material.icons.outlined.Mood
+import androidx.compose.material.icons.outlined.PlayCircle
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material.icons.outlined.SwitchAccount
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.WavingHand
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,6 +83,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,17 +117,32 @@ import com.example.model.AiHumanTutor
 import com.example.model.TokenStatus
 import com.example.model.TutorChatMessage
 import com.example.ui.components.LiveMotionPhotoFriendView
+import com.example.ui.components.LottieMotionTutorView
 import com.example.ui.components.MotionPhotoGesture
 import com.example.ui.components.PronunciationReportCard
+import com.example.ui.components.SvgCssLipSyncRigView
+import com.example.ui.components.TalkingHead3DTeacherView
 import com.example.ui.components.VoiceWaveformOrb3D
 import com.example.ui.components.YouTubeWordContextDialog
 import com.example.ui.theme.AdventureEmerald
 import com.example.ui.theme.CoralOrange
+import com.example.ui.theme.GlacierCyan
 import com.example.ui.theme.RoyalPurple
 import com.example.ui.theme.SkyQuestBlue
 import com.example.ui.theme.SpartaRed
+import com.example.ui.theme.StudioCobalt
+import com.example.ui.theme.StudioCoral
+import com.example.ui.theme.StudioIris
 import com.example.ui.theme.TrophyGold
 import com.example.viewmodel.TutorCallState
+import kotlinx.coroutines.delay
+
+private enum class TutorStageMode(val labelKo: String) {
+    SVG_RIG("SVG"),
+    THREE_D("3D"),
+    LOTTIE("모션"),
+    PHOTO("실사")
+}
 
 private data class IconQuickAction(
     val icon: ImageVector,
@@ -122,52 +152,31 @@ private data class IconQuickAction(
 )
 
 private val faceTalkQuickChips = listOf(
-    IconQuickAction(Icons.Default.ShoppingCart, "마트", "Hi there! Are you paying by card or cash at the supermarket today?"),
-    IconQuickAction(Icons.Default.WavingHand, "소개", "Nice to meet you here at the park! Tell me a little about yourself in English!"),
-    IconQuickAction(Icons.Default.LocalCafe, "카페", "Welcome to the cafe! What coffee or drink can I get started for you today?"),
-    IconQuickAction(Icons.Default.Flight, "공항", "Good afternoon! Welcome to the airport gate. What's the purpose of your visit?")
+    IconQuickAction(Icons.Outlined.ChatBubbleOutline, "수다", "Hey! How's your day going? Tell me anything fun that happened today!"),
+    IconQuickAction(Icons.Outlined.LocalCafe, "카페", "Welcome to the cafe! What coffee or drink can I get started for you today?"),
+    IconQuickAction(Icons.Outlined.Flight, "공항", "Good afternoon! Welcome to the airport gate. What's the purpose of your visit?"),
+    IconQuickAction(Icons.Outlined.Restaurant, "식당", "Welcome in! How many people are in your party today, and would you like a window seat?"),
+    IconQuickAction(Icons.Outlined.Hotel, "호텔", "Welcome to our hotel! Do you have a reservation under your name today?"),
+    IconQuickAction(Icons.Outlined.ShoppingCart, "마트", "Hi there! Are you paying by card or cash at the supermarket today?"),
+    IconQuickAction(Icons.Outlined.Directions, "길찾기", "Hey, you look like you're searching for a place! Where are you trying to get to?"),
+    IconQuickAction(Icons.Outlined.WavingHand, "소개", "Nice to meet you here at the park! Tell me a little about yourself in English!")
 )
 
-private data class GuidedReplyHint(
-    val english: String,
-    val korean: String
+private val koreanQuickHelpPrompts = listOf(
+    "방금 문장 쉽게 설명해줘",
+    "더 천천히 말해줘",
+    "내 문장 더 자연스럽게 고쳐줘",
+    "이 상황에서 쓸 원어민 표현 하나 알려줘"
 )
-
-private fun guidedHintsForTopic(topicTag: String): List<GuidedReplyHint> {
-    return when {
-        topicTag.contains("공항") -> listOf(
-            GuidedReplyHint("I'm here for sightseeing with my family.", "가족과 관광하러 왔어요."),
-            GuidedReplyHint("I'll stay here for five days.", "여기서 5일 머물 예정이에요."),
-            GuidedReplyHint("Could you show me the way to gate 12?", "12번 게이트 가는 길 알려주시겠어요?")
-        )
-        topicTag.contains("카페") -> listOf(
-            GuidedReplyHint("Can I get an iced Americano, please?", "아이스 아메리카노 한 잔 주세요."),
-            GuidedReplyHint("I'd like it for here, please.", "매장에서 마시고 갈게요."),
-            GuidedReplyHint("Do you have anything less sweet?", "덜 단 메뉴 추천해 주실래요?")
-        )
-        topicTag.contains("마트") -> listOf(
-            GuidedReplyHint("I'll pay by card, please.", "카드로 결제할게요."),
-            GuidedReplyHint("Could I get a shopping bag?", "쇼핑백 하나 주실 수 있나요?"),
-            GuidedReplyHint("Please take this item off, I'll pay cash.", "이거 빼고 현금으로 계산할게요.")
-        )
-        topicTag.contains("소개") -> listOf(
-            GuidedReplyHint("Hi! I love learning English and traveling.", "안녕! 영어 공부랑 여행을 좋아해."),
-            GuidedReplyHint("I live in Korea and enjoy listening to music.", "한국에 살고 음악 듣는 걸 좋아해."),
-            GuidedReplyHint("What do you usually do on weekends?", "너는 주말에 보통 뭐 해?")
-        )
-        else -> listOf(
-            GuidedReplyHint("My day is going great! How about you?", "오늘 아주 잘 보내고 있어! 너는?"),
-            GuidedReplyHint("Times Square looks so bright and exciting!", "타임스스퀘어 정말 밝고 멋지다!"),
-            GuidedReplyHint("Can we practice useful travel phrases today?", "오늘 실전 여행 영어 표현 같이 연습할래?")
-        )
-    }
-}
 
 private fun roleplayMissionsForTopic(topicTag: String): List<String> {
     return when {
         topicTag.contains("공항") -> listOf("방문 목적 말하기", "체류 기간 답하기", "게이트 질문하기")
         topicTag.contains("카페") -> listOf("음료 주문하기", "옵션 선택하기", "결제·감사 인사")
+        topicTag.contains("식당") -> listOf("인원·좌석 요청", "추천 메뉴 주문", "계산서 요청하기")
+        topicTag.contains("호텔") -> listOf("예약 체크인하기", "조식·시설 묻기", "추가 요청하기")
         topicTag.contains("마트") -> listOf("결제 수단 말하기", "봉투 요청하기", "영수증 받기")
+        topicTag.contains("길찾기") -> listOf("목적지 묻기", "거리·시간 확인", "방향 감사 인사")
         topicTag.contains("소개") -> listOf("인사·취미 말하기", "질문 되묻기", "응원 주고받기")
         else -> listOf("안부 인사하기", "오늘 일정 나누기", "자연스럽게 답하기")
     }
@@ -200,7 +209,14 @@ fun AiTutorCallScreen(
     onStopVoice: () -> Unit,
     onSendTypedMessage: (String) -> Unit,
     onReplayTutorText: (String) -> Unit,
-    onSpeakSlowWord: (String) -> Unit
+    onSpeakSlowWord: (String) -> Unit,
+    onStartShadowingTarget: (String) -> Unit,
+    onCancelShadowingTarget: () -> Unit,
+    onToggleProactiveMode: () -> Unit = {},
+    onTriggerProactiveCheckIn: () -> Unit = {},
+    onAutoProactiveCheckIn: () -> Unit = {},
+    onUpdateLearnerName: (String) -> Unit = {},
+    onUpdateConversationGoal: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var typedMessage by remember { mutableStateOf("") }
@@ -212,14 +228,95 @@ fun AiTutorCallScreen(
     var showPronunciationDetail by remember { mutableStateOf(false) }
     var showGestureBar by remember { mutableStateOf(false) }
     var showGuidedHints by remember { mutableStateOf(true) }
+    var showNameGoalDialog by remember { mutableStateOf(false) }
     var manualGesture by remember { mutableStateOf<MotionPhotoGesture?>(null) }
     var youtubeQuery by remember { mutableStateOf<String?>(null) }
     var tappedWord by remember { mutableStateOf<String?>(null) }
+    var stageMode by remember { mutableStateOf(TutorStageMode.SVG_RIG) }
+
+    val hasAnyOverlayOpen = showHistoryOverlay || showScorecardOverlay || showTutorPicker ||
+        showGestureBar || showEnginePicker || showPronunciationDetail || showNameGoalDialog
+    BackHandler(enabled = hasAnyOverlayOpen) {
+        showHistoryOverlay = false
+        showScorecardOverlay = false
+        showTutorPicker = false
+        showGestureBar = false
+        showEnginePicker = false
+        showPronunciationDetail = false
+        showNameGoalDialog = false
+    }
+
+    // Gentle Proactive API Check-In when user stays silent for 18s during an active topic conversation
+    LaunchedEffect(
+        state.proactiveModeEnabled,
+        state.isThinking,
+        state.turnsInCall,
+        state.messages.size,
+        voiceState.isListening,
+        voiceState.isSpeaking,
+        hasAnyOverlayOpen,
+        showKeyboardDock
+    ) {
+        if (state.proactiveModeEnabled &&
+            !state.isThinking &&
+            !voiceState.isListening &&
+            !voiceState.isSpeaking &&
+            !hasAnyOverlayOpen &&
+            !showKeyboardDock
+        ) {
+            delay(18_000L)
+            onAutoProactiveCheckIn()
+        }
+    }
 
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) onStartListening()
+        if (granted) {
+            onStartListening()
+        } else {
+            showKeyboardDock = true
+        }
+    }
+
+    // System Google Speech Dialog Fallback (works even when inline SpeechRecognizer service fails!)
+    val systemSpeechLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            if (spoken.isNotBlank()) {
+                onSendTypedMessage(spoken)
+            }
+        }
+    }
+
+    fun launchSystemSpeechFallback() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            val langTag = if (state.koreanVoiceInputMode) "ko-KR" else state.selectedTutor.locale.toLanguageTag().ifBlank { "en-US" }
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
+            putExtra(
+                RecognizerIntent.EXTRA_PROMPT,
+                if (state.koreanVoiceInputMode) "한국어로 질문하거나 표현을 물어보세요!" else "Speak naturally in English!"
+            )
+        }
+        try {
+            systemSpeechLauncher.launch(intent)
+        } catch (_: Exception) {
+            showKeyboardDock = true
+        }
+    }
+
+    // Automatically open keyboard input bar if SpeechRecognizer reports an error so user is never stuck!
+    LaunchedEffect(voiceState.errorTimestampMs) {
+        if (voiceState.errorTimestampMs > 0L && voiceState.errorNotice != null) {
+            showKeyboardDock = true
+        }
     }
 
     val tutor = state.selectedTutor
@@ -231,7 +328,7 @@ fun AiTutorCallScreen(
     // Dynamic AI / Zero-LLM Skill hints refreshed every turn!
     val guidedHints = state.dynamicSuggestedReplies
     val roleplayMissions = remember(state.activeTopicTag) { roleplayMissionsForTopic(state.activeTopicTag) }
-    val isGuamPortrait = tutor.portraitRes == R.drawable.img_friend_guam_beach_no_mic_1795422199110
+    val isEmmaRealPortrait = tutor.portraitRes == R.drawable.img_real_tutor_emma_1795478674413
     val timerText = "%02d:%02d".format(state.callSeconds / 60, state.callSeconds % 60)
     val previousMsg = state.messages.dropLast(1).lastOrNull()
     val subtitleShadow = Shadow(
@@ -239,9 +336,15 @@ fun AiTutorCallScreen(
         offset = Offset(0f, 3f),
         blurRadius = 10f
     )
-    val subtitleWords = remember(state.liveSubtitleEn) {
-        state.liveSubtitleEn.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    // Track character span of each word in liveSubtitleEn so TTS onRangeStart highlights it live!
+    val subtitleWordSpans = remember(state.liveSubtitleEn) {
+        Regex("\\S+").findAll(state.liveSubtitleEn).map { m ->
+            Triple(m.value, m.range.first, m.range.last + 1)
+        }.toList()
     }
+    val isKaraokeActiveForSubtitle = voiceState.isSpeaking &&
+        voiceState.spokenCharStart >= 0 &&
+        voiceState.activeSpokenText.trim().equals(state.liveSubtitleEn.trim(), ignoreCase = true)
 
     if (youtubeQuery != null) {
         YouTubeWordContextDialog(
@@ -255,19 +358,71 @@ fun AiTutorCallScreen(
             .fillMaxSize()
             .background(Color(0xFF060B12))
     ) {
-        // 1. ZERO-LAG GPU MOTION-PHOTO FRIEND STAGE (Nano Banana 2.1 Topic Scenes + Photorealistic Blink!)
-        LiveMotionPhotoFriendView(
-            portraitRes = tutor.portraitRes,
-            contentDescription = "${tutor.name} 라이브 회화학습",
-            activeGesture = activeGesture,
-            activeTopicTag = state.activeTopicTag,
-            nanoBananaSceneBitmap = state.nanoBananaSceneBitmap,
-            nanoBananaBlinkBitmap = state.nanoBananaBlinkBitmap,
-            isSpeaking = voiceState.isSpeaking,
-            isListening = voiceState.isListening,
-            extraCropZoom = if (isGuamPortrait) 1.32f else 1.0f,
-            modifier = Modifier.fillMaxSize()
-        )
+        // 1. 4-MODE AI TEACHER STAGE (SVG+CSS Lip-Sync Rig · 3D TalkingHead · Lottie · Real Photo)
+        when (stageMode) {
+            TutorStageMode.SVG_RIG -> {
+                SvgCssLipSyncRigView(
+                    tutorId = tutor.id,
+                    tutorName = tutor.name,
+                    learnerName = activePlayerName,
+                    activeTopicTag = state.activeTopicTag,
+                    activeGesture = activeGesture,
+                    aiMood = state.aiMood,
+                    liveThoughtKo = state.liveThoughtKo,
+                    isSpeaking = voiceState.isSpeaking,
+                    isListening = voiceState.isListening,
+                    isThinking = state.isThinking,
+                    speechRate = speechRate,
+                    speechBeatIndex = voiceState.speechBeatIndex,
+                    userRmsDb = voiceState.rmsDb,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            TutorStageMode.THREE_D -> {
+                TalkingHead3DTeacherView(
+                    tutorId = tutor.id,
+                    tutorName = tutor.name,
+                    spokenTextEn = state.liveSubtitleEn,
+                    activeGesture = activeGesture,
+                    isSpeaking = voiceState.isSpeaking,
+                    isListening = voiceState.isListening,
+                    isThinking = state.isThinking,
+                    speechRate = speechRate,
+                    userRmsDb = voiceState.rmsDb,
+                    latestPronunciationScore = state.latestPronunciation?.overallScore,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            TutorStageMode.LOTTIE -> {
+                LottieMotionTutorView(
+                    tutorName = tutor.name,
+                    activeGesture = activeGesture,
+                    isSpeaking = voiceState.isSpeaking,
+                    isListening = voiceState.isListening,
+                    speechRate = speechRate,
+                    userRmsDb = voiceState.rmsDb,
+                    latestPronunciationScore = state.latestPronunciation?.overallScore,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            TutorStageMode.PHOTO -> {
+                LiveMotionPhotoFriendView(
+                    portraitRes = tutor.portraitRes,
+                    contentDescription = "${tutor.name} 라이브 회화학습",
+                    activeGesture = activeGesture,
+                    activeTopicTag = state.activeTopicTag,
+                    nanoBananaSceneBitmap = state.nanoBananaSceneBitmap,
+                    nanoBananaBlinkBitmap = state.nanoBananaBlinkBitmap,
+                    isSpeaking = voiceState.isSpeaking,
+                    isListening = voiceState.isListening,
+                    speechBeatIndex = voiceState.speechBeatIndex,
+                    userRmsDb = voiceState.rmsDb,
+                    extraCropZoom = if (isEmmaRealPortrait) 1.24f else 1.0f,
+                    verticalOffsetFraction = if (isEmmaRealPortrait) 0.055f else 0f,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
 
         // Subtle Transparent Vignette for Crisp Floating Subtitles
         Box(
@@ -317,11 +472,22 @@ fun AiTutorCallScreen(
                         )
                         Spacer(Modifier.width(6.dp))
                         Column {
-                            Text(
-                                text = "${tutor.name} · $timerText",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Text(
+                                    text = "${tutor.name} · $timerText",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                if (voiceState.isSpeaking) {
+                                    LiveMiniAudioEqualizer(
+                                        beatIndex = voiceState.speechBeatIndex,
+                                        color = AdventureEmerald
+                                    )
+                                }
+                            }
                             Text(
                                 text = state.sceneLocationLabelKo,
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
@@ -331,34 +497,34 @@ fun AiTutorCallScreen(
                     }
                 }
 
-                // Compact FaceTalk Circular Icon Controls
+                // Compact Outlined Circular Icon Controls
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     FaceTalkIconBtn(
-                        icon = Icons.Default.Mood,
-                        desc = "33종 모션표정",
+                        icon = Icons.Outlined.Mood,
+                        desc = "표정",
                         active = showGestureBar,
                         activeColor = CoralOrange,
                         tag = "facetalk_motion_gestures",
                         onClick = { showGestureBar = !showGestureBar }
                     )
                     FaceTalkIconBtn(
-                        icon = Icons.Default.SwitchAccount,
-                        desc = "친구·배경 변경",
+                        icon = Icons.Outlined.SwitchAccount,
+                        desc = "선생님 변경",
                         active = showTutorPicker,
-                        activeColor = TrophyGold,
+                        activeColor = StudioCobalt,
                         tag = "facetalk_switch_tutor",
                         onClick = { showTutorPicker = !showTutorPicker }
                     )
                     FaceTalkIconBtn(
-                        icon = Icons.Default.ClosedCaption,
+                        icon = Icons.Outlined.ClosedCaption,
                         desc = "자막",
                         active = state.showKoreanTranslations,
-                        activeColor = AdventureEmerald,
+                        activeColor = StudioCobalt,
                         tag = "video_toggle_subtitles",
                         onClick = onToggleKoreanSubtitles
                     )
                     FaceTalkIconBtn(
-                        icon = Icons.Default.HeadsetMic,
+                        icon = Icons.Outlined.HeadsetMic,
                         desc = "연속회화",
                         active = handsFreeMode,
                         activeColor = SkyQuestBlue,
@@ -386,16 +552,16 @@ fun AiTutorCallScreen(
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "${speechRate}x",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.ExtraBold),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
                                 color = Color.White
                             )
                         }
                     }
                     FaceTalkIconBtn(
-                        icon = Icons.Default.EmojiEvents,
-                        desc = "회화 성적표",
+                        icon = Icons.Outlined.EmojiEvents,
+                        desc = "성적표",
                         active = showScorecardOverlay,
-                        activeColor = TrophyGold,
+                        activeColor = StudioCoral,
                         tag = "facetalk_scorecard_btn",
                         onClick = {
                             showScorecardOverlay = !showScorecardOverlay
@@ -403,7 +569,7 @@ fun AiTutorCallScreen(
                         }
                     )
                     FaceTalkIconBtn(
-                        icon = Icons.Default.History,
+                        icon = Icons.Outlined.History,
                         desc = "기록",
                         active = showHistoryOverlay,
                         activeColor = RoyalPurple,
@@ -416,7 +582,7 @@ fun AiTutorCallScreen(
                 }
             }
 
-            // Speak / Praktika / Ringle-Style 3-Step Live Roleplay Mission Progress Bar
+            // 3-Step Live Roleplay Mission Progress Bar
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = Color.Black.copy(alpha = 0.42f),
@@ -440,18 +606,18 @@ fun AiTutorCallScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CheckCircle,
+                                imageVector = Icons.Outlined.CheckCircle,
                                 contentDescription = null,
-                                tint = if (done) AdventureEmerald else Color.White.copy(alpha = 0.36f),
+                                tint = if (done) GlacierCyan else Color.White.copy(alpha = 0.36f),
                                 modifier = Modifier.size(13.dp)
                             )
                             Text(
                                 text = "${idx + 1}.$stepLabel",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontSize = 10.sp,
-                                    fontWeight = if (done) FontWeight.ExtraBold else FontWeight.SemiBold
+                                    fontWeight = if (done) FontWeight.Bold else FontWeight.Medium
                                 ),
-                                color = if (done) Color(0xFF86EFAC) else Color.White.copy(alpha = 0.82f),
+                                color = if (done) GlacierCyan else Color.White.copy(alpha = 0.82f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -601,37 +767,72 @@ fun AiTutorCallScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
-                // Live Voice Command / Nano Banana Scene Generation Status Pills
+                // Left Status Pills: 3-Mode Stage Switcher + AI Engine Switcher + Live Listening/Thinking
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // 3D TalkingHead · Lottie Motion · Real Photo Toggle
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color.Black.copy(alpha = 0.52f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                        modifier = Modifier.testTag("tutor_stage_mode_toggle")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            TutorStageMode.entries.forEach { mode ->
+                                val active = stageMode == mode
+                                Surface(
+                                    shape = RoundedCornerShape(11.dp),
+                                    color = if (active) StudioCobalt else Color.Transparent,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(11.dp))
+                                        .clickable { stageMode = mode }
+                                        .testTag("tutor_stage_mode_${mode.name}")
+                                ) {
+                                    Text(
+                                        text = mode.labelKo,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 10.5.sp,
+                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+                                        ),
+                                        color = if (active) Color.White else Color.White.copy(alpha = 0.72f),
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     if (state.isGeneratingScene) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
-                            color = Color(0xCC148F68),
-                            border = BorderStroke(1.dp, TrophyGold.copy(alpha = 0.7f))
+                            color = StudioCobalt.copy(alpha = 0.88f),
+                            border = BorderStroke(1.dp, GlacierCyan.copy(alpha = 0.7f))
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 CircularProgressIndicator(
-                                    color = TrophyGold,
+                                    color = Color.White,
                                     strokeWidth = 2.dp,
                                     modifier = Modifier.size(13.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = "'${state.sceneLocationLabelKo}' 스튜디오 배경 생성 중...",
+                                    text = "'${state.sceneLocationLabelKo}' 배경 생성 중",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                     color = Color.White
                                 )
                             }
                         }
                     }
-                    // 1-Tap Free LLM / Zero-LLM Skill Engine Switcher Pill (Never blocks tutor's face!)
+                    // 1-Tap AI Engine Switcher Pill
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = Color.Black.copy(alpha = 0.48f),
-                        border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.65f)),
+                        border = BorderStroke(1.dp, StudioCobalt.copy(alpha = 0.65f)),
                         modifier = Modifier
                             .clip(RoundedCornerShape(14.dp))
                             .clickable { showEnginePicker = !showEnginePicker }
@@ -643,15 +844,15 @@ fun AiTutorCallScreen(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.AutoAwesome,
+                                imageVector = Icons.Outlined.AutoAwesome,
                                 contentDescription = "AI 엔진 전환",
-                                tint = AdventureEmerald,
+                                tint = GlacierCyan,
                                 modifier = Modifier.size(13.dp)
                             )
                             Text(
                                 text = "${state.activeEngineBadgeKo} ▾",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                color = Color(0xFFA7F3D0),
+                                color = Color(0xFFBAE6FD),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -660,8 +861,8 @@ fun AiTutorCallScreen(
                     AnimatedVisibility(visible = showEnginePicker) {
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = Color(0xE80B131E),
-                            border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.6f))
+                            color = Color(0xE80D0F14),
+                            border = BorderStroke(1.dp, StudioCobalt.copy(alpha = 0.6f))
                         ) {
                             Column(
                                 modifier = Modifier.padding(8.dp),
@@ -671,7 +872,7 @@ fun AiTutorCallScreen(
                                     val selected = mode == engineMode
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = if (selected) AdventureEmerald else Color.White.copy(alpha = 0.08f),
+                                        color = if (selected) StudioCobalt else Color.White.copy(alpha = 0.08f),
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(10.dp))
                                             .clickable {
@@ -694,7 +895,7 @@ fun AiTutorCallScreen(
                     if (voiceState.isListening || state.isThinking) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
-                            color = if (voiceState.isListening) SpartaRed.copy(alpha = 0.85f) else TrophyGold.copy(alpha = 0.88f)
+                            color = if (voiceState.isListening) SpartaRed.copy(alpha = 0.88f) else StudioCoral.copy(alpha = 0.90f)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -702,18 +903,18 @@ fun AiTutorCallScreen(
                             ) {
                                 if (state.isThinking) {
                                     CircularProgressIndicator(
-                                        color = Color(0xFF3E2C00),
+                                        color = Color.White,
                                         strokeWidth = 2.dp,
                                         modifier = Modifier.size(13.dp)
                                     )
                                 } else {
-                                    Icon(Icons.Default.GraphicEq, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+                                    Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
                                 }
                                 Spacer(Modifier.width(5.dp))
                                 Text(
                                     text = if (state.isThinking) "응답 중" else if (state.koreanVoiceInputMode) "KR 듣는 중" else "EN 듣는 중",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = if (state.isThinking) Color(0xFF3E2C00) else Color.White
+                                    color = Color.White
                                 )
                             }
                         }
@@ -731,6 +932,90 @@ fun AiTutorCallScreen(
                             )
                         }
                     }
+                    // Proactive AI Thinking Toggle + 1-Tap Proactive Prompt Trigger
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (state.proactiveModeEnabled) StudioIris.copy(alpha = 0.82f) else Color.Black.copy(alpha = 0.48f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (state.proactiveModeEnabled) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.22f)
+                            ),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onToggleProactiveMode() }
+                                .testTag("proactive_mode_toggle_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Psychology,
+                                    contentDescription = "능동 사고 토글",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = if (state.proactiveModeEnabled) "능동 ON" else "능동 OFF",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = StudioCobalt.copy(alpha = 0.85f),
+                            border = BorderStroke(1.dp, GlacierCyan.copy(alpha = 0.55f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable(enabled = !state.isThinking && !voiceState.isListening) {
+                                    onTriggerProactiveCheckIn()
+                                }
+                                .testTag("proactive_speak_now_btn")
+                        ) {
+                            Text(
+                                text = "먼저 말걸기",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Active Conversation Goal (목표) Pill — Tap to edit learner name & goal
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.Black.copy(alpha = 0.46f),
+                        border = BorderStroke(1.dp, GlacierCyan.copy(alpha = 0.42f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showNameGoalDialog = true }
+                            .testTag("conversation_goal_pill")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Flag,
+                                contentDescription = "대화 목표",
+                                tint = GlacierCyan,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "목표: ${state.conversationGoalKo}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium),
+                                color = Color.White.copy(alpha = 0.9f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(end = 2.dp)
+                            )
+                        }
+                    }
+
                     state.latestPronunciation?.let { report ->
                         Surface(
                             shape = RoundedCornerShape(14.dp),
@@ -749,7 +1034,7 @@ fun AiTutorCallScreen(
                     }
                 }
 
-                // Floating FaceTalk Self-Cam PiP Mini Frame (원삐 / 투삐 / 손님)
+                // Floating Self-Cam PiP Frame (Tap to edit Learner Name & Conversation Goal!)
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = Color.Black.copy(alpha = 0.45f),
@@ -757,7 +1042,11 @@ fun AiTutorCallScreen(
                         1.5.dp,
                         if (voiceState.isListening) SpartaRed else Color.White.copy(alpha = 0.4f)
                     ),
-                    modifier = Modifier.size(width = 76.dp, height = 96.dp)
+                    modifier = Modifier
+                        .size(width = 76.dp, height = 96.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { showNameGoalDialog = true }
+                        .testTag("edit_learner_name_pip")
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Column(
@@ -765,19 +1054,30 @@ fun AiTutorCallScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.GraphicEq,
-                                contentDescription = null,
-                                tint = if (voiceState.isListening) SpartaRed else TrophyGold,
-                                modifier = Modifier.size(24.dp)
+                                imageVector = Icons.Outlined.GraphicEq,
+                                contentDescription = "내 이름 설정",
+                                tint = if (voiceState.isListening) SpartaRed else GlacierCyan,
+                                modifier = Modifier.size(22.dp)
                             )
-                            Text(
-                                text = activePlayerName,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
                                 modifier = Modifier.padding(horizontal = 4.dp)
-                            )
+                            ) {
+                                Text(
+                                    text = activePlayerName,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Icon(
+                                    imageVector = Icons.Outlined.Edit,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.65f),
+                                    modifier = Modifier.size(10.dp)
+                                )
+                            }
                             Text(
                                 text = if (state.koreanVoiceInputMode) "KR" else "EN",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
@@ -787,6 +1087,68 @@ fun AiTutorCallScreen(
                     }
                 }
             }
+        }
+
+        if (showNameGoalDialog) {
+            var draftName by remember(activePlayerName) { mutableStateOf(activePlayerName) }
+            var draftGoal by remember(state.conversationGoalKo) { mutableStateOf(state.conversationGoalKo) }
+            AlertDialog(
+                onDismissRequest = { showNameGoalDialog = false },
+                title = {
+                    Text(
+                        text = "내 이름 · 대화 목표 설정",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "AI 캐릭터가 대화 중 이름을 부르고, 설정한 목표를 향해 능동적으로 대화를 이끌어 줍니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = draftName,
+                            onValueChange = { draftName = it },
+                            label = { Text("불러줄 이름 (예: 지민, Alex, 원삐)") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("learner_name_input")
+                        )
+                        OutlinedTextField(
+                            value = draftGoal,
+                            onValueChange = { draftGoal = it },
+                            label = { Text("상황별 대화 목표") },
+                            maxLines = 2,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("conversation_goal_input")
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (draftName.isNotBlank() && draftName.trim() != activePlayerName) {
+                                onUpdateLearnerName(draftName.trim())
+                            }
+                            if (draftGoal.isNotBlank() && draftGoal.trim() != state.conversationGoalKo) {
+                                onUpdateConversationGoal(draftGoal.trim())
+                            }
+                            showNameGoalDialog = false
+                        },
+                        modifier = Modifier.testTag("save_name_goal_btn")
+                    ) {
+                        Text("적용")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNameGoalDialog = false }) {
+                        Text("취소")
+                    }
+                }
+            )
         }
 
         // Expandable Pronunciation Detail Overlay (only when user taps score chip)
@@ -810,7 +1172,7 @@ fun AiTutorCallScreen(
                         onClick = { showPronunciationDetail = false },
                         modifier = Modifier.align(Alignment.TopEnd)
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "닫기")
+                        Icon(Icons.Outlined.Close, contentDescription = "닫기")
                     }
                 }
             }
@@ -855,6 +1217,49 @@ fun AiTutorCallScreen(
                 )
             }
 
+            // Actionable Voice Mic Error / Fallback Banner (never leaves user guessing why mic didn't respond!)
+            val voiceErrorText = voiceState.errorNotice
+            if (!voiceErrorText.isNullOrBlank() && !voiceState.isListening) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xE81E293B),
+                    border = BorderStroke(1.dp, CoralOrange.copy(alpha = 0.75f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("voice_error_fallback_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = voiceErrorText,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = Color(0xFFFED7AA),
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SkyQuestBlue,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { launchSystemSpeechFallback() }
+                                .testTag("voice_system_dialog_fallback_btn")
+                        ) {
+                            Text(
+                                text = "음성창",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Floating Tapped-Word Slow Shadowing Chip (Praktika / Cake Instant Tap-Word Learning!)
             if (tappedWord != null) {
                 Surface(
@@ -892,7 +1297,7 @@ fun AiTutorCallScreen(
                                 .padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                         Icon(
-                            imageVector = Icons.Default.Close,
+                            imageVector = Icons.Outlined.Close,
                             contentDescription = "닫기",
                             tint = Color.White.copy(alpha = 0.7f),
                             modifier = Modifier
@@ -903,7 +1308,52 @@ fun AiTutorCallScreen(
                 }
             }
 
-            // MAIN INTERACTIVE TAP-ANY-WORD TRANSPARENT CINEMA SUBTITLES (Zero heavy box!)
+            // Active 1-Tap Shadowing Drill Banner
+            state.shadowingTargetEn?.let { shadowTarget ->
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xEC161922),
+                    border = BorderStroke(1.5.dp, StudioCobalt),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("active_shadowing_drill_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.MicNone,
+                            contentDescription = null,
+                            tint = GlacierCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "따라 말하기 측정 중",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = GlacierCyan
+                            )
+                            Text(
+                                text = "\"$shadowTarget\"",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        IconButton(
+                            onClick = onCancelShadowingTarget,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(Icons.Outlined.Close, contentDescription = "섀도잉 종료", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
+            // MAIN INTERACTIVE KARAOKE + TAP-ANY-WORD TRANSPARENT CINEMA SUBTITLES
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -916,21 +1366,34 @@ fun AiTutorCallScreen(
                         .fillMaxWidth()
                         .testTag("interactive_tap_word_subtitle")
                 ) {
-                    subtitleWords.forEach { rawWord ->
+                    subtitleWordSpans.forEach { (rawWord, startIdx, endIdx) ->
                         val clean = rawWord.replace(Regex("[^A-Za-z'-]"), "")
                         val isSelected = clean.isNotBlank() && clean.equals(tappedWord, ignoreCase = true)
+                        val isCurrentlySpoken = isKaraokeActiveForSubtitle &&
+                            voiceState.spokenCharStart < endIdx &&
+                            voiceState.spokenCharEnd > startIdx
                         Text(
                             text = rawWord,
                             style = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = 19.sp,
+                                fontSize = if (isCurrentlySpoken) 20.sp else 19.sp,
                                 lineHeight = 25.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 shadow = subtitleShadow
                             ),
-                            color = if (isSelected) TrophyGold else Color.White,
+                            color = when {
+                                isCurrentlySpoken -> GlacierCyan
+                                isSelected -> StudioCoral
+                                else -> Color.White
+                            },
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) TrophyGold.copy(alpha = 0.24f) else Color.Transparent)
+                                .background(
+                                    when {
+                                        isCurrentlySpoken -> StudioCobalt.copy(alpha = 0.36f)
+                                        isSelected -> StudioCoral.copy(alpha = 0.24f)
+                                        else -> Color.Transparent
+                                    }
+                                )
                                 .clickable {
                                     if (clean.isNotBlank()) {
                                         tappedWord = clean
@@ -939,7 +1402,7 @@ fun AiTutorCallScreen(
                                         onReplayTutorText(state.liveSubtitleEn)
                                     }
                                 }
-                                .padding(horizontal = 2.dp)
+                                .padding(horizontal = 3.dp, vertical = 1.dp)
                         )
                     }
                 }
@@ -951,14 +1414,14 @@ fun AiTutorCallScreen(
                             fontWeight = FontWeight.SemiBold,
                             shadow = subtitleShadow
                         ),
-                        color = TrophyGold,
+                        color = Color(0xFFBAE6FD),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.clickable { onReplayTutorText(state.liveSubtitleEn) }
                     )
                 }
             }
 
-            // ELSA Speak-Style Word-by-Word Pronunciation Heatmap Strip (when learner spoke!)
+            // Word-by-Word Pronunciation Heatmap Strip
             state.latestPronunciation?.let { report ->
                 if (report.tokens.isNotEmpty()) {
                     LazyRow(
@@ -969,8 +1432,8 @@ fun AiTutorCallScreen(
                     ) {
                         items(report.tokens) { wf ->
                             val (bg, txt) = when (wf.status) {
-                                TokenStatus.EXACT -> AdventureEmerald.copy(alpha = 0.34f) to Color(0xFF86EFAC)
-                                TokenStatus.CLOSE -> TrophyGold.copy(alpha = 0.32f) to TrophyGold
+                                TokenStatus.EXACT -> StudioCobalt.copy(alpha = 0.36f) to GlacierCyan
+                                TokenStatus.CLOSE -> StudioCoral.copy(alpha = 0.32f) to StudioCoral
                                 TokenStatus.MISSED -> SpartaRed.copy(alpha = 0.42f) to Color(0xFFFCA5A5)
                             }
                             Surface(
@@ -983,7 +1446,7 @@ fun AiTutorCallScreen(
                             ) {
                                 Text(
                                     text = wf.targetWord,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, fontSize = 11.sp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
                                     color = txt,
                                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                                 )
@@ -993,16 +1456,16 @@ fun AiTutorCallScreen(
                 }
             }
 
-            // Speak / Praktika-Style Dynamic AI Reply Hints (1-Tap Native Reply when Learner Freezes!)
+            // Compact Reply Hints Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
-                    color = if (showGuidedHints) TrophyGold.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.42f),
-                    border = BorderStroke(1.dp, TrophyGold.copy(alpha = 0.55f)),
+                    color = if (showGuidedHints) StudioCoral.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.42f),
+                    border = BorderStroke(1.dp, StudioCoral.copy(alpha = 0.55f)),
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .clickable { showGuidedHints = !showGuidedHints }
@@ -1014,23 +1477,18 @@ fun AiTutorCallScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Lightbulb,
-                            contentDescription = "AI 추천 답변 힌트",
-                            tint = TrophyGold,
+                            imageVector = Icons.Outlined.Lightbulb,
+                            contentDescription = "추천 답변",
+                            tint = StudioCoral,
                             modifier = Modifier.size(13.dp)
                         )
                         Text(
-                            text = if (showGuidedHints) "실시간 추천 답변 힌트 ▾" else "답변 힌트 보기 ▸",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, fontSize = 11.sp),
-                            color = TrophyGold
+                            text = if (showGuidedHints) "추천 답변 ▾" else "추천 답변 ▸",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                            color = StudioCoral
                         )
                     }
                 }
-                Text(
-                    text = "자막 단어 탭=느리게 듣기 · 힌트 탭=바로 대답",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = Color.White.copy(alpha = 0.72f)
-                )
             }
 
             AnimatedVisibility(visible = showGuidedHints) {
@@ -1047,8 +1505,7 @@ fun AiTutorCallScreen(
                             border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.55f)),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(14.dp))
-                                .clickable {
-                                    onReplayTutorText(hint.english)
+                                .clickable(enabled = !state.isThinking) {
                                     onSendTypedMessage(hint.english)
                                 }
                         ) {
@@ -1074,12 +1531,13 @@ fun AiTutorCallScreen(
                 }
             }
 
-            // Loora / Ringle-Style Inline Native Expression Upgrade + 1-Second Grammar Fix Card
+            // Loora / Ringle-Style Inline Native Expression Upgrade + 1-Tap Shadowing Card
             if (state.liveNaturalRephraseEn.isNotBlank() || state.liveGrammarFixKo.isNotBlank() || state.liveCoachingCommentKo.isNotBlank()) {
+                val shadowSentence = state.liveNaturalRephraseEn.ifBlank { state.liveSubtitleEn }
                 Surface(
                     shape = RoundedCornerShape(18.dp),
-                    color = Color.Black.copy(alpha = 0.48f),
-                    border = BorderStroke(1.dp, if (state.liveNaturalRephraseEn.isNotBlank()) TrophyGold.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.2f)),
+                    color = Color.Black.copy(alpha = 0.52f),
+                    border = BorderStroke(1.dp, if (state.liveNaturalRephraseEn.isNotBlank()) TrophyGold.copy(alpha = 0.50f) else Color.White.copy(alpha = 0.22f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -1088,29 +1546,38 @@ fun AiTutorCallScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.AutoFixHigh,
+                            imageVector = Icons.Outlined.AutoFixHigh,
                             contentDescription = "코칭",
-                            tint = TrophyGold,
+                            tint = StudioCoral,
                             modifier = Modifier.size(16.dp)
                         )
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
+                            if (state.liveNaturalRephraseEn.isNotBlank() && state.lastUserSpokenEn.isNotBlank()) {
+                                Text(
+                                    text = "내 말: ${state.lastUserSpokenEn}",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    color = Color.White.copy(alpha = 0.68f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                             Text(
                                 text = if (state.liveNaturalRephraseEn.isNotBlank()) {
-                                    "원어민 업그레이드: ${state.liveNaturalRephraseEn}"
+                                    "원어민: ${state.liveNaturalRephraseEn}"
                                 } else {
                                     state.liveCoachingCommentKo
                                 },
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White,
+                                color = if (state.liveNaturalRephraseEn.isNotBlank()) GlacierCyan else Color.White,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                             if (state.liveGrammarFixKo.isNotBlank()) {
                                 Text(
-                                    text = "1초 교정: ${state.liveGrammarFixKo}",
+                                    text = "교정: ${state.liveGrammarFixKo}",
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
                                     color = Color(0xFF93C5FD),
                                     maxLines = 2,
@@ -1118,24 +1585,53 @@ fun AiTutorCallScreen(
                                 )
                             }
                         }
+                        // 1-Tap Exact-Sentence Shadowing Button
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = StudioCobalt.copy(alpha = 0.90f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    val granted = ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.RECORD_AUDIO
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    if (granted) {
+                                        onStartShadowingTarget(shadowSentence)
+                                    } else {
+                                        onStartShadowingTarget(shadowSentence)
+                                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
+                                }
+                                .testTag("shadowing_target_btn")
+                        ) {
+                            Text(
+                                text = "따라말하기",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)
+                            )
+                        }
                         IconButton(
-                            onClick = { onReplayTutorText(state.liveNaturalRephraseEn.ifBlank { state.liveSubtitleEn }) },
+                            onClick = { onReplayTutorText(shadowSentence) },
                             modifier = Modifier.size(30.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                imageVector = Icons.AutoMirrored.Outlined.VolumeUp,
                                 contentDescription = "다시 듣기",
                                 tint = SkyQuestBlue,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
                         IconButton(
-                            onClick = { youtubeQuery = state.liveNaturalRephraseEn.ifBlank { state.liveSubtitleEn } },
+                            onClick = {
+                                youtubeQuery = com.example.data.RealSceneClipFetcher.extractBestSearchPhrase(shadowSentence)
+                            },
                             modifier = Modifier.size(30.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.PlayCircle,
-                                contentDescription = "실제 대사 클립",
+                                imageVector = Icons.Outlined.PlayCircle,
+                                contentDescription = "유튜브 실제 대사 찾기",
                                 tint = SpartaRed,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -1144,18 +1640,53 @@ fun AiTutorCallScreen(
                 }
             }
 
-            // Single Compact Icon Quick-Topic Strip (No wall of text!)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
+            // KR Mode Instant 1-Tap Korean Question Helpers
+            AnimatedVisibility(visible = state.koreanVoiceInputMode) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("kr_quick_helper_row")
+                ) {
+                    items(koreanQuickHelpPrompts, key = { it }) { krPrompt ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = CoralOrange.copy(alpha = 0.28f),
+                            border = BorderStroke(1.dp, CoralOrange.copy(alpha = 0.72f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable(enabled = !state.isThinking) {
+                                    onSendTypedMessage(krPrompt)
+                                }
+                        ) {
+                            Text(
+                                text = "KR · $krPrompt",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 8 Realistic Live Roleplay Scenario Chips (Horizontally scrollable, active scene highlighted!)
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("roleplay_scenario_strip"),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                faceTalkQuickChips.forEach { chip ->
+                items(faceTalkQuickChips, key = { it.labelKo }) { chip ->
+                    val isSelectedScene = state.activeTopicTag.contains(chip.labelKo)
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = Color.Black.copy(alpha = 0.42f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                        color = if (isSelectedScene) AdventureEmerald.copy(alpha = 0.82f) else Color.Black.copy(alpha = 0.44f),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelectedScene) Color.White else Color.White.copy(alpha = 0.24f)
+                        ),
                         modifier = Modifier
-                            .weight(1f)
                             .clip(RoundedCornerShape(16.dp))
                             .clickable {
                                 if (chip.isQuestion) onSendTypedMessage(chip.prompt)
@@ -1164,14 +1695,14 @@ fun AiTutorCallScreen(
                             .testTag("quick_kr_chip_${chip.labelKo}")
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 7.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = chip.icon,
                                 contentDescription = chip.labelKo,
-                                tint = TrophyGold,
+                                tint = if (isSelectedScene) Color.White else TrophyGold,
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(Modifier.width(4.dp))
@@ -1226,13 +1757,13 @@ fun AiTutorCallScreen(
                             .testTag("video_call_send_button")
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "전송", tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = "전송", tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
             }
 
-            // REAL KAKAO FACETALK FLOATING BOTTOM ACTION ROW (Icon-First!)
+            // FLOATING BOTTOM ACTION ROW (Minimalist Outlined Icons)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -1254,14 +1785,14 @@ fun AiTutorCallScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Translate,
+                            imageVector = Icons.Outlined.Translate,
                             contentDescription = "한영 전환",
                             tint = Color.White,
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
                             text = if (state.koreanVoiceInputMode) "KR" else "EN",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.ExtraBold),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
                             color = Color.White
                         )
                     }
@@ -1269,14 +1800,14 @@ fun AiTutorCallScreen(
 
                 // Replay Audio Button
                 FaceTalkBigCircleBtn(
-                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                    icon = Icons.AutoMirrored.Outlined.VolumeUp,
                     desc = "다시 듣기",
                     bg = Color.Black.copy(alpha = 0.52f),
                     tag = "video_replay_subtitle",
                     onClick = { onReplayTutorText(state.liveSubtitleEn) }
                 )
 
-                // Center Large FaceTalk 3D Mic Orb
+                // Center Large Mic Orb
                 VoiceWaveformOrb3D(
                     isListening = voiceState.isListening,
                     isSpeaking = voiceState.isSpeaking,
@@ -1297,18 +1828,21 @@ fun AiTutorCallScreen(
                     }
                 )
 
-                // Real Dialogue Clip Button
+                // Real YouTube Dialogue Search Button
                 FaceTalkBigCircleBtn(
-                    icon = Icons.Default.PlayCircle,
-                    desc = "대사 클립",
-                    bg = SpartaRed.copy(alpha = 0.82f),
+                    icon = Icons.Outlined.PlayCircle,
+                    desc = "유튜브 대사 찾기",
+                    bg = SpartaRed.copy(alpha = 0.86f),
                     tag = "facetalk_clip_btn",
-                    onClick = { youtubeQuery = state.liveNaturalRephraseEn.ifBlank { state.liveSubtitleEn } }
+                    onClick = {
+                        val raw = state.liveNaturalRephraseEn.ifBlank { state.liveSubtitleEn }
+                        youtubeQuery = com.example.data.RealSceneClipFetcher.extractBestSearchPhrase(raw)
+                    }
                 )
 
                 // Keyboard Toggle Button
                 FaceTalkBigCircleBtn(
-                    icon = Icons.Default.Keyboard,
+                    icon = Icons.Outlined.Keyboard,
                     desc = "키보드 입력",
                     bg = if (showKeyboardDock) SkyQuestBlue else Color.Black.copy(alpha = 0.52f),
                     tag = "facetalk_keyboard_toggle",
@@ -1346,7 +1880,7 @@ fun AiTutorCallScreen(
                             color = Color.White
                         )
                         IconButton(onClick = { showHistoryOverlay = false }) {
-                            Icon(Icons.Default.Close, contentDescription = "닫기", tint = Color.White)
+                            Icon(Icons.Outlined.Close, contentDescription = "닫기", tint = Color.White)
                         }
                     }
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1402,7 +1936,7 @@ fun AiTutorCallScreen(
                             )
                         }
                         IconButton(onClick = { showScorecardOverlay = false }) {
-                            Icon(Icons.Default.Close, contentDescription = "닫기", tint = Color.White)
+                            Icon(Icons.Outlined.Close, contentDescription = "닫기", tint = Color.White)
                         }
                     }
 
@@ -1467,11 +2001,11 @@ fun AiTutorCallScreen(
                                             Text(
                                                 text = "원어민: $upgraded",
                                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                                color = Color(0xFF86EFAC)
+                                                color = GlacierCyan
                                             )
                                         }
                                         IconButton(onClick = { onReplayTutorText(upgraded) }, modifier = Modifier.size(32.dp)) {
-                                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "듣기", tint = SkyQuestBlue, modifier = Modifier.size(18.dp))
+                                            Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = "듣기", tint = SkyQuestBlue, modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -1581,12 +2115,54 @@ private fun TranscriptRowItem(
             }
             if (msg.fromTutor && !msg.isStreaming) {
                 IconButton(onClick = onReplay, modifier = Modifier.size(30.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "듣기", tint = SkyQuestBlue, modifier = Modifier.size(16.dp))
+                    Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = "듣기", tint = SkyQuestBlue, modifier = Modifier.size(16.dp))
                 }
                 IconButton(onClick = onYouTube, modifier = Modifier.size(30.dp)) {
-                    Icon(Icons.Default.PlayCircle, contentDescription = "클립", tint = SpartaRed, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.PlayCircle, contentDescription = "클립", tint = SpartaRed, modifier = Modifier.size(16.dp))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LiveMiniAudioEqualizer(
+    beatIndex: Int,
+    color: Color
+) {
+    val infinite = rememberInfiniteTransition(label = "liveEq")
+    val bar1 by infinite.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(240, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "eq1"
+    )
+    val bar2 by infinite.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 0.3f,
+        animationSpec = infiniteRepeatable(tween(190, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "eq2"
+    )
+    val bar3 by infinite.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(tween(270, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "eq3"
+    )
+    val beatBoost = if (beatIndex % 2 == 0) 1.0f else 0.82f
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.height(12.dp)
+    ) {
+        listOf(bar1 * beatBoost, bar2, bar3 * beatBoost).forEach { level ->
+            Box(
+                modifier = Modifier
+                    .width(2.5.dp)
+                    .height((12f * level.coerceIn(0.25f, 1f)).dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(color)
+            )
         }
     }
 }

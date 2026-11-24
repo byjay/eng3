@@ -161,7 +161,13 @@ data class TravelPracticeState(
     val twistReplyKo: String = "",
     val twistCoachTipKo: String = "",
     val twistLoading: Boolean = false,
-    val twistEngineBadge: String = ""
+    val twistEngineBadge: String = "",
+    val proactiveLineEn: String = "",
+    val proactiveLineKo: String = "",
+    val proactiveThoughtKo: String = "",
+    val proactiveMood: String = "happy",
+    val proactiveLoading: Boolean = false,
+    val proactiveEngineBadge: String = ""
 )
 
 data class TutorCallState(
@@ -188,7 +194,14 @@ data class TutorCallState(
     val nanoBananaBlinkBitmap: Bitmap? = null,
     val isGeneratingScene: Boolean = false,
     val sceneErrorKo: String? = null,
-    val turnsInCall: Int = 0
+    val turnsInCall: Int = 0,
+    val lastUserSpokenEn: String = "",
+    val shadowingTargetEn: String? = null,
+    val liveThoughtKo: String = "",
+    val conversationGoalKo: String = HybridAiCoachEngine.goalForTopic("수다"),
+    val aiMood: String = "happy",
+    val proactiveModeEnabled: Boolean = true,
+    val proactiveNudgeCount: Int = 0
 )
 
 class SpeakQuestViewModel(
@@ -200,6 +213,9 @@ class SpeakQuestViewModel(
 
     private val nanoBananaEngine = NanoBananaMotionEngine()
     private var sceneGenJob: Job? = null
+    private var tutorReplyJob: Job? = null
+    private var twistReplyJob: Job? = null
+    private var travelProactiveJob: Job? = null
 
     private val _streakMilestoneEvent = MutableStateFlow<StreakMilestoneEvent?>(null)
     val streakMilestoneEvent: StateFlow<StreakMilestoneEvent?> = _streakMilestoneEvent.asStateFlow()
@@ -624,7 +640,8 @@ class SpeakQuestViewModel(
                 weak + fresh + mastered
             }
             VocabStudyTrack.TOPIC_SITUATION -> {
-                val matched = combinedWordPool(0).filter { it.topic == topic }.shuffled()
+                val gradeMatched = pool.filter { it.topic == topic }.shuffled()
+                val matched = if (gradeMatched.isNotEmpty()) gradeMatched else combinedWordPool(0).filter { it.topic == topic }.shuffled()
                 val filler = pool.filter { it.topic != topic }.shuffled()
                 matched + filler
             }
@@ -633,6 +650,12 @@ class SpeakQuestViewModel(
         val first = ordered.firstOrNull()
         val difficultyTier = kingdomStats.value.difficultyTier
         val quizTime = (18 - (difficultyTier - 1) * 2).coerceIn(10, 18)
+        val gradeLabel = when (grade) {
+            1 -> "고1 공통영어"
+            2 -> "고2 영어Ⅰ·Ⅱ"
+            3 -> "고3 수능·심화"
+            else -> "전학년 통합"
+        }
 
         _spartaState.value = SpartaDrillState(
             grade = grade,
@@ -649,7 +672,7 @@ class SpeakQuestViewModel(
             timeLeftSec = quizTime,
             maxTimeSec = quizTime,
             learningMethod = _spartaState.value.learningMethod,
-            lastFeedbackKo = "${tier1To5}등급 빌드업 · ${track.labelKo} 시작! (ABC 순서 배제, 4개 예문 읽고·듣고·말하기)"
+            lastFeedbackKo = "$gradeLabel · ${tier1To5}등급 빌드업 · ${track.labelKo} 시작! (4개 예문 읽고·듣고·말하기)"
         )
         viewModelScope.launch {
             localStore.updateSelectedGrade(grade)
@@ -658,6 +681,19 @@ class SpeakQuestViewModel(
         if (!previewFirst) {
             startSpartaCountdown()
         }
+    }
+
+    fun selectVocabGrade(grade: Int) {
+        val clamped = grade.coerceIn(0, 3)
+        val count = combinedWordPool(clamped).size
+        startSmartVocabSession(grade = clamped)
+        val label = when (clamped) {
+            1 -> "고1 공통영어"
+            2 -> "고2 영어Ⅰ·Ⅱ"
+            3 -> "고3 수능·심화"
+            else -> "전학년 전체"
+        }
+        showToast("$label 단어 덱으로 전환했어요! (${count}단어)")
     }
 
     fun selectVocabTier1To5(tier: Int) {
@@ -1175,37 +1211,218 @@ class SpeakQuestViewModel(
         showToast(if (next) "한국어 질문·음성 설정 모드 ON (예: 마트에서 이거 빼고 현금으로...)" else "원어민 영어 회화 말하기 모드 ON")
     }
 
+    fun toggleProactiveMode() {
+        val next = !_tutorCallState.value.proactiveModeEnabled
+        _tutorCallState.value = _tutorCallState.value.copy(
+            proactiveModeEnabled = next,
+            proactiveNudgeCount = 0
+        )
+        showToast(if (next) "능동 대화 ON · 상황에 맞춰 먼저 생각하고 말을 걸어요" else "능동 대화 OFF")
+    }
+
+    fun updateConversationGoal(newGoalKo: String) {
+        val cleaned = newGoalKo.trim()
+        if (cleaned.isBlank()) return
+        _tutorCallState.value = _tutorCallState.value.copy(
+            conversationGoalKo = cleaned.take(60),
+            liveThoughtKo = "새 목표 '$cleaned'에 맞춰 대화를 이끌어 갈게요!"
+        )
+        showToast("대화 목표 변경: $cleaned")
+    }
+
     fun setTutorConversationTopic(
         context: Context,
         topicKo: String,
         starterPromptEn: String
     ) {
         val tutor = _tutorCallState.value.selectedTutor
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
         val locationLabel = NanoBananaMotionEngine.topicToDisplayLocationKo(topicKo)
-        val msg = TutorChatMessage(
-            id = UUID.randomUUID().toString(),
+        val goalKo = HybridAiCoachEngine.goalForTopic(topicKo)
+        val streamingId = UUID.randomUUID().toString()
+        val placeholderMsg = TutorChatMessage(
+            id = streamingId,
             fromTutor = true,
-            textEn = starterPromptEn,
-            translationKo = "주제: $topicKo ($locationLabel) — 자막을 보고 친구처럼 편하게 대답해 보세요!",
-            coachingTipKo = "배경 조명이 '$locationLabel' 현장으로 즉시 전환됐어요. 자신 있게 영어로 말해 보세요!",
-            engineBadge = tutor.accentLabel
+            textEn = "...",
+            isStreaming = true
         )
+
+        tutorReplyJob?.cancel()
+        voiceEngine.stopSpeaking()
         _tutorCallState.value = _tutorCallState.value.copy(
             activeTopicTag = topicKo,
             sceneLocationLabelKo = locationLabel,
-            isThinking = false,
+            conversationGoalKo = goalKo,
+            liveThoughtKo = "${learnerName}님과 '$topicKo' 상황 대화를 능동적으로 구상하는 중...",
+            aiMood = "thinking",
+            isThinking = true,
             isGeneratingScene = false,
             sceneErrorKo = null,
             nanoBananaSceneBitmap = null,
             nanoBananaBlinkBitmap = null,
-            messages = _tutorCallState.value.messages + msg,
-            liveSubtitleEn = starterPromptEn,
-            liveSubtitleKo = "주제: $topicKo ($locationLabel) — 자연스럽게 영어로 답해 보세요!",
-            liveCoachingCommentKo = "아래 추천 힌트를 탭하거나 마이크로 직접 말해 보세요!",
+            proactiveNudgeCount = 0,
+            messages = _tutorCallState.value.messages + placeholderMsg,
             liveGrammarFixKo = "",
             dynamicSuggestedReplies = HybridAiCoachEngine.defaultSuggestedRepliesForTopic(topicKo)
         )
-        speakWithActiveTutor(starterPromptEn)
+
+        tutorReplyJob = viewModelScope.launch {
+            val reply = try {
+                aiCoachEngine.generateProactiveTopicTurn(
+                    tutor = tutor,
+                    learnerName = learnerName,
+                    activeTopicTag = topicKo,
+                    conversationGoalKo = goalKo,
+                    history = _tutorCallState.value.messages.filterNot { it.id == streamingId },
+                    mode = engineMode.value,
+                    slots = llmSlots.value,
+                    isOpening = true,
+                    onStreamChunk = { partial ->
+                        _tutorCallState.value = _tutorCallState.value.copy(
+                            liveSubtitleEn = partial,
+                            messages = _tutorCallState.value.messages.map { m ->
+                                if (m.id == streamingId) m.copy(textEn = partial, isStreaming = true) else m
+                            }
+                        )
+                    }
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                com.example.engine.LocalConversationSkillEngine.generateProactiveOpener(
+                    tutor = tutor,
+                    learnerName = learnerName,
+                    activeTopicTag = topicKo,
+                    conversationGoalKo = goalKo,
+                    turnCount = _tutorCallState.value.turnsInCall,
+                    isOpening = true
+                )
+            }
+
+            val finalMsg = TutorChatMessage(
+                id = streamingId,
+                fromTutor = true,
+                textEn = reply.replyEn.ifBlank { starterPromptEn },
+                translationKo = reply.translationKo,
+                coachingTipKo = reply.coachingTipKo,
+                naturalRephraseEn = reply.naturalRephraseEn,
+                engineBadge = reply.engineBadge,
+                isStreaming = false
+            )
+            val curr = _tutorCallState.value
+            _tutorCallState.value = curr.copy(
+                isThinking = false,
+                messages = curr.messages.map { m -> if (m.id == streamingId) finalMsg else m },
+                liveSubtitleEn = finalMsg.textEn,
+                liveSubtitleKo = reply.translationKo,
+                liveCoachingCommentKo = reply.coachingTipKo,
+                liveNaturalRephraseEn = reply.naturalRephraseEn,
+                liveGrammarFixKo = reply.grammarFixKo,
+                liveThoughtKo = reply.thoughtKo.ifBlank { "${learnerName}님과의 '$topicKo' 대화를 시작했어요!" },
+                conversationGoalKo = reply.goalProgressKo.ifBlank { goalKo },
+                aiMood = reply.characterMood,
+                activeEngineBadgeKo = reply.engineBadge,
+                dynamicSuggestedReplies = reply.suggestedReplies.ifEmpty {
+                    HybridAiCoachEngine.defaultSuggestedRepliesForTopic(topicKo)
+                }
+            )
+            speakWithActiveTutor(finalMsg.textEn) {
+                if (handsFreeMode.value) {
+                    startTutorLiveListening()
+                }
+            }
+        }
+    }
+
+    fun triggerProactiveCheckIn(manual: Boolean = false) {
+        val curr = _tutorCallState.value
+        val vState = voiceEngine.state.value
+        if (curr.isThinking || vState.isListening || vState.isSpeaking) return
+        if (!manual && (!curr.proactiveModeEnabled || curr.proactiveNudgeCount >= 2)) return
+
+        val tutor = curr.selectedTutor
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+        val streamingId = UUID.randomUUID().toString()
+        val placeholderMsg = TutorChatMessage(
+            id = streamingId,
+            fromTutor = true,
+            textEn = "...",
+            isStreaming = true
+        )
+
+        tutorReplyJob?.cancel()
+        _tutorCallState.value = curr.copy(
+            isThinking = true,
+            aiMood = "thinking",
+            liveThoughtKo = "${learnerName}님께 '${curr.activeTopicTag}' 다음 질문을 능동적으로 떠올리는 중...",
+            proactiveNudgeCount = if (manual) 0 else curr.proactiveNudgeCount + 1,
+            messages = curr.messages + placeholderMsg
+        )
+
+        tutorReplyJob = viewModelScope.launch {
+            val reply = try {
+                aiCoachEngine.generateProactiveTopicTurn(
+                    tutor = tutor,
+                    learnerName = learnerName,
+                    activeTopicTag = curr.activeTopicTag,
+                    conversationGoalKo = curr.conversationGoalKo,
+                    history = curr.messages,
+                    mode = engineMode.value,
+                    slots = llmSlots.value,
+                    isOpening = false,
+                    onStreamChunk = { partial ->
+                        _tutorCallState.value = _tutorCallState.value.copy(
+                            liveSubtitleEn = partial,
+                            messages = _tutorCallState.value.messages.map { m ->
+                                if (m.id == streamingId) m.copy(textEn = partial, isStreaming = true) else m
+                            }
+                        )
+                    }
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                com.example.engine.LocalConversationSkillEngine.generateProactiveOpener(
+                    tutor = tutor,
+                    learnerName = learnerName,
+                    activeTopicTag = curr.activeTopicTag,
+                    conversationGoalKo = curr.conversationGoalKo,
+                    turnCount = curr.turnsInCall,
+                    isOpening = false
+                )
+            }
+
+            val finalMsg = TutorChatMessage(
+                id = streamingId,
+                fromTutor = true,
+                textEn = reply.replyEn,
+                translationKo = reply.translationKo,
+                coachingTipKo = reply.coachingTipKo,
+                naturalRephraseEn = reply.naturalRephraseEn,
+                engineBadge = reply.engineBadge,
+                isStreaming = false
+            )
+            val latest = _tutorCallState.value
+            _tutorCallState.value = latest.copy(
+                isThinking = false,
+                messages = latest.messages.map { m -> if (m.id == streamingId) finalMsg else m },
+                liveSubtitleEn = reply.replyEn,
+                liveSubtitleKo = reply.translationKo,
+                liveCoachingCommentKo = reply.coachingTipKo,
+                liveNaturalRephraseEn = reply.naturalRephraseEn,
+                liveGrammarFixKo = reply.grammarFixKo,
+                liveThoughtKo = reply.thoughtKo.ifBlank { "${learnerName}님에게 다음 대화 힌트를 건넸어요" },
+                conversationGoalKo = reply.goalProgressKo.ifBlank { latest.conversationGoalKo },
+                aiMood = reply.characterMood,
+                activeEngineBadgeKo = reply.engineBadge,
+                dynamicSuggestedReplies = reply.suggestedReplies.ifEmpty { latest.dynamicSuggestedReplies }
+            )
+            speakWithActiveTutor(reply.replyEn) {
+                if (handsFreeMode.value) {
+                    startTutorLiveListening()
+                }
+            }
+        }
     }
 
     fun synthesizeTutorSceneWithNanoBanana(
@@ -1282,10 +1499,34 @@ class SpeakQuestViewModel(
         }
     }
 
+    fun clearVoiceErrorNotice() {
+        voiceEngine.clearErrorNotice()
+    }
+
     fun stopVoiceIo() {
         stopLoopPlayback()
         voiceEngine.stopListening()
         voiceEngine.stopSpeaking()
+    }
+
+    fun startTutorShadowingDrill(targetSentence: String) {
+        val clean = targetSentence.trim()
+        if (clean.isBlank()) return
+        stopLoopPlayback()
+        _tutorCallState.value = _tutorCallState.value.copy(
+            shadowingTargetEn = clean,
+            koreanVoiceInputMode = false,
+            liveCoachingCommentKo = "따라 말하기 집중 모드! 아래 문장을 원어민 리듬으로 말해 보세요."
+        )
+        speakWithActiveTutor(clean) {
+            startTutorLiveListening()
+        }
+    }
+
+    fun cancelTutorShadowingDrill() {
+        _tutorCallState.value = _tutorCallState.value.copy(
+            shadowingTargetEn = null
+        )
     }
 
     fun sendUserMessageToTutor(userText: String, durationMs: Long = 3200L) {
@@ -1301,6 +1542,41 @@ class SpeakQuestViewModel(
 
         val st = _tutorCallState.value
         val tutor = st.selectedTutor
+
+        // 1.5 If active Shadowing Drill target is set, grade pronunciation strictly against that target!
+        val activeShadowTarget = st.shadowingTargetEn
+        if (!activeShadowTarget.isNullOrBlank()) {
+            val shadowReport = PronunciationAnalyzer.analyze(activeShadowTarget, trimmed, durationMs)
+            val passed = shadowReport.overallScore >= 75
+            val updatedScores = st.pronunciationScoresInCall + shadowReport.overallScore
+            _tutorCallState.value = st.copy(
+                latestPronunciation = shadowReport,
+                lastUserSpokenEn = trimmed,
+                shadowingTargetEn = if (passed) null else activeShadowTarget,
+                pronunciationScoresInCall = updatedScores,
+                liveCoachingCommentKo = if (passed) {
+                    "섀도잉 ${shadowReport.overallScore}점 (${shadowReport.fluencyGrade}) 완벽 통과! 이제 자유롭게 대화를 이어가세요!"
+                } else {
+                    "섀도잉 ${shadowReport.overallScore}점! 빨간/노란 단어를 탭해 느리게 듣고 한 번 더 도전해 보세요."
+                }
+            )
+            if (passed) {
+                viewModelScope.launch {
+                    val (boss, lvlUp) = localStore.recordLearningAchievement(
+                        xpDelta = 18,
+                        coinsDelta = 15,
+                        castleHpDelta = 3,
+                        missionCompleted = false
+                    )
+                    notifySpecialMilestones(boss, lvlUp)
+                }
+                showToast("따라 말하기 ${shadowReport.overallScore}점 통과! +15 코인")
+            } else {
+                showToast("섀도잉 ${shadowReport.overallScore}점 · 틀린 단어를 탭해 다시 들어보세요!")
+            }
+            return
+        }
+
         val isEnglishSpeech = trimmed.any { it in 'a'..'z' || it in 'A'..'Z' }
         val selfScore = if (isEnglishSpeech) PronunciationAnalyzer.analyze(trimmed, trimmed, durationMs).overallScore else null
 
@@ -1318,29 +1594,52 @@ class SpeakQuestViewModel(
             isStreaming = true
         )
 
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+        voiceEngine.clearErrorNotice()
+        tutorReplyJob?.cancel()
         _tutorCallState.value = st.copy(
             messages = st.messages + userMsg + streamingPlaceholder,
             isThinking = true,
-            liveVoiceCommandNotice = ""
+            aiMood = "thinking",
+            liveThoughtKo = "${learnerName}님의 말을 이해하고 '${st.activeTopicTag}' 목표에 맞춰 답을 생각하는 중...",
+            proactiveNudgeCount = 0,
+            liveVoiceCommandNotice = "",
+            lastUserSpokenEn = trimmed
         )
 
-        viewModelScope.launch {
-            val reply = aiCoachEngine.generateFriendReply(
-                tutor = tutor,
-                userSpokenText = trimmed,
-                history = st.messages + userMsg,
-                mode = engineMode.value,
-                slots = llmSlots.value,
-                activeTopicTag = st.activeTopicTag,
-                onStreamChunk = { partial ->
-                    _tutorCallState.value = _tutorCallState.value.copy(
-                        liveSubtitleEn = partial,
-                        messages = _tutorCallState.value.messages.map { m ->
-                            if (m.id == streamingId) m.copy(textEn = partial, isStreaming = true) else m
-                        }
-                    )
-                }
-            )
+        tutorReplyJob = viewModelScope.launch {
+            val reply = try {
+                aiCoachEngine.generateFriendReply(
+                    tutor = tutor,
+                    userSpokenText = trimmed,
+                    history = st.messages + userMsg,
+                    mode = engineMode.value,
+                    slots = llmSlots.value,
+                    activeTopicTag = st.activeTopicTag,
+                    learnerName = learnerName,
+                    conversationGoalKo = st.conversationGoalKo,
+                    onStreamChunk = { partial ->
+                        _tutorCallState.value = _tutorCallState.value.copy(
+                            liveSubtitleEn = partial,
+                            messages = _tutorCallState.value.messages.map { m ->
+                                if (m.id == streamingId) m.copy(textEn = partial, isStreaming = true) else m
+                            }
+                        )
+                    }
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                com.example.engine.LocalConversationSkillEngine.generateReply(
+                    tutor = tutor,
+                    userText = trimmed,
+                    history = st.messages + userMsg,
+                    activeTopicTag = st.activeTopicTag,
+                    activeTwist = null,
+                    learnerName = learnerName,
+                    conversationGoalKo = st.conversationGoalKo
+                )
+            }
 
             val coachingReport = if (isEnglishSpeech) {
                 PronunciationAnalyzer.analyze(reply.naturalRephraseEn, trimmed, durationMs)
@@ -1385,6 +1684,9 @@ class SpeakQuestViewModel(
                 liveCoachingCommentKo = reply.coachingTipKo,
                 liveNaturalRephraseEn = reply.naturalRephraseEn,
                 liveGrammarFixKo = reply.grammarFixKo,
+                liveThoughtKo = reply.thoughtKo.ifBlank { "${learnerName}님과 '${currentCall.activeTopicTag}' 대화를 이어가는 중" },
+                conversationGoalKo = reply.goalProgressKo.ifBlank { currentCall.conversationGoalKo },
+                aiMood = reply.characterMood,
                 activeEngineBadgeKo = reply.engineBadge,
                 dynamicSuggestedReplies = reply.suggestedReplies.ifEmpty {
                     HybridAiCoachEngine.defaultSuggestedRepliesForTopic(currentCall.activeTopicTag)
@@ -1477,6 +1779,7 @@ class SpeakQuestViewModel(
     fun selectTravelZone(zoneId: Int) {
         val firstInZone = TravelCurriculumRepository.scenariosForZone(zoneId).firstOrNull()
             ?: TravelCurriculumRepository.allScenarios.first()
+        travelProactiveJob?.cancel()
         _travelState.value = _travelState.value.copy(
             selectedZoneId = zoneId,
             activeScenario = firstInZone,
@@ -1486,11 +1789,17 @@ class SpeakQuestViewModel(
             latestPronunciation = null,
             twistReplyText = "",
             twistReplyKo = "",
-            twistCoachTipKo = ""
+            twistCoachTipKo = "",
+            proactiveLineEn = "",
+            proactiveLineKo = "",
+            proactiveThoughtKo = "",
+            proactiveMood = "happy",
+            proactiveLoading = false
         )
     }
 
     fun selectTravelScenario(scenario: TravelScenario) {
+        travelProactiveJob?.cancel()
         _travelState.value = _travelState.value.copy(
             selectedZoneId = scenario.zoneId,
             activeScenario = scenario,
@@ -1500,8 +1809,72 @@ class SpeakQuestViewModel(
             latestPronunciation = null,
             twistReplyText = "",
             twistReplyKo = "",
-            twistCoachTipKo = ""
+            twistCoachTipKo = "",
+            proactiveLineEn = "",
+            proactiveLineKo = "",
+            proactiveThoughtKo = "",
+            proactiveMood = "happy",
+            proactiveLoading = false
         )
+    }
+
+    fun triggerTravelProactiveConversation(isOpening: Boolean = false) {
+        val st = _travelState.value
+        val tutor = _tutorCallState.value.selectedTutor
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+        val streetLoc = com.example.ui.components.TravelStreetDirectory.locationForZone(st.selectedZoneId)
+        val topicLabel = "${streetLoc.placeNameKo} · ${st.activeScenario.titleKo}"
+        val goalKo = "${streetLoc.cityBadgeEn} 실제 거리에서 '${st.activeScenario.titleKo}' 상황 영어로 자연스럽게 해결하기"
+
+        travelProactiveJob?.cancel()
+        _travelState.value = st.copy(proactiveLoading = true)
+
+        travelProactiveJob = viewModelScope.launch {
+            val reply = try {
+                aiCoachEngine.generateProactiveTopicTurn(
+                    tutor = tutor,
+                    learnerName = learnerName,
+                    activeTopicTag = topicLabel,
+                    conversationGoalKo = goalKo,
+                    history = emptyList(),
+                    mode = engineMode.value,
+                    slots = llmSlots.value,
+                    isOpening = isOpening
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                com.example.engine.AiCoachReply(
+                    replyEn = "Hey $learnerName! We're right here at ${streetLoc.cityBadgeEn}. Want to practice '${st.activeScenario.titleKo}' together?",
+                    translationKo = "${learnerName}님! 지금 ${streetLoc.placeNameKo}에 와 있어요. '${st.activeScenario.titleKo}' 상황 같이 말해볼까요?",
+                    coachingTipKo = "실제 거리를 둘러보며 첫 문장부터 자신 있게 말해보세요.",
+                    naturalRephraseEn = "",
+                    engineBadge = "현지 오프라인 코치",
+                    thoughtKo = "${streetLoc.placeNameKo} 현지 거리에 맞춰 ${learnerName}님에게 자연스럽게 첫 대화를 건넵니다.",
+                    characterMood = "excited"
+                )
+            }
+
+            _travelState.value = _travelState.value.copy(
+                proactiveLoading = false,
+                proactiveLineEn = reply.replyEn,
+                proactiveLineKo = reply.translationKo,
+                proactiveThoughtKo = reply.thoughtKo,
+                proactiveMood = reply.characterMood.ifBlank { "happy" },
+                proactiveEngineBadge = reply.engineBadge
+            )
+            speakWithActiveTutor(reply.replyEn)
+        }
+    }
+
+    fun replayTravelProactiveLine() {
+        val st = _travelState.value
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+        val loc = com.example.ui.components.TravelStreetDirectory.locationForZone(st.selectedZoneId)
+        val text = st.proactiveLineEn.ifBlank {
+            "Hey $learnerName! Welcome to ${loc.cityBadgeEn}. Ready to practice ${st.activeScenario.titleKo}?"
+        }
+        speakWithActiveTutor(text)
     }
 
     fun selectTravelSentence(index: Int) {
@@ -1582,23 +1955,43 @@ class SpeakQuestViewModel(
         val refPhrase = twist.keyPhrases.firstOrNull() ?: userText
         val pronReport = PronunciationAnalyzer.analyze(refPhrase, userText, durationMs)
 
+        twistReplyJob?.cancel()
         _travelState.value = st.copy(twistLoading = true, latestPronunciation = pronReport)
 
-        viewModelScope.launch {
-            val reply = aiCoachEngine.generateFriendReply(
-                tutor = tutor,
-                userSpokenText = userText,
-                history = emptyList(),
-                mode = engineMode.value,
-                slots = llmSlots.value,
-                activeTwist = twist
-            )
+        twistReplyJob = viewModelScope.launch {
+            val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+            val reply = try {
+                aiCoachEngine.generateFriendReply(
+                    tutor = tutor,
+                    userSpokenText = userText,
+                    history = emptyList(),
+                    mode = engineMode.value,
+                    slots = llmSlots.value,
+                    activeTwist = twist,
+                    learnerName = learnerName
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                com.example.engine.LocalConversationSkillEngine.generateReply(
+                    tutor = tutor,
+                    userText = userText,
+                    history = emptyList(),
+                    activeTopicTag = st.activeScenario.titleKo,
+                    activeTwist = twist
+                )
+            }
             _travelState.value = _travelState.value.copy(
                 twistLoading = false,
                 twistReplyText = reply.replyEn,
                 twistReplyKo = reply.translationKo,
                 twistCoachTipKo = reply.coachingTipKo,
-                twistEngineBadge = reply.engineBadge
+                twistEngineBadge = reply.engineBadge,
+                proactiveLineEn = reply.replyEn,
+                proactiveLineKo = reply.translationKo,
+                proactiveThoughtKo = reply.thoughtKo,
+                proactiveMood = reply.characterMood.ifBlank { "happy" },
+                proactiveEngineBadge = reply.engineBadge
             )
             speakWithActiveTutor(reply.replyEn)
             localStore.markScenarioCleared(st.activeScenario.id)

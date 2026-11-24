@@ -8,16 +8,16 @@ import com.example.model.TravelZone
 object TravelCurriculumRepository {
 
     val zones: List<TravelZone> = listOf(
-        TravelZone(1, "공항 · 입국심사", "Airport & Immigration", "체크인·보안검색·입국심사·면세 10상황", 0xFF1CB0F6, 0xFF1899D6),
-        TravelZone(2, "기내 · 수하물", "In-Flight & Baggage", "좌석·기내식·환승·수하물 분실 10상황", 0xFF58CC02, 0xFF46A302),
-        TravelZone(3, "교통 · 시내이동", "Transit & Navigation", "택시·지하철·기차·렌터카·길찾기 10상황", 0xFFFF9600, 0xFFCC7700),
-        TravelZone(4, "호텔 · 숙소", "Hotel & Stays", "체크인·룸업글·불편신고·체크아웃 10상황", 0xFFCE82FF, 0xFFA55EEA),
-        TravelZone(5, "식당 · 카페", "Dining & Cafes", "예약·주문·알레르기·결제·팁 10상황", 0xFFFF4B4B, 0xFFD33131),
-        TravelZone(6, "쇼핑 · 택스리펀", "Shopping & Tax-Free", "사이즈·할인·교환·환불·면세서류 10상황", 0xFFFFC800, 0xFFE5A400),
-        TravelZone(7, "관광 · 액티비티", "Sightseeing & Tours", "티켓·박물관·가이드·사진·공연 10상황", 0xFF00B894, 0xFF008F72),
-        TravelZone(8, "응급 · 의료 · 분실", "Emergency & Health", "병원·약국·여권분실·경찰신고·보험 10상황", 0xFFE84393, 0xFFB82B70),
-        TravelZone(9, "소셜 · 현지친구", "Social & Local Friends", "스몰토크·파티·현지추천·SNS교환 10상황", 0xFF6C5CE7, 0xFF5243C2),
-        TravelZone(10, "출국 · 비즈니스", "Departure & Business", "출국수속·라운지·미팅·네트워킹 10상황", 0xFF00ACC1, 0xFF008394)
+        TravelZone(1, "공항 · 입국심사", "Airport & Immigration", "체크인·보안검색·입국심사·면세 10상황", 0xFF335CFF, 0xFF1F42D6),
+        TravelZone(2, "기내 · 수하물", "In-Flight & Baggage", "좌석·기내식·환승·수하물 분실 10상황", 0xFF00A8E8, 0xFF0081B8),
+        TravelZone(3, "교통 · 시내이동", "Transit & Navigation", "택시·지하철·기차·렌터카·길찾기 10상황", 0xFFFF6242, 0xFFD94426),
+        TravelZone(4, "호텔 · 숙소", "Hotel & Stays", "체크인·룸업글·불편신고·체크아웃 10상황", 0xFF6B5BFF, 0xFF4E3FE0),
+        TravelZone(5, "식당 · 카페", "Dining & Cafes", "예약·주문·알레르기·결제·팁 10상황", 0xFFE13D65, 0xFFB8264A),
+        TravelZone(6, "쇼핑 · 택스리펀", "Shopping & Tax-Free", "사이즈·할인·교환·환불·면세서류 10상황", 0xFF4F46E5, 0xFF3730A3),
+        TravelZone(7, "관광 · 액티비티", "Sightseeing & Tours", "티켓·박물관·가이드·사진·공연 10상황", 0xFF0EA5E9, 0xFF0284C7),
+        TravelZone(8, "응급 · 의료 · 분실", "Emergency & Health", "병원·약국·여권분실·경찰신고·보험 10상황", 0xFFF43F5E, 0xFFBE123C),
+        TravelZone(9, "소셜 · 현지친구", "Social & Local Friends", "스몰토크·파티·현지추천·SNS교환 10상황", 0xFF7C3AED, 0xFF5B21B6),
+        TravelZone(10, "출국 · 비즈니스", "Departure & Business", "출국수속·라운지·미팅·네트워킹 10상황", 0xFF2563EB, 0xFF1D4ED8)
     )
 
     private data class ScenarioSeed(

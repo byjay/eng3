@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,11 +15,11 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Castle
-import androidx.compose.material.icons.filled.FlightTakeoff
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.MicNone
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -62,7 +63,7 @@ import com.example.ui.screens.SquirrelHeroPickerOverlay
 import com.example.ui.screens.SquirrelStoryAndBattleOverlay
 import com.example.ui.screens.TravelScenariosScreen
 import com.example.ui.screens.WorldMapScreen
-import com.example.ui.theme.AdventureEmerald
+import com.example.ui.theme.StudioCobalt
 import com.example.ui.theme.SpeakQuestTheme
 import com.example.viewmodel.SpeakQuestViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,11 +80,11 @@ private enum class FamilyKingdomTab(
     val icon: ImageVector,
     val tag: String
 ) {
-    KINGDOM("kingdom_home", "왕국홈", "왕국 홈", Icons.Default.Castle, "nav_kingdom_home"),
-    VOCAB("vocab_pattern", "단어·패턴", "단어·패턴 학습", Icons.Default.LocalFireDepartment, "nav_vocab_pattern"),
-    TRAVEL("travel_100", "여행100", "여행 회화 100", Icons.Default.FlightTakeoff, "nav_travel"),
-    VIDEO_CALL("video_tutor", "회화학습", "원어민 회화학습", Icons.Default.RecordVoiceOver, "nav_video_call"),
-    FAMILY_HUB("family_hub", "통계·보물", "통계·보물 허브", Icons.Default.CardGiftcard, "nav_family_hub")
+    KINGDOM("kingdom_home", "홈", "홈", Icons.Outlined.Home, "nav_kingdom_home"),
+    VOCAB("vocab_memorization", "단어암기", "단어암기", Icons.Outlined.MenuBook, "nav_vocab_pattern"),
+    TRAVEL("travel_100", "여행", "여행 회화 100", Icons.Outlined.Flight, "nav_travel"),
+    VIDEO_CALL("video_tutor", "회화", "원어민 회화학습", Icons.Outlined.MicNone, "nav_video_call"),
+    FAMILY_HUB("family_hub", "통계", "통계·리포트", Icons.Outlined.BarChart, "nav_family_hub")
 }
 
 class MainActivity : ComponentActivity() {
@@ -96,7 +97,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            )
+        )
         // MUST configure Firebase App Check before setContent or any Firebase AI Logic calls
         configureAppCheck(this, intent)
         extractIncomingDeepLinks(intent)
@@ -306,9 +316,11 @@ private fun FamilyKingdomApp(
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = AdventureEmerald,
-                            selectedTextColor = AdventureEmerald,
-                            indicatorColor = AdventureEmerald.copy(alpha = 0.16f)
+                            selectedIconColor = StudioCobalt,
+                            selectedTextColor = StudioCobalt,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            indicatorColor = StudioCobalt.copy(alpha = 0.14f)
                         ),
                         modifier = Modifier.testTag(tab.tag)
                     )
@@ -386,14 +398,24 @@ private fun FamilyKingdomApp(
                 }
 
                 FamilyKingdomTab.VOCAB -> {
+                    val wrongWordsList = remember(weakWordIds, harvestedApiWords) {
+                        (com.example.data.VocabRepository.allWords + harvestedApiWords)
+                            .distinctBy { it.id }
+                            .filter { it.id in weakWordIds }
+                    }
                     SpartaVocabScreen(
                         state = spartaState,
                         patternState = patternState,
                         voiceState = voiceState,
                         activeStudySec = activeStudySec,
+                        masteredWordsCount = masteredWordIds.size,
+                        streakCount = progress.streakCount,
+                        todayWordsCompleted = progress.todayWordsCompleted,
+                        wrongWords = wrongWordsList,
                         harvestedApiCount = harvestedApiWords.size,
                         harvestStatusKo = harvestStatusKo,
                         isHarvestingWords = isHarvestingWords,
+                        onSelectGrade = { grade -> viewModel.selectVocabGrade(grade) },
                         onSelectTier1To5 = { tier -> viewModel.selectVocabTier1To5(tier) },
                         onStartLevelTest = { viewModel.startQuickLevelTest() },
                         onSelectTrack = { track -> viewModel.startSmartVocabSession(track = track) },
@@ -417,6 +439,11 @@ private fun FamilyKingdomApp(
                         onListenWord = { viewModel.listenSpartaWordOnly() },
                         onListenSentence = { viewModel.listenSpartaSentence() },
                         onListenAllExamples = { viewModel.listenAllWordExamplesSequentially() },
+                        onSpeakChunk = { text -> viewModel.speakWithActiveTutor(text) },
+                        onRecordFocusWordResult = { wordId, known ->
+                            viewModel.recordMainFocusWordResult(wordId, known)
+                        },
+                        onOpenWeeklyReport = { showWeeklyReportModal = true },
                         onStartVoiceShadowing = { viewModel.startSpartaShadowingSpeech() },
                         onStopVoice = { viewModel.stopVoiceIo() },
                         onEvaluateTypedShadowing = { spoken -> viewModel.evaluateSpartaShadowing(spoken) },
@@ -436,6 +463,8 @@ private fun FamilyKingdomApp(
                 FamilyKingdomTab.TRAVEL -> {
                     TravelScenariosScreen(
                         state = travelState,
+                        activePlayerName = parents.daughterName,
+                        selectedTutor = tutorCallState.selectedTutor,
                         scenarioProgress = scenarioProgress,
                         voiceState = voiceState,
                         speechRate = speechRate,
@@ -451,6 +480,8 @@ private fun FamilyKingdomApp(
                         onPlayTwistPrompt = { viewModel.playActiveTwistPrompt() },
                         onStartTwistSpeech = { viewModel.startTwistVoiceResponse() },
                         onSubmitTypedTwist = { text -> viewModel.submitTwistResponse(text) },
+                        onTriggerProactiveSpeak = { viewModel.triggerTravelProactiveConversation(isOpening = false) },
+                        onReplayProactiveLine = { viewModel.replayTravelProactiveLine() },
                         onStopVoice = { viewModel.stopVoiceIo() }
                     )
                 }
@@ -477,7 +508,14 @@ private fun FamilyKingdomApp(
                         onStopVoice = { viewModel.stopVoiceIo() },
                         onSendTypedMessage = { text -> viewModel.sendUserMessageToTutor(text) },
                         onReplayTutorText = { text -> viewModel.speakWithActiveTutor(text) },
-                        onSpeakSlowWord = { word -> viewModel.speakSlowWord(word) }
+                        onSpeakSlowWord = { word -> viewModel.speakSlowWord(word) },
+                        onStartShadowingTarget = { sentence -> viewModel.startTutorShadowingDrill(sentence) },
+                        onCancelShadowingTarget = { viewModel.cancelTutorShadowingDrill() },
+                        onToggleProactiveMode = { viewModel.toggleProactiveMode() },
+                        onTriggerProactiveCheckIn = { viewModel.triggerProactiveCheckIn(manual = true) },
+                        onAutoProactiveCheckIn = { viewModel.triggerProactiveCheckIn(manual = false) },
+                        onUpdateLearnerName = { newName -> viewModel.selectActivePlayer(newName) },
+                        onUpdateConversationGoal = { newGoal -> viewModel.updateConversationGoal(newGoal) }
                     )
                 }
 
@@ -495,6 +533,7 @@ private fun FamilyKingdomApp(
                         giftRequests = giftRequests,
                         dadMissions = dadMissions,
                         scorecards = scorecards,
+                        weeklyStudyReport = weeklyStudyReport,
                         schedules = schedules,
                         studyLogs = studyLogs,
                         activeStudyElapsedSec = activeStudySec,

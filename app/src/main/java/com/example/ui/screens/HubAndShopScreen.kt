@@ -105,6 +105,8 @@ import com.example.ui.theme.SkyQuestBlue
 import com.example.ui.theme.SkyQuestBlueShadow
 import com.example.ui.theme.SpartaRed
 import com.example.ui.theme.SpartaRedShadow
+import com.example.ui.components.WeeklyStudyReportData
+import com.example.ui.components.WeeklyWordAndAccuracyComboChartCard
 import com.example.ui.theme.TrophyGold
 import com.example.ui.theme.TrophyGoldShadow
 
@@ -125,6 +127,7 @@ fun HubAndShopScreen(
     giftRequests: List<GiftRequestItem>,
     dadMissions: List<DadAllowanceMission>,
     scorecards: List<ScorecardEntry>,
+    weeklyStudyReport: WeeklyStudyReportData,
     schedules: List<StudyScheduleItem>,
     studyLogs: List<StudyTimeLogEntry>,
     activeStudyElapsedSec: Int,
@@ -260,6 +263,11 @@ fun HubAndShopScreen(
 
         // ==================== TAB 1: MONTHLY STUDY CALENDAR & CSAT VERIFICATION TABLE ====================
         if (activeSubTab == 1) {
+            item {
+                WeeklyWordAndAccuracyComboChartCard(
+                    report = weeklyStudyReport
+                )
+            }
             item {
                 StudyStatsOverviewCards(
                     logs = studyLogs,
@@ -575,6 +583,13 @@ fun HubAndShopScreen(
                         }
                     }
                 }
+            }
+
+            // Weekly Scorecard Dual-Axis Bar + Accuracy Line Combo Chart
+            item {
+                WeeklyWordAndAccuracyComboChartCard(
+                    report = weeklyStudyReport
+                )
             }
 
             // Exam Scorecard Section

@@ -25,12 +25,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,9 +56,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.TravelCurriculumRepository
 import com.example.engine.VoiceEngineState
+import com.example.model.AiHumanTutor
 import com.example.model.ScenarioProgress
 import com.example.model.TravelScenario
 import com.example.ui.components.Elevated3DCard
+import com.example.ui.components.GoogleStreetViewStage
 import com.example.ui.components.PronunciationReportCard
 import com.example.ui.components.Tactile3DButton
 import com.example.ui.components.VoiceWaveformOrb3D
@@ -77,6 +79,8 @@ import com.example.viewmodel.TravelPracticeState
 @Composable
 fun TravelScenariosScreen(
     state: TravelPracticeState,
+    activePlayerName: String,
+    selectedTutor: AiHumanTutor,
     scenarioProgress: List<ScenarioProgress>,
     voiceState: VoiceEngineState,
     speechRate: Float,
@@ -92,6 +96,8 @@ fun TravelScenariosScreen(
     onPlayTwistPrompt: () -> Unit,
     onStartTwistSpeech: () -> Unit,
     onSubmitTypedTwist: (String) -> Unit,
+    onTriggerProactiveSpeak: () -> Unit,
+    onReplayProactiveLine: () -> Unit,
     onStopVoice: () -> Unit
 ) {
     val context = LocalContext.current
@@ -170,6 +176,31 @@ fun TravelScenariosScreen(
             }
         }
 
+        // 1-B. Real Google Maps 360° Street View + SVG+CSS Lip-Sync Proactive AI Companion
+        item {
+            GoogleStreetViewStage(
+                zoneId = state.selectedZoneId,
+                scenarioTitleKo = state.activeScenario.titleKo,
+                activePlayerName = activePlayerName,
+                tutor = selectedTutor,
+                isListening = voiceState.isListening,
+                isSpeaking = voiceState.isSpeaking,
+                isThinking = state.proactiveLoading || state.twistLoading,
+                rmsDb = voiceState.rmsDb,
+                speechRate = speechRate,
+                speechBeatIndex = voiceState.speechBeatIndex,
+                proactiveLineEn = state.proactiveLineEn,
+                proactiveLineKo = state.proactiveLineKo,
+                proactiveThoughtKo = state.proactiveThoughtKo,
+                proactiveMood = state.proactiveMood,
+                proactiveEngineBadge = state.proactiveEngineBadge,
+                showKorean = state.showKoreanSubtitles,
+                onTriggerProactiveSpeak = onTriggerProactiveSpeak,
+                onReplayProactiveLine = onReplayProactiveLine,
+                onMicClick = { requestOrStartMic() }
+            )
+        }
+
         // 2. 10 Scenarios inside the selected Zone (1..100 total)
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -204,7 +235,7 @@ fun TravelScenariosScreen(
                                     color = TrophyGoldShadow
                                 )
                                 if (prog?.twistCleared == true) {
-                                    Icon(Icons.Default.CheckCircle, contentDescription = "클리어", tint = AdventureEmerald, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Outlined.CheckCircle, contentDescription = "클리어", tint = AdventureEmerald, modifier = Modifier.size(16.dp))
                                 }
                             }
                             Text(
@@ -241,7 +272,7 @@ fun TravelScenariosScreen(
                 )
                 Tactile3DButton(
                     text = "돌발 변수 대응 (3종)",
-                    icon = Icons.Default.Bolt,
+                    icon = Icons.Outlined.Bolt,
                     containerColor = if (activeSubTab == 1) CoralOrange else MaterialTheme.colorScheme.surface,
                     shadowColor = if (activeSubTab == 1) CoralOrangeShadow else MaterialTheme.colorScheme.outline,
                     contentColor = if (activeSubTab == 1) Color.White else MaterialTheme.colorScheme.onSurface,
@@ -317,7 +348,7 @@ fun TravelScenariosScreen(
                                 modifier = Modifier.testTag("travel_toggle_korean")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Translate,
+                                    imageVector = Icons.Outlined.Translate,
                                     contentDescription = "한국어 해석 토글",
                                     tint = if (state.showKoreanSubtitles) SkyQuestBlue else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -375,7 +406,7 @@ fun TravelScenariosScreen(
                         ) {
                             Tactile3DButton(
                                 text = "원어민 듣기",
-                                icon = Icons.AutoMirrored.Filled.VolumeUp,
+                                icon = Icons.AutoMirrored.Outlined.VolumeUp,
                                 containerColor = SkyQuestBlue,
                                 shadowColor = SkyQuestBlueShadow,
                                 height = 50.dp,
@@ -421,7 +452,7 @@ fun TravelScenariosScreen(
                                 },
                                 modifier = Modifier.size(48.dp)
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "평가", tint = AdventureEmerald)
+                                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = "평가", tint = AdventureEmerald)
                             }
                         }
 
@@ -482,7 +513,7 @@ fun TravelScenariosScreen(
                 Elevated3DCard(accentShadow = CoralOrange.copy(alpha = 0.4f)) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = CoralOrange)
+                            Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = CoralOrange)
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 text = twist.titleKo,
@@ -542,7 +573,7 @@ fun TravelScenariosScreen(
                         ) {
                             Tactile3DButton(
                                 text = "돌발 상황 듣기",
-                                icon = Icons.AutoMirrored.Filled.VolumeUp,
+                                icon = Icons.AutoMirrored.Outlined.VolumeUp,
                                 containerColor = CoralOrange,
                                 shadowColor = CoralOrangeShadow,
                                 height = 50.dp,
@@ -583,7 +614,7 @@ fun TravelScenariosScreen(
                                     .size(48.dp)
                                     .testTag("travel_twist_send")
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "대응 전송", tint = CoralOrange)
+                                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = "대응 전송", tint = CoralOrange)
                             }
                         }
 

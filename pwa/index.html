@@ -355,31 +355,64 @@
       width: 72px; height: 72px; border-radius: 50%; background: #fff;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
-    .week-bars {
-      display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
-      align-items: end; height: 126px; padding-top: 16px; position: relative;
-      border-bottom: 1px solid var(--outline);
+    .d3-combo-wrap {
+      width: 100%;
+      margin-top: 8px;
+      position: relative;
     }
-    .week-goal-line {
-      position: absolute; left: 0; right: 0; top: 36px;
-      border-top: 1.5px dashed rgba(180, 123, 0, 0.65);
-      pointer-events: none;
+    .d3-combo-wrap svg {
+      width: 100%;
+      height: auto;
+      display: block;
+      overflow: visible;
     }
-    .week-col {
-      display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%;
+    .d3-legend {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted);
+      margin: 6px 0;
     }
-    .week-bar-slot {
-      width: 22px; height: 96px; border-radius: 7px; background: #F6F2E9;
-      display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;
+    .d3-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
-    .week-bar-known { background: var(--emerald); width: 100%; transition: height 0.4s ease; }
-    .week-bar-review { background: #EA580C; width: 100%; transition: height 0.4s ease; }
+    .d3-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .d3-line-swatch {
+      width: 14px;
+      height: 3px;
+      border-radius: 999px;
+      background: #2563EB;
+      display: inline-block;
+      position: relative;
+    }
+    .d3-selected-pill {
+      background: #F0F6FF;
+      border: 1px solid rgba(37, 99, 235, 0.28);
+      color: #1E3A8A;
+      border-radius: 10px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 6px;
+    }
     .word-log-row {
       display: flex; align-items: center; justify-content: space-between;
       padding: 8px 10px; border-radius: 12px; margin-top: 6px;
       font-size: 13px; border: 1px solid var(--outline); background: #FAFAF8;
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" defer></script>
 </head>
 <body>
 
@@ -606,14 +639,17 @@
         </div>
 
         <div class="chart-box">
-          <div class="row" style="margin-bottom:4px;">
-            <strong style="font-size:14px;">최근 7일 주간 학습 차트</strong>
-            <span style="font-size:10px; font-weight:800; color:var(--gold-dark);">점선: 10단어 목표</span>
+          <div class="row" style="margin-bottom:2px;">
+            <strong style="font-size:14px;">주간 성적표 · 단어 수 &amp; 정답률 추이</strong>
+            <span style="font-size:10px; font-weight:800; color:var(--gold-dark); background:#FFF8E6; border:1px solid rgba(180,123,0,0.35); padding:2px 6px; border-radius:6px;">D3.js · 목표 10단어</span>
           </div>
-          <div class="week-bars" id="repWeekBars">
-            <div class="week-goal-line"></div>
+          <div class="d3-legend">
+            <span class="d3-legend-item"><span class="d3-dot" style="background:var(--emerald);"></span>암기 막대</span>
+            <span class="d3-legend-item"><span class="d3-dot" style="background:#EA580C;"></span>복습 막대</span>
+            <span class="d3-legend-item" style="color:#1D4ED8;"><span class="d3-line-swatch"></span>정답률(%) 선</span>
           </div>
-          <div id="repWeekLabels" style="display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-top:6px; text-align:center; font-size:11px; font-weight:700; color:var(--muted);"></div>
+          <div id="repWeekSelectedInfo" class="d3-selected-pill">요일 막대나 점을 탭하면 상세 성적을 확인할 수 있어요.</div>
+          <div id="repWeekD3Chart" class="d3-combo-wrap" aria-label="요일별 학습 단어 수 막대 및 정답률 선 차트"></div>
         </div>
 
         <div class="chart-box" style="margin-bottom:0;">
@@ -822,27 +858,12 @@
       ring.style.setProperty('--known-deg', knownDeg + 'deg');
       ring.style.setProperty('--total-deg', totalDeg + 'deg');
 
-      const maxVal = Math.max(10, ...days.map(x => x.known + x.review)) + 1;
-      const barsEl = document.getElementById('repWeekBars');
-      const labelsEl = document.getElementById('repWeekLabels');
-      barsEl.innerHTML = '<div class="week-goal-line"></div>';
-      labelsEl.innerHTML = '';
-      days.forEach(d => {
-        const knownPct = Math.round((d.known / maxVal) * 100);
-        const revPct = Math.round((d.review / maxVal) * 100);
-        const col = document.createElement('div');
-        col.className = 'week-col';
-        col.innerHTML = '<div class="week-bar-slot" style="' + (d.isToday ? 'background:#FFF4DC;' : '') + '">' +
-          '<div class="week-bar-review" style="height:' + revPct + '%"></div>' +
-          '<div class="week-bar-known" style="height:' + knownPct + '%"></div>' +
-          '</div>';
-        barsEl.appendChild(col);
-
-        const lbl = document.createElement('div');
-        lbl.innerHTML = '<div style="color:' + (d.isToday ? 'var(--emerald-dark)' : 'var(--muted)') + ';font-weight:900;">' + d.known + '</div>' +
-          '<div style="' + (d.isToday ? 'background:#EA580C;color:#fff;border-radius:6px;padding:1px 4px;' : '') + '">' + d.label + '</div>';
-        labelsEl.appendChild(lbl);
+      const enrichedDays = days.map(d => {
+        const total = d.known + d.review;
+        const accuracy = total > 0 ? Math.round((d.known / total) * 100) : 0;
+        return { ...d, total, accuracy };
       });
+      renderWeeklyD3ComboChart(enrichedDays);
 
       const listEl = document.getElementById('repTodayWordsList');
       document.getElementById('repTodayLogCount').textContent = state.todayWordLog.length + '건';
@@ -857,6 +878,248 @@
         ).join('');
       }
       document.getElementById('weeklyReportModal').classList.remove('hidden');
+    }
+
+    function renderWeeklyD3ComboChart(days) {
+      const container = document.getElementById('repWeekD3Chart');
+      const infoEl = document.getElementById('repWeekSelectedInfo');
+      if (!container || !Array.isArray(days) || days.length === 0) return;
+
+      const updateSelectedText = (d) => {
+        if (!infoEl || !d) return;
+        const dayTitle = d.isToday ? '오늘' : (d.label + '요일');
+        infoEl.textContent = d.total > 0
+          ? (dayTitle + ' · 학습 ' + d.total + '단어 (암기 ' + d.known + ' / 복습 ' + d.review + ') · 정답률 ' + d.accuracy + '%')
+          : (dayTitle + ' · 기록된 학습 없음 (요일을 탭해 상세 확인)');
+      };
+
+      const maxWords = Math.max(10, ...days.map(d => d.total)) + 2;
+      const width = 390;
+      const height = 212;
+      const margin = { top: 20, right: 38, bottom: 44, left: 32 };
+      const innerW = width - margin.left - margin.right;
+      const innerH = height - margin.top - margin.bottom;
+
+      updateSelectedText(days[days.length - 1]);
+      container.innerHTML = '';
+
+      // Graceful offline pure-SVG fallback if D3 CDN is unavailable
+      if (typeof window.d3 === 'undefined') {
+        const slotW = innerW / days.length;
+        const barW = Math.min(24, slotW * 0.48);
+        const goalY = innerH * (1 - 10 / maxWords);
+        const pts = days.map((d, i) => {
+          const cx = slotW * i + slotW / 2;
+          const cy = innerH * (1 - d.accuracy / 100);
+          return cx.toFixed(1) + ',' + cy.toFixed(1);
+        }).join(' ');
+        const barsSvg = days.map((d, i) => {
+          const cx = slotW * i + slotW / 2;
+          const x = cx - barW / 2;
+          const totalH = (d.total / maxWords) * innerH;
+          const knownH = (d.known / maxWords) * innerH;
+          const cy = innerH * (1 - d.accuracy / 100);
+          return '<rect x="' + x + '" y="0" width="' + barW + '" height="' + innerH + '" rx="5" fill="' + (d.isToday ? '#FFF4DC' : '#F5F1E8') + '"/>' +
+            (d.review > 0 ? '<rect x="' + x + '" y="' + (innerH - totalH) + '" width="' + barW + '" height="' + totalH + '" rx="5" fill="#EA580C"/>' : '') +
+            (d.known > 0 ? '<rect x="' + x + '" y="' + (innerH - knownH) + '" width="' + barW + '" height="' + knownH + '" rx="5" fill="#10B981"/>' : '') +
+            '<circle cx="' + cx + '" cy="' + cy + '" r="4" fill="' + (d.total > 0 ? '#2563EB' : '#94A3B8') + '" stroke="#FFFFFF" stroke-width="1.8"/>' +
+            '<text x="' + cx + '" y="' + (innerH + 15) + '" text-anchor="middle" font-size="10" font-weight="800" fill="' + (d.isToday ? '#EA580C' : '#475569') + '">' + d.label + '</text>' +
+            '<text x="' + cx + '" y="' + (innerH + 28) + '" text-anchor="middle" font-size="9" font-weight="700" fill="#1D4ED8">' + (d.total > 0 ? d.accuracy + '%' : '-') + '</text>';
+        }).join('');
+        container.innerHTML = '<svg viewBox="0 0 ' + width + ' ' + height + '">' +
+          '<g transform="translate(' + margin.left + ',' + margin.top + ')">' +
+          '<line x1="0" y1="' + goalY + '" x2="' + innerW + '" y2="' + goalY + '" stroke="#B47B00" stroke-dasharray="5,4" stroke-width="1.3"/>' +
+          barsSvg +
+          '<polyline fill="none" stroke="#2563EB" stroke-width="2.5" points="' + pts + '"/>' +
+          '</g></svg>';
+        return;
+      }
+
+      const d3 = window.d3;
+      const svg = d3.select(container)
+        .append('svg')
+        .attr('viewBox', '0 0 ' + width + ' ' + height)
+        .attr('role', 'img');
+
+      const defs = svg.append('defs');
+      const areaGrad = defs.append('linearGradient')
+        .attr('id', 'd3AccuracyAreaGrad')
+        .attr('x1', '0%').attr('y1', '0%')
+        .attr('x2', '0%').attr('y2', '100%');
+      areaGrad.append('stop').attr('offset', '0%').attr('stop-color', '#2563EB').attr('stop-opacity', 0.22);
+      areaGrad.append('stop').attr('offset', '100%').attr('stop-color', '#7C3AED').attr('stop-opacity', 0.01);
+
+      const g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+      const x = d3.scaleBand()
+        .domain(days.map(d => d.iso))
+        .range([0, innerW])
+        .padding(0.32);
+
+      const yWords = d3.scaleLinear()
+        .domain([0, maxWords])
+        .range([innerH, 0]);
+
+      const yAcc = d3.scaleLinear()
+        .domain([0, 100])
+        .range([innerH, 0]);
+
+      // Horizontal grid lines (0%, 50%, 100% accuracy)
+      [0, 50, 100].forEach(tick => {
+        g.append('line')
+          .attr('x1', 0).attr('x2', innerW)
+          .attr('y1', yAcc(tick)).attr('y2', yAcc(tick))
+          .attr('stroke', tick === 0 ? '#D8CEBC' : '#EDE7DA')
+          .attr('stroke-width', tick === 0 ? 1.2 : 1);
+      });
+
+      // 10-word Daily Goal dashed line (left Y-axis)
+      g.append('line')
+        .attr('x1', 0).attr('x2', innerW)
+        .attr('y1', yWords(10)).attr('y2', yWords(10))
+        .attr('stroke', '#B47B00')
+        .attr('stroke-opacity', 0.7)
+        .attr('stroke-width', 1.4)
+        .attr('stroke-dasharray', '6,4');
+
+      // Left Y-Axis (Learned Word Count)
+      const leftAxis = g.append('g')
+        .call(d3.axisLeft(yWords).tickValues([0, Math.round(maxWords / 2), maxWords]).tickSize(0).tickFormat(v => v === 0 ? '0개' : v));
+      leftAxis.select('.domain').remove();
+      leftAxis.selectAll('text').attr('fill', '#047857').attr('font-size', '9.5px').attr('font-weight', '700');
+
+      // Right Y-Axis (Accuracy %)
+      const rightAxis = g.append('g')
+        .attr('transform', 'translate(' + innerW + ',0)')
+        .call(d3.axisRight(yAcc).tickValues([0, 50, 100]).tickSize(0).tickFormat(v => v + '%'));
+      rightAxis.select('.domain').remove();
+      rightAxis.selectAll('text').attr('fill', '#1D4ED8').attr('font-size', '9.5px').attr('font-weight', '700');
+
+      // Background slot pills
+      g.selectAll('.bar-bg')
+        .data(days)
+        .enter()
+        .append('rect')
+        .attr('x', d => x(d.iso))
+        .attr('y', 0)
+        .attr('width', x.bandwidth())
+        .attr('height', innerH)
+        .attr('rx', 6)
+        .attr('fill', d => d.isToday ? '#FFF4DC' : '#F5F1E8');
+
+      // Total (Review + Known) Bars
+      g.selectAll('.bar-review')
+        .data(days.filter(d => d.review > 0))
+        .enter()
+        .append('rect')
+        .attr('x', d => x(d.iso))
+        .attr('width', x.bandwidth())
+        .attr('y', innerH)
+        .attr('height', 0)
+        .attr('rx', 6)
+        .attr('fill', '#EA580C')
+        .transition().duration(480)
+        .attr('y', d => yWords(d.total))
+        .attr('height', d => Math.max(0, innerH - yWords(d.total)));
+
+      // Known (Mastered) Bars
+      g.selectAll('.bar-known')
+        .data(days.filter(d => d.known > 0))
+        .enter()
+        .append('rect')
+        .attr('x', d => x(d.iso))
+        .attr('width', x.bandwidth())
+        .attr('y', innerH)
+        .attr('height', 0)
+        .attr('rx', 6)
+        .attr('fill', d => d.isToday ? '#059669' : '#10B981')
+        .transition().duration(520)
+        .attr('y', d => yWords(d.known))
+        .attr('height', d => Math.max(0, innerH - yWords(d.known)));
+
+      // Accuracy % Area & Smooth Monotone Trend Line
+      const hasActivity = days.some(d => d.total > 0);
+      if (hasActivity) {
+        const areaGen = d3.area()
+          .x(d => x(d.iso) + x.bandwidth() / 2)
+          .y0(innerH)
+          .y1(d => yAcc(d.accuracy))
+          .curve(d3.curveMonotoneX);
+        g.append('path')
+          .datum(days)
+          .attr('fill', 'url(#d3AccuracyAreaGrad)')
+          .attr('d', areaGen);
+      }
+
+      const lineGen = d3.line()
+        .x(d => x(d.iso) + x.bandwidth() / 2)
+        .y(d => yAcc(d.accuracy))
+        .curve(d3.curveMonotoneX);
+
+      g.append('path')
+        .datum(days)
+        .attr('fill', 'none')
+        .attr('stroke', '#2563EB')
+        .attr('stroke-width', 2.6)
+        .attr('stroke-linecap', 'round')
+        .attr('stroke-linejoin', 'round')
+        .attr('d', lineGen);
+
+      // Accuracy Nodes
+      const nodes = g.selectAll('.acc-node')
+        .data(days)
+        .enter()
+        .append('circle')
+        .attr('class', 'acc-node')
+        .attr('cx', d => x(d.iso) + x.bandwidth() / 2)
+        .attr('cy', d => yAcc(d.accuracy))
+        .attr('r', (d, i) => i === days.length - 1 ? 5.5 : 4)
+        .attr('fill', d => d.total > 0 ? '#2563EB' : '#94A3B8')
+        .attr('stroke', (d, i) => i === days.length - 1 ? '#F59E0B' : '#FFFFFF')
+        .attr('stroke-width', 2);
+
+      // Bottom Labels (Word count + Accuracy % + Day Pill)
+      days.forEach(d => {
+        const cx = x(d.iso) + x.bandwidth() / 2;
+        g.append('text')
+          .attr('x', cx).attr('y', innerH + 14)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '9.5px').attr('font-weight', '800')
+          .attr('fill', d.total > 0 ? '#047857' : '#64748B')
+          .text(d.total + '개');
+
+        g.append('text')
+          .attr('x', cx).attr('y', innerH + 26)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '9px').attr('font-weight', '700')
+          .attr('fill', d.total > 0 ? '#1D4ED8' : '#94A3B8')
+          .text(d.total > 0 ? (d.accuracy + '%') : '-');
+
+        g.append('text')
+          .attr('x', cx).attr('y', innerH + 39)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '10px').attr('font-weight', d.isToday ? '900' : '700')
+          .attr('fill', d.isToday ? '#EA580C' : '#334155')
+          .text(d.label);
+      });
+
+      // Full-column interactive hit targets for tap/click/hover selection
+      g.selectAll('.hit-zone')
+        .data(days)
+        .enter()
+        .append('rect')
+        .attr('x', d => x(d.iso) - 4)
+        .attr('y', 0)
+        .attr('width', x.bandwidth() + 8)
+        .attr('height', innerH + 42)
+        .attr('fill', 'transparent')
+        .style('cursor', 'pointer')
+        .on('click mouseenter', function(event, d) {
+          updateSelectedText(d);
+          nodes
+            .attr('r', n => n.iso === d.iso ? 6 : 4)
+            .attr('stroke', n => n.iso === d.iso ? '#F59E0B' : '#FFFFFF');
+        });
     }
 
     function closeWeeklyReportModal() {

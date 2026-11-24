@@ -63,11 +63,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
 import com.example.model.SquirrelJobHero
 import com.example.ui.theme.AdventureEmerald
 import com.example.ui.theme.AdventureEmeraldShadow
 import com.example.ui.theme.CoralOrange
 import com.example.ui.theme.CoralOrangeShadow
+import com.example.ui.theme.RoyalPurple
 import com.example.ui.theme.SkyQuestBlue
 import com.example.ui.theme.SkyQuestBlueShadow
 import com.example.ui.theme.TrophyGold
@@ -149,8 +154,8 @@ fun WeeklyStudyReportModal(
 
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color(0xFFFBF8F1),
-            border = BorderStroke(2.dp, TrophyGold),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline),
             shadowElevation = 16.dp,
             modifier = Modifier
                 .padding(horizontal = 16.dp, vertical = 22.dp)
@@ -166,7 +171,7 @@ fun WeeklyStudyReportModal(
                         .fillMaxWidth()
                         .background(
                             Brush.horizontalGradient(
-                                listOf(Color(0xFF0E6F52), Color(0xFF148F68), Color(0xFF1D4ED8))
+                                listOf(Color(0xFF1E293B), Color(0xFF4F6EF7), Color(0xFF8B7CFF))
                             )
                         )
                         .padding(horizontal = 18.dp, vertical = 14.dp)
@@ -246,7 +251,7 @@ fun WeeklyStudyReportModal(
                             value = "${report.cumulativeStreakCount}회",
                             subtext = "10단어 달성",
                             accentColor = CoralOrange,
-                            bgColor = Color(0xFFFFF3E8),
+                            bgColor = CoralOrange.copy(alpha = 0.12f),
                             icon = Icons.Default.LocalFireDepartment,
                             modifier = Modifier
                                 .weight(1f)
@@ -256,8 +261,8 @@ fun WeeklyStudyReportModal(
                             title = "오늘 성적",
                             value = report.todayGradeLabel,
                             subtext = "정답률 ${report.todayAccuracyPercent}%",
-                            accentColor = SkyQuestBlueShadow,
-                            bgColor = Color(0xFFEFF6FF),
+                            accentColor = SkyQuestBlue,
+                            bgColor = SkyQuestBlue.copy(alpha = 0.12f),
                             icon = Icons.Default.EmojiEvents,
                             modifier = Modifier
                                 .weight(1f)
@@ -282,8 +287,8 @@ fun WeeklyStudyReportModal(
                         animFraction = animFraction
                     )
 
-                    // 3. 7-Day Weekly Bar Chart (Known vs Review + 10-word Daily Goal Line)
-                    WeeklySevenDayBarChartCard(
+                    // 3. 7-Day Weekly Combo Chart (Word Count Bars + Accuracy % Trend Line)
+                    WeeklyWordAndAccuracyComboChartCard(
                         report = report,
                         animFraction = animFraction
                     )
@@ -544,25 +549,33 @@ private fun AchievementProgressRow(
                 .height(7.dp)
                 .clip(RoundedCornerShape(999.dp)),
             color = barColor,
-            trackColor = Color(0xFFF1ECE1),
+            trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
             strokeCap = StrokeCap.Round
         )
     }
 }
 
 @Composable
-private fun WeeklySevenDayBarChartCard(
+fun WeeklyWordAndAccuracyComboChartCard(
     report: WeeklyStudyReportData,
-    animFraction: Float
+    animFraction: Float = 1f,
+    modifier: Modifier = Modifier
 ) {
     val metrics = report.dailyMetrics
     val maxBarValue = maxOf(10, (metrics.maxOfOrNull { it.totalAttempts } ?: 0) + 2)
+    val midBarValue = (maxBarValue / 2).coerceAtLeast(5)
+    var selectedIdx by remember(metrics.size) {
+        mutableIntStateOf((metrics.size - 1).coerceAtLeast(0))
+    }
+    val safeSelectedIdx = selectedIdx.coerceIn(0, (metrics.size - 1).coerceAtLeast(0))
+    val selectedDay = metrics.getOrNull(safeSelectedIdx)
+    val hasAnyActivity = metrics.any { it.totalAttempts > 0 }
 
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = Color.White,
-        border = BorderStroke(1.2.dp, Color(0xFFE4DCCB)),
-        modifier = Modifier
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = modifier
             .fillMaxWidth()
             .testTag("weekly_bar_chart_card")
     ) {
@@ -570,88 +583,214 @@ private fun WeeklySevenDayBarChartCard(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "최근 7일 주간 학습 차트",
+                        text = "주간 성적표 · 단어 수 & 정답률 추이",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                        color = Color(0xFF1B2834)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "주간 학습일 ${report.activeDaysCount}/7일 · 평균 정답률 ${report.weeklyAccuracyPercent}%",
+                        text = "학습일 ${report.activeDaysCount}/7일 · 주간 ${report.weeklyTotalAttempts}단어 · 평균 정답률 ${report.weeklyAccuracyPercent}%",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = TrophyGold.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, TrophyGold.copy(alpha = 0.45f))
                 ) {
-                    LegendDot(color = AdventureEmerald, text = "암기")
-                    LegendDot(color = CoralOrange, text = "복습")
+                    Text(
+                        text = "목표 10단어",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = TrophyGold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
                 }
             }
 
-            // Stacked Bar Chart Canvas with 10-word Daily Goal dashed line
-            Box(
+            // Legend Row (Bars + Accuracy Trend Line)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LegendDot(color = AdventureEmerald, text = "암기 막대")
+                LegendDot(color = CoralOrange, text = "복습 막대")
+                LegendLineBadge(color = SkyQuestBlueShadow, text = "정답률(%) 선")
+            }
+
+            if (metrics.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "아직 주간 학습 기록이 없습니다. 단어를 학습하면 요일별 막대·정답률 선 차트가 표시됩니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+                return@Column
+            }
+
+            // Interactive Selected-Day Detail Pill
+            if (selectedDay != null) {
+                val dayTitle = if (selectedDay.isToday) "오늘(${selectedDay.dayLabelKo})" else "${selectedDay.dayLabelKo}요일"
+                val detailText = if (selectedDay.totalAttempts > 0) {
+                    "$dayTitle · 학습 ${selectedDay.totalAttempts}단어 (암기 ${selectedDay.knownCount} / 복습 ${selectedDay.reviewCount}) · 정답률 ${selectedDay.accuracyPercent}%"
+                } else {
+                    "$dayTitle · 기록된 학습 없음 (요일을 탭해 상세 확인)"
+                }
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = SkyQuestBlue.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, SkyQuestBlue.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("weekly_chart_selected_pill")
+                ) {
+                    Text(
+                        text = detailText,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            // Dual-Axis Combo Chart: Left Y (Word Count) + Canvas (Stacked Bars + Accuracy Line) + Right Y (Accuracy %)
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(142.dp)
-                    .padding(top = 6.dp)
+                    .height(166.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
+                // Left Y-Axis (Word Count)
+                Column(
+                    modifier = Modifier
+                        .width(26.dp)
+                        .fillMaxHeight()
+                        .padding(top = 8.dp, bottom = 6.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = "$maxBarValue",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                        color = AdventureEmeraldShadow
+                    )
+                    Text(
+                        text = "$midBarValue",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "0개",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Center Dual-Layer Canvas
+                Canvas(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(horizontal = 4.dp)
+                        .testTag("weekly_combo_chart_canvas")
+                ) {
                     val count = metrics.size.coerceAtLeast(1)
                     val topPad = 14.dp.toPx()
-                    val bottomPad = 6.dp.toPx()
+                    val bottomPad = 8.dp.toPx()
                     val chartHeight = (size.height - topPad - bottomPad).coerceAtLeast(1f)
+                    val baseY = topPad + chartHeight
 
-                    // 10-word Goal Reference Line
+                    // Horizontal subtle grid lines (100%, 50%, 0%)
+                    val midY = topPad + chartHeight * 0.5f
+                    drawLine(
+                        color = Color(0xFFEDE7DA),
+                        start = Offset(0f, topPad),
+                        end = Offset(size.width, topPad),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    drawLine(
+                        color = Color(0xFFEDE7DA),
+                        start = Offset(0f, midY),
+                        end = Offset(size.width, midY),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    drawLine(
+                        color = Color(0xFFD8CEBC),
+                        start = Offset(0f, baseY),
+                        end = Offset(size.width, baseY),
+                        strokeWidth = 1.2.dp.toPx()
+                    )
+
+                    // 10-word Daily Goal Reference Line (mapped to left word-count axis)
                     val goalY = topPad + chartHeight * (1f - (10f / maxBarValue.toFloat()).coerceIn(0f, 1f))
                     drawLine(
                         color = TrophyGoldShadow.copy(alpha = 0.65f),
                         start = Offset(0f, goalY),
                         end = Offset(size.width, goalY),
-                        strokeWidth = 1.5.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
-                    )
-
-                    // Baseline
-                    val baseY = topPad + chartHeight
-                    drawLine(
-                        color = Color(0xFFE4DCCB),
-                        start = Offset(0f, baseY),
-                        end = Offset(size.width, baseY),
-                        strokeWidth = 1.dp.toPx()
+                        strokeWidth = 1.4.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 7f), 0f)
                     )
 
                     val slotWidth = size.width / count
-                    val barWidth = (slotWidth * 0.46f).coerceIn(14.dp.toPx(), 28.dp.toPx())
+                    val barWidth = (slotWidth * 0.44f).coerceIn(12.dp.toPx(), 24.dp.toPx())
                     val radius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
 
+                    // Layer 1: Stacked Word Count Bars
+                    val linePoints = ArrayList<Offset>(count)
                     metrics.forEachIndexed { idx, day ->
                         val centerX = slotWidth * idx + slotWidth / 2f
                         val left = centerX - barWidth / 2f
+                        val isSelected = idx == safeSelectedIdx
 
-                        // Background slot pill
+                        // Selected highlight band
+                        if (isSelected) {
+                            drawRoundRect(
+                                color = SkyQuestBlue.copy(alpha = 0.08f),
+                                topLeft = Offset(slotWidth * idx + 2.dp.toPx(), topPad - 4.dp.toPx()),
+                                size = Size((slotWidth - 4.dp.toPx()).coerceAtLeast(1f), chartHeight + 6.dp.toPx()),
+                                cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
+                            )
+                        }
+
+                        // Background bar slot
                         drawRoundRect(
-                            color = if (day.isToday) Color(0xFFFFF4DC) else Color(0xFFF6F2E9),
+                            color = if (day.isToday) CoralOrange.copy(alpha = 0.16f) else Color(0xFF64748B).copy(alpha = 0.16f),
                             topLeft = Offset(left, topPad),
                             size = Size(barWidth, chartHeight),
                             cornerRadius = radius
                         )
 
-                        val totalH = (day.totalAttempts.toFloat() / maxBarValue.toFloat()).coerceIn(0f, 1f) * chartHeight * animFraction
-                        val knownH = (day.knownCount.toFloat() / maxBarValue.toFloat()).coerceIn(0f, 1f) * chartHeight * animFraction
+                        val totalH = (day.totalAttempts.toFloat() / maxBarValue.toFloat())
+                            .coerceIn(0f, 1f) * chartHeight * animFraction
+                        val knownH = (day.knownCount.toFloat() / maxBarValue.toFloat())
+                            .coerceIn(0f, 1f) * chartHeight * animFraction
 
                         if (totalH > 1f) {
-                            // Review cap + total bar
                             if (day.reviewCount > 0) {
                                 drawRoundRect(
-                                    color = CoralOrange,
+                                    color = CoralOrange.copy(alpha = if (isSelected) 1f else 0.85f),
                                     topLeft = Offset(left, baseY - totalH),
                                     size = Size(barWidth, totalH),
                                     cornerRadius = radius
@@ -659,63 +798,171 @@ private fun WeeklySevenDayBarChartCard(
                             }
                             if (knownH > 1f) {
                                 drawRoundRect(
-                                    color = if (day.isToday) AdventureEmerald else AdventureEmerald.copy(alpha = 0.78f),
+                                    color = if (isSelected || day.isToday) AdventureEmerald else AdventureEmerald.copy(alpha = 0.78f),
                                     topLeft = Offset(left, baseY - knownH),
                                     size = Size(barWidth, knownH),
                                     cornerRadius = radius
                                 )
                             }
                         }
+
+                        // Compute Accuracy % Trend Point (right Y-axis: 0%..100%)
+                        val accRatio = (day.accuracyPercent / 100f).coerceIn(0f, 1f) * animFraction
+                        val accY = baseY - (accRatio * chartHeight)
+                        linePoints.add(Offset(centerX, accY))
+                    }
+
+                    // Layer 2: Accuracy % Smooth Trend Curve + Subtle Area Fill + Nodes
+                    if (linePoints.size >= 2) {
+                        val linePath = Path().apply {
+                            moveTo(linePoints.first().x, linePoints.first().y)
+                            for (i in 0 until linePoints.lastIndex) {
+                                val p0 = linePoints[i]
+                                val p1 = linePoints[i + 1]
+                                val midX = (p0.x + p1.x) / 2f
+                                cubicTo(midX, p0.y, midX, p1.y, p1.x, p1.y)
+                            }
+                        }
+
+                        if (hasAnyActivity) {
+                            val areaPath = Path().apply {
+                                addPath(linePath)
+                                lineTo(linePoints.last().x, baseY)
+                                lineTo(linePoints.first().x, baseY)
+                                close()
+                            }
+                            drawPath(
+                                path = areaPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        SkyQuestBlue.copy(alpha = 0.22f),
+                                        RoyalPurple.copy(alpha = 0.04f),
+                                        Color.Transparent
+                                    ),
+                                    startY = topPad,
+                                    endY = baseY
+                                )
+                            )
+                        }
+
+                        drawPath(
+                            path = linePath,
+                            brush = Brush.horizontalGradient(listOf(SkyQuestBlueShadow, RoyalPurple)),
+                            style = Stroke(
+                                width = 2.8.dp.toPx(),
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
+                        )
+                    }
+
+                    // Data point nodes along the Accuracy % curve
+                    linePoints.forEachIndexed { idx, pt ->
+                        val day = metrics[idx]
+                        val isSelected = idx == safeSelectedIdx
+                        val outerRadius = if (isSelected) 6.5.dp.toPx() else 4.5.dp.toPx()
+                        val innerRadius = if (isSelected) 4.dp.toPx() else 2.8.dp.toPx()
+
+                        drawCircle(
+                            color = if (isSelected) TrophyGold else Color.White,
+                            radius = outerRadius,
+                            center = pt
+                        )
+                        drawCircle(
+                            color = when {
+                                day.totalAttempts <= 0 -> Color(0xFF94A3B8)
+                                isSelected -> RoyalPurple
+                                else -> SkyQuestBlueShadow
+                            },
+                            radius = innerRadius,
+                            center = pt
+                        )
                     }
                 }
 
-                // Goal Line Tag
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color(0xFFFFF8E6),
-                    border = BorderStroke(1.dp, TrophyGold.copy(alpha = 0.6f)),
-                    modifier = Modifier.align(Alignment.TopEnd)
+                // Right Y-Axis (Accuracy %)
+                Column(
+                    modifier = Modifier
+                        .width(30.dp)
+                        .fillMaxHeight()
+                        .padding(top = 8.dp, bottom = 6.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.Start
                 ) {
                     Text(
-                        text = "점선: 10단어 목표",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                        color = TrophyGoldShadow,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        text = "100%",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                        color = SkyQuestBlueShadow
+                    )
+                    Text(
+                        text = "50%",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = SkyQuestBlueShadow.copy(alpha = 0.78f)
+                    )
+                    Text(
+                        text = "0%",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // Day labels + word count row aligned with bars
+            // Interactive Day Selector Row aligned with the 7 slots
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 26.dp, end = 30.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                metrics.forEach { day ->
+                metrics.forEachIndexed { idx, day ->
+                    val isSelected = idx == safeSelectedIdx
                     Column(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) SkyQuestBlue.copy(alpha = 0.1f) else Color.Transparent)
+                            .clickable { selectedIdx = idx }
+                            .padding(vertical = 4.dp)
+                            .testTag("weekly_chart_day_$idx"),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = "${day.knownCount}",
+                            text = "${day.totalAttempts}개",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 11.sp
+                                fontSize = 10.sp
                             ),
-                            color = if (day.isToday) AdventureEmeraldShadow else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (day.totalAttempts > 0) AdventureEmeraldShadow else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = if (day.totalAttempts > 0) "${day.accuracyPercent}%" else "-",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.5.sp
+                            ),
+                            color = if (day.totalAttempts > 0) SkyQuestBlueShadow else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
                         )
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (day.isToday) CoralOrange else Color.Transparent
+                            shape = RoundedCornerShape(7.dp),
+                            color = when {
+                                day.isToday -> CoralOrange
+                                isSelected -> SkyQuestBlueShadow
+                                else -> Color.Transparent
+                            }
                         ) {
                             Text(
                                 text = if (day.isToday) "오늘" else day.dayLabelKo,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = if (day.isToday) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                    fontSize = 11.sp
+                                    fontWeight = if (day.isToday || isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                    fontSize = 10.5.sp
                                 ),
-                                color = if (day.isToday) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                color = if (day.isToday || isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                maxLines = 1
                             )
                         }
                     }
@@ -746,13 +993,45 @@ private fun LegendDot(color: Color, text: String) {
 }
 
 @Composable
+private fun LegendLineBadge(color: Color, text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier.width(14.dp).height(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.5.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(color)
+            )
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = color
+        )
+    }
+}
+
+@Composable
 private fun TodayWordsScorecardSection(
     todayWords: List<TodayWordResultEntry>
 ) {
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = Color.White,
-        border = BorderStroke(1.2.dp, Color(0xFFE4DCCB)),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("today_words_scorecard_section")
@@ -769,23 +1048,23 @@ private fun TodayWordsScorecardSection(
                 Text(
                     text = "오늘 학습한 단어 성적표",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                    color = Color(0xFF1B2834)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "총 ${todayWords.size}건",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = SkyQuestBlueShadow
+                    color = SkyQuestBlue
                 )
             }
 
             if (todayWords.isEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFFF6F2E9),
+                    color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "아직 오늘 기록된 단어가 없어요!\n메인 화면의 '집중 단어 학습 모드'에서 첫 단어를 학습하면 성적과 차트가 실시간으로 채워집니다.",
+                        text = "아직 오늘 기록된 단어가 없어요!\n메인 화면에서 첫 단어를 학습하면 성적과 차트가 실시간으로 채워집니다.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -796,7 +1075,7 @@ private fun TodayWordsScorecardSection(
                 todayWords.take(20).forEach { entry ->
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (entry.known) Color(0xFFF0FDF8) else Color(0xFFFFF4EE),
+                        color = if (entry.known) AdventureEmerald.copy(alpha = 0.12f) else CoralOrange.copy(alpha = 0.12f),
                         border = BorderStroke(
                             1.dp,
                             if (entry.known) AdventureEmerald.copy(alpha = 0.28f) else CoralOrange.copy(alpha = 0.28f)
@@ -814,7 +1093,7 @@ private fun TodayWordsScorecardSection(
                                 Text(
                                     text = entry.word,
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                    color = Color(0xFF1B2834),
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )

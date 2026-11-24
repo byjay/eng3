@@ -31,21 +31,21 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.FlightTakeoff
-import androidx.compose.material.icons.filled.Help
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.RecordVoiceOver
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.MicNone
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.PlayCircle
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -88,6 +88,7 @@ import com.example.ui.components.GameHudBar
 import com.example.ui.components.SquirrelHeroAvatar
 import com.example.ui.components.SquirrelMoodState
 import com.example.ui.components.Tactile3DButton
+import com.example.ui.components.YouTubeWordContextDialog
 import com.example.ui.theme.AdventureEmerald
 import com.example.ui.theme.AdventureEmeraldShadow
 import com.example.ui.theme.CoralOrange
@@ -164,15 +165,7 @@ fun WorldMapScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFFDFEFE8),
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.background
-                    )
-                )
-            ),
+            .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -233,8 +226,8 @@ fun WorldMapScreen(
                         ) {
                             Text(
                                 text = player,
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold),
-                                color = if (active) Color(0xFF3E2C00) else Color.White,
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
                         }
@@ -278,7 +271,7 @@ fun WorldMapScreen(
                             Text(
                                 text = "Lv.${kingdomStats.princessLevel} ${parents.daughterName}",
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color(0xFF3E2C00),
+                                color = Color.White,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
@@ -315,50 +308,64 @@ fun WorldMapScreen(
             }
         }
 
-        // 2-A. MAIN FOCUSED VOCABULARY STUDY MODE (수능 빈출 단어 + 오답 집중 복습 모드)
+        // 2-A. Clean Daily Vocabulary Hub Launcher (Vocabulary Memorization lives in its own dedicated tab!)
         item {
-            MainFocusedVocabStudyCard(
-                vocabGradeTier = vocabGradeTier,
-                masteredWordsCount = masteredWordsCount,
-                streakCount = progress.streakCount,
-                todayWordsCompleted = progress.todayWordsCompleted,
-                activeHero = activeSquirrelHero,
-                wrongWords = wrongWords,
-                isReviewMode = isWrongReviewMode,
-                reviewAllClearBanner = reviewAllClearBanner,
-                onToggleReviewMode = { enabled ->
-                    reviewAllClearBanner = false
-                    isWrongReviewMode = enabled && wrongWords.isNotEmpty()
-                },
-                onDismissAllClear = { reviewAllClearBanner = false },
-                onSpeakEnglish = onSpeakFocusEnglish,
-                onRecordResult = { wordId, known ->
-                    focusMood = if (known) SquirrelMoodState.HAPPY_CHEER else SquirrelMoodState.LISTENING_TILT
-                    onRecordFocusWordResult(wordId, known)
-                },
-                onOpenFullVocab = { onStartVocabTrack(VocabStudyTrack.CSAT_FREQUENCY) },
-                onOpenWeeklyReport = onOpenWeeklyReport
-            )
-        }
+            Elevated3DCard(accentShadow = SkyQuestBlueShadow.copy(alpha = 0.28f)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DailyGoalStreakCardSection(
+                        todayWordsCompleted = progress.todayWordsCompleted,
+                        streakCount = progress.streakCount,
+                        onOpenWeeklyReport = onOpenWeeklyReport
+                    )
 
-        // 2-A2. DEDICATED WRONG ANSWER NOTEBOOK SECTION ('오답 노트' + '복습 모드' 버튼)
-        item {
-            WrongAnswerNotebookCard(
-                wrongWords = wrongWords,
-                isReviewModeActive = isWrongReviewMode,
-                onEnterReviewMode = {
-                    if (wrongWords.isNotEmpty()) {
-                        reviewAllClearBanner = false
-                        isWrongReviewMode = !isWrongReviewMode
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "오늘의 단어암기 · 해마 그림 + 3단 블록",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "누적 마스터 ${masteredWordsCount}단어 · 오답 복습 ${wrongWords.size}단어 대기 중",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                },
-                onStartSpartaWeakReview = { onStartVocabTrack(VocabStudyTrack.SMART_REVIEW) },
-                onSpeakWord = onSpeakFocusEnglish,
-                onMarkMastered = { wordId ->
-                    focusMood = SquirrelMoodState.HAPPY_CHEER
-                    onRecordFocusWordResult(wordId, true)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Tactile3DButton(
+                            text = "단어암기 바로 시작",
+                            icon = Icons.Outlined.PlayArrow,
+                            containerColor = AdventureEmerald,
+                            shadowColor = AdventureEmeraldShadow,
+                            height = 48.dp,
+                            modifier = Modifier.weight(1.25f),
+                            tag = "home_launch_vocab_tab",
+                            onClick = { onStartVocabTrack(VocabStudyTrack.CSAT_FREQUENCY) }
+                        )
+                        if (wrongWords.isNotEmpty()) {
+                            Tactile3DButton(
+                                text = "오답 (${wrongWords.size})",
+                                icon = Icons.Outlined.Refresh,
+                                containerColor = CoralOrange,
+                                shadowColor = CoralOrangeShadow,
+                                height = 48.dp,
+                                modifier = Modifier.weight(0.85f),
+                                tag = "home_launch_wrong_review_tab",
+                                onClick = { onStartVocabTrack(VocabStudyTrack.SMART_REVIEW) }
+                            )
+                        }
+                    }
                 }
-            )
+            }
         }
 
         // 2-B. Original White Pygmy Squirrel Story RPG Hub (10 Jobs + 6 Story Chapters + Sealed Mystery Chest)
@@ -430,10 +437,10 @@ fun WorldMapScreen(
                     ) {
                         Tactile3DButton(
                             text = "다람쥐 10종",
-                            icon = Icons.Default.Star,
+                            icon = Icons.Outlined.StarOutline,
                             containerColor = TrophyGold,
                             shadowColor = TrophyGoldShadow,
-                            contentColor = Color(0xFF3E2C00),
+                            contentColor = Color.White,
                             height = 46.dp,
                             modifier = Modifier.weight(0.95f),
                             tag = "home_open_squirrel_picker",
@@ -441,7 +448,7 @@ fun WorldMapScreen(
                         )
                         Tactile3DButton(
                             text = "Ch.$nextChapterNum 스토리 출격",
-                            icon = Icons.Default.PlayArrow,
+                            icon = Icons.Outlined.PlayArrow,
                             containerColor = AdventureEmerald,
                             shadowColor = AdventureEmeraldShadow,
                             height = 46.dp,
@@ -455,8 +462,8 @@ fun WorldMapScreen(
                     if (unopenedChests > 0) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
-                            color = TrophyGold.copy(alpha = 0.22f),
-                            border = BorderStroke(2.dp, TrophyGold),
+                            color = TrophyGold.copy(alpha = 0.16f),
+                            border = BorderStroke(1.5.dp, TrophyGold.copy(alpha = 0.65f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
@@ -470,22 +477,22 @@ fun WorldMapScreen(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Default.Help,
+                                        imageVector = Icons.Outlined.HelpOutline,
                                         contentDescription = "미스터리 보물상자",
-                                        tint = Color(0xFF3E2C00),
-                                        modifier = Modifier.size(24.dp)
+                                        tint = TrophyGold,
+                                        modifier = Modifier.size(22.dp)
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        text = "??? 미스터리 보물상자 ${unopenedChests}개 도착!",
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                        color = Color(0xFF3E2C00)
+                                        text = "미스터리 보물상자 ${unopenedChests}개 도착",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                                 Text(
                                     text = "열기",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold),
-                                    color = TrophyGoldShadow
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = TrophyGold
                                 )
                             }
                         }
@@ -507,10 +514,10 @@ fun WorldMapScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.AutoAwesome,
+                        imageVector = Icons.Outlined.AutoAwesome,
                         contentDescription = null,
-                        tint = TrophyGoldShadow,
-                        modifier = Modifier.size(26.dp)
+                        tint = TrophyGold,
+                        modifier = Modifier.size(22.dp)
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
@@ -535,10 +542,10 @@ fun WorldMapScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.Security,
+                                imageVector = Icons.Outlined.Shield,
                                 contentDescription = null,
                                 tint = if (kingdomStats.bossPending) SpartaRed else RoyalPurple,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
@@ -607,7 +614,7 @@ fun WorldMapScreen(
                     if (kingdomStats.bossPending) {
                         Tactile3DButton(
                             text = "시험 마왕 보스전 출격!",
-                            icon = Icons.Default.LocalFireDepartment,
+                            icon = Icons.Outlined.LocalFireDepartment,
                             containerColor = SpartaRed,
                             shadowColor = SpartaRedShadow,
                             height = 48.dp,
@@ -618,7 +625,7 @@ fun WorldMapScreen(
                     } else {
                         Tactile3DButton(
                             text = "수능 1~5등급 실력 검증 테스트",
-                            icon = Icons.Default.EmojiEvents,
+                            icon = Icons.Outlined.EmojiEvents,
                             containerColor = SkyQuestBlue,
                             shadowColor = SkyQuestBlueShadow,
                             height = 48.dp,
@@ -664,16 +671,16 @@ fun WorldMapScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.CloudDownload,
+                                    imageVector = Icons.Outlined.CloudDownload,
                                     contentDescription = "오늘의 50단어 수집",
-                                    tint = SkyQuestBlueShadow,
+                                    tint = SkyQuestBlue,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
                                     text = "+50수집",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = SkyQuestBlueShadow
+                                    color = SkyQuestBlue
                                 )
                             }
                         }
@@ -728,24 +735,24 @@ fun WorldMapScreen(
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "LIVE 회화학습 · 투명 자막 · 실시간 교정",
+                                text = "LIVE 회화 · 3D 립싱크 · 실시간 교정",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = AdventureEmeraldShadow
+                                color = AdventureEmerald
                             )
                             Text(
                                 text = activeTutor.koreanNickname,
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "카카오 페이스톡 감성 · EN/KR 음성 질문",
+                                text = "실시간 AI 튜터 · EN/KR 음성 질문",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     Tactile3DButton(
-                        text = "${activeTutor.name} · LIVE 회화학습 시작",
-                        icon = Icons.Default.RecordVoiceOver,
+                        text = "${activeTutor.name} · LIVE 회화 시작",
+                        icon = Icons.Outlined.MicNone,
                         containerColor = AdventureEmerald,
                         shadowColor = AdventureEmeraldShadow,
                         modifier = Modifier.fillMaxWidth(),
@@ -831,7 +838,7 @@ private fun FairytaleExpeditionTile(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = if (zone.id <= 2) Icons.Default.FlightTakeoff else Icons.Default.Star,
+                            imageVector = if (zone.id <= 2) Icons.Outlined.Flight else Icons.Outlined.StarOutline,
                             contentDescription = zone.titleKo,
                             tint = accent,
                             modifier = Modifier.size(14.dp)
@@ -845,7 +852,7 @@ private fun FairytaleExpeditionTile(
                     }
                 }
                 Icon(
-                    imageVector = Icons.Default.PlayArrow,
+                    imageVector = Icons.Outlined.PlayArrow,
                     contentDescription = "시작",
                     tint = accent,
                     modifier = Modifier.size(18.dp)
@@ -887,22 +894,35 @@ private fun MainFocusedVocabStudyCard(
     onOpenFullVocab: () -> Unit,
     onOpenWeeklyReport: () -> Unit
 ) {
-    val normalDeck = remember(vocabGradeTier) {
-        val all = VocabRepository.allWords
-        val preferred = all.filter { it.csatFrequency >= 4 }
-        (if (preferred.isNotEmpty()) preferred else all).take(40)
+    var selectedGrade by remember { mutableIntStateOf(0) } // 0 = 전체, 1 = 고1, 2 = 고2, 3 = 고3
+    val normalDeck = remember(vocabGradeTier, selectedGrade) {
+        val pool = VocabRepository.wordsForGrade(selectedGrade)
+        if (selectedGrade != 0) {
+            pool
+        } else {
+            val preferred = pool.filter { it.csatFrequency >= 4 }
+            (if (preferred.isNotEmpty()) preferred else pool).take(45)
+        }
     }
     val activeDeck = if (isReviewMode && wrongWords.isNotEmpty()) wrongWords else normalDeck
-    var currentIdx by remember(isReviewMode) { mutableIntStateOf(0) }
-    var showMeaning by remember { mutableStateOf(false) }
+    var currentIdx by remember(isReviewMode, selectedGrade) { mutableIntStateOf(0) }
+    var showMeaning by remember(selectedGrade) { mutableStateOf(false) }
     var sessionStreak by remember { mutableIntStateOf(0) }
+    var youtubeWordQuery by remember { mutableStateOf<String?>(null) }
 
     val word = activeDeck[currentIdx % activeDeck.size]
     val sentenceEn = word.examples.firstOrNull()?.english ?: word.exampleEn
     val sentenceKo = word.examples.firstOrNull()?.korean ?: word.exampleKo
 
+    if (youtubeWordQuery != null) {
+        YouTubeWordContextDialog(
+            wordOrPhrase = youtubeWordQuery!!,
+            onDismiss = { youtubeWordQuery = null }
+        )
+    }
+
     Elevated3DCard(
-        accentShadow = if (isReviewMode) CoralOrangeShadow.copy(alpha = 0.48f) else SkyQuestBlueShadow.copy(alpha = 0.42f)
+        accentShadow = if (isReviewMode) CoralOrangeShadow.copy(alpha = 0.42f) else SkyQuestBlueShadow.copy(alpha = 0.36f)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
@@ -916,23 +936,23 @@ private fun MainFocusedVocabStudyCard(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = if (isReviewMode) CoralOrange.copy(alpha = 0.18f) else SkyQuestBlue.copy(alpha = 0.14f)
+                        color = if (isReviewMode) CoralOrange.copy(alpha = 0.16f) else SkyQuestBlue.copy(alpha = 0.14f)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = if (isReviewMode) Icons.Default.Refresh else Icons.Default.LocalFireDepartment,
+                                imageVector = if (isReviewMode) Icons.Outlined.Refresh else Icons.Outlined.LocalFireDepartment,
                                 contentDescription = null,
-                                tint = if (isReviewMode) CoralOrangeShadow else SkyQuestBlueShadow,
-                                modifier = Modifier.size(16.dp)
+                                tint = if (isReviewMode) CoralOrange else SkyQuestBlue,
+                                modifier = Modifier.size(15.dp)
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = if (isReviewMode) "오답 집중 복습 모드" else "집중 단어 학습 모드",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold),
-                                color = if (isReviewMode) CoralOrangeShadow else SkyQuestBlueShadow
+                                text = if (isReviewMode) "오답 복습" else "집중 단어",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = if (isReviewMode) CoralOrange else SkyQuestBlue
                             )
                         }
                     }
@@ -948,17 +968,17 @@ private fun MainFocusedVocabStudyCard(
                             .testTag("main_focus_review_mode_toggle")
                     ) {
                         Text(
-                            text = if (isReviewMode) "남은 오답 ${wrongWords.size}개 · 해제" else if (wrongWords.isNotEmpty()) "복습 모드 (${wrongWords.size})" else "연속 ${sessionStreak}단어",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
-                            color = if (isReviewMode) Color.White else if (wrongWords.isNotEmpty()) CoralOrangeShadow else AdventureEmeraldShadow,
+                            text = if (isReviewMode) "오답 ${wrongWords.size} · 해제" else if (wrongWords.isNotEmpty()) "복습 (${wrongWords.size})" else "연속 ${sessionStreak}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (isReviewMode) Color.White else if (wrongWords.isNotEmpty()) CoralOrange else AdventureEmerald,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
                 Text(
-                    text = "누적 ${masteredWordsCount}개 · 전체 ▸",
+                    text = "누적 ${masteredWordsCount} · 전체 ▸",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = SkyQuestBlueShadow,
+                    color = SkyQuestBlue,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(onClick = onOpenFullVocab)
@@ -967,11 +987,68 @@ private fun MainFocusedVocabStudyCard(
                 )
             }
 
+            // Top High School Difficulty Grade Deck Filter Tabs (전체 · 고1 · 고2 · 고3) — Dark-Mode Safe!
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("main_focus_grade_tabs"),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val gradeTabs = listOf(
+                    Triple(0, "전체", RoyalPurple),
+                    Triple(1, "고1", AdventureEmerald),
+                    Triple(2, "고2", SkyQuestBlue),
+                    Triple(3, "고3", SpartaRed)
+                )
+                gradeTabs.forEach { (gradeVal, label, accentColor) ->
+                    val selected = !isReviewMode && selectedGrade == gradeVal
+                    val gradeCount = remember(gradeVal) { VocabRepository.wordsForGrade(gradeVal).size }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) accentColor else MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(
+                            width = if (selected) 1.5.dp else 1.dp,
+                            color = if (selected) accentColor else MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                selectedGrade = gradeVal
+                                currentIdx = 0
+                                showMeaning = false
+                                if (isReviewMode) onToggleReviewMode(false)
+                            }
+                            .testTag("main_focus_grade_tab_$gradeVal")
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = "${gradeCount}단어",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium),
+                                color = if (selected) Color.White.copy(alpha = 0.88f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+
             if (reviewAllClearBanner) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = AdventureEmerald.copy(alpha = 0.16f),
-                    border = BorderStroke(1.2.dp, AdventureEmerald),
+                    border = BorderStroke(1.dp, AdventureEmerald),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
@@ -984,14 +1061,14 @@ private fun MainFocusedVocabStudyCard(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "오답 노트 올클리어! 틀렸던 단어를 전부 정복했어요!",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
-                            color = AdventureEmeraldShadow
+                            text = "오답 노트 올클리어!",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = AdventureEmerald
                         )
                         Text(
                             text = "확인",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = AdventureEmeraldShadow
+                            color = AdventureEmerald
                         )
                     }
                 }
@@ -1004,16 +1081,19 @@ private fun MainFocusedVocabStudyCard(
                 onOpenWeeklyReport = onOpenWeeklyReport
             )
 
-            // Word & Real CSAT Sentence Panel
+            // Word & Real CSAT Sentence Panel — Dark-Mode Safe!
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = if (isReviewMode) Color(0xFFFFF4EE) else Color(0xFFF6F2E9),
-                border = BorderStroke(1.2.dp, if (isReviewMode) CoralOrange.copy(alpha = 0.5f) else Color(0xFFE2DACB)),
+                color = if (isReviewMode) CoralOrange.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(
+                    1.dp,
+                    if (isReviewMode) CoralOrange.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outline
+                ),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1021,51 +1101,93 @@ private fun MainFocusedVocabStudyCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = word.word,
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = word.word,
+                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                val wordGradeColor = when (word.grade) {
+                                    1 -> AdventureEmerald
+                                    2 -> SkyQuestBlue
+                                    else -> SpartaRed
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = wordGradeColor.copy(alpha = 0.16f)
+                                ) {
+                                    Text(
+                                        text = "고${word.grade}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = wordGradeColor,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
                             Text(
                                 text = if (isReviewMode) {
-                                    "오답 집중 복습 (${(currentIdx % activeDeck.size) + 1}/${activeDeck.size}) · ${word.ipa}"
+                                    "오답 복습 ${(currentIdx % activeDeck.size) + 1}/${activeDeck.size} · ${word.ipa}"
                                 } else {
-                                    "${word.ipa} · ${word.partOfSpeech} · 수능 빈출 ★${word.csatFrequency}"
+                                    "${word.ipa} · ${word.partOfSpeech} · ★${word.csatFrequency}"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (isReviewMode) CoralOrangeShadow else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isReviewMode) CoralOrange else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Surface(
-                            shape = CircleShape,
-                            color = if (isReviewMode) CoralOrange else SkyQuestBlue,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .clickable { onSpeakEnglish("${word.word}. $sentenceEn") }
-                                .testTag("main_focus_speak_btn")
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = "원어민 단어·문장 듣기",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Surface(
+                                shape = CircleShape,
+                                color = SpartaRed.copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, SpartaRed.copy(alpha = 0.4f)),
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .clickable { youtubeWordQuery = word.word }
+                                    .testTag("main_focus_youtube_btn")
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.PlayCircle,
+                                        contentDescription = "유튜브 강의 구간 재생",
+                                        tint = SpartaRed,
+                                        modifier = Modifier.size(21.dp)
+                                    )
+                                }
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isReviewMode) CoralOrange else SkyQuestBlue,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onSpeakEnglish("${word.word}. $sentenceEn") }
+                                    .testTag("main_focus_speak_btn")
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.VolumeUp,
+                                        contentDescription = "원어민 단어·문장 듣기",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(21.dp)
+                                    )
+                                }
                             }
                         }
                     }
 
                     Text(
                         text = sentenceEn,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
                     if (showMeaning) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = AdventureEmerald.copy(alpha = 0.12f),
+                            color = AdventureEmerald.copy(alpha = 0.14f),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(
@@ -1074,8 +1196,8 @@ private fun MainFocusedVocabStudyCard(
                             ) {
                                 Text(
                                     text = word.meaningKo,
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                    color = AdventureEmeraldShadow
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = AdventureEmerald
                                 )
                                 Text(
                                     text = sentenceKo,
@@ -1087,8 +1209,8 @@ private fun MainFocusedVocabStudyCard(
                     } else {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.dp, SkyQuestBlue.copy(alpha = 0.35f)),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
@@ -1101,16 +1223,16 @@ private fun MainFocusedVocabStudyCard(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Visibility,
+                                    imageVector = Icons.Outlined.Visibility,
                                     contentDescription = null,
-                                    tint = SkyQuestBlueShadow,
+                                    tint = SkyQuestBlue,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = "터치해서 뜻 · 해석 확인하기 (${activeHero.nameKo}와 암기 중)",
+                                    text = "뜻 · 예문 해석 보기",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = SkyQuestBlueShadow
+                                    color = SkyQuestBlue
                                 )
                             }
                         }
@@ -1118,14 +1240,14 @@ private fun MainFocusedVocabStudyCard(
                 }
             }
 
-            // Instant Action Buttons (Auto-saves to Wrong Answer Notebook on '다시 복습'!)
+            // Instant Action Buttons (Zero truncation!)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Tactile3DButton(
-                    text = if (isReviewMode) "한 번 더 복습" else "다시 복습 (오답저장)",
-                    icon = Icons.Default.Refresh,
+                    text = "다시 복습",
+                    icon = Icons.Outlined.Refresh,
                     containerColor = CoralOrange,
                     shadowColor = CoralOrangeShadow,
                     height = 46.dp,
@@ -1138,12 +1260,12 @@ private fun MainFocusedVocabStudyCard(
                     }
                 )
                 Tactile3DButton(
-                    text = if (isReviewMode) "오답 정복!" else "완벽 암기!",
-                    icon = Icons.Default.CheckCircle,
+                    text = if (isReviewMode) "오답 정복" else "암기 완료",
+                    icon = Icons.Outlined.CheckCircle,
                     containerColor = AdventureEmerald,
                     shadowColor = AdventureEmeraldShadow,
                     height = 46.dp,
-                    modifier = Modifier.weight(1.15f),
+                    modifier = Modifier.weight(1.1f),
                     tag = "main_focus_known_btn",
                     onClick = {
                         onRecordResult(word.id, true)
@@ -1190,9 +1312,9 @@ private fun WrongAnswerNotebookCard(
                         color = CoralOrange.copy(alpha = 0.16f)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
+                            imageVector = Icons.Outlined.Refresh,
                             contentDescription = "오답 노트",
-                            tint = CoralOrangeShadow,
+                            tint = CoralOrange,
                             modifier = Modifier
                                 .padding(6.dp)
                                 .size(18.dp)
@@ -1201,10 +1323,10 @@ private fun WrongAnswerNotebookCard(
                     Column {
                         Text(
                             text = "오답 노트",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
-                            text = "틀린 단어가 자동으로 보관되어 언제든 다시 복습해요",
+                            text = "틀린 단어가 자동 보관됩니다",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1215,9 +1337,9 @@ private fun WrongAnswerNotebookCard(
                     color = if (wrongWords.isNotEmpty()) CoralOrange else AdventureEmerald.copy(alpha = 0.16f)
                 ) {
                     Text(
-                        text = if (wrongWords.isNotEmpty()) "${wrongWords.size}단어 보관" else "0단어 클린",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
-                        color = if (wrongWords.isNotEmpty()) Color.White else AdventureEmeraldShadow,
+                        text = if (wrongWords.isNotEmpty()) "${wrongWords.size}단어" else "0단어",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (wrongWords.isNotEmpty()) Color.White else AdventureEmerald,
                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                     )
                 }
@@ -1226,12 +1348,12 @@ private fun WrongAnswerNotebookCard(
             if (wrongWords.isEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = AdventureEmerald.copy(alpha = 0.08f),
-                    border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.3f)),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "현재 보관된 오답 단어가 없어요! 위 집중 단어 학습에서 '다시 복습 (오답저장)'을 누르면 여기에 자동 보관됩니다.",
+                        text = "보관된 오답이 없습니다. '다시 복습'을 누른 단어가 여기에 모입니다.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(12.dp)
@@ -1243,18 +1365,18 @@ private fun WrongAnswerNotebookCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Tactile3DButton(
-                        text = if (isReviewModeActive) "복습 모드 진행 중 ✓" else "복습 모드 (${wrongWords.size}단어)",
-                        icon = Icons.Default.Refresh,
+                        text = if (isReviewModeActive) "복습 중 ✓" else "복습 모드 (${wrongWords.size})",
+                        icon = Icons.Outlined.Refresh,
                         containerColor = if (isReviewModeActive) AdventureEmerald else CoralOrange,
                         shadowColor = if (isReviewModeActive) AdventureEmeraldShadow else CoralOrangeShadow,
                         height = 46.dp,
-                        modifier = Modifier.weight(1.2f),
+                        modifier = Modifier.weight(1.15f),
                         tag = "wrong_note_review_mode_btn",
                         onClick = onEnterReviewMode
                     )
                     Tactile3DButton(
-                        text = "스파르타 약점",
-                        icon = Icons.Default.LocalFireDepartment,
+                        text = "약점 집중",
+                        icon = Icons.Outlined.LocalFireDepartment,
                         containerColor = RoyalPurple,
                         shadowColor = RoyalPurpleShadow,
                         height = 46.dp,
@@ -1268,8 +1390,8 @@ private fun WrongAnswerNotebookCard(
                     visibleWords.forEach { w ->
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = Color(0xFFFFF8F5),
-                            border = BorderStroke(1.dp, CoralOrange.copy(alpha = 0.32f)),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(1.dp, CoralOrange.copy(alpha = 0.35f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("wrong_note_item_${w.id}")
@@ -1286,7 +1408,7 @@ private fun WrongAnswerNotebookCard(
                                     ) {
                                         Text(
                                             text = w.word,
-                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
@@ -1298,7 +1420,7 @@ private fun WrongAnswerNotebookCard(
                                     Text(
                                         text = w.meaningKo,
                                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                        color = CoralOrangeShadow
+                                        color = CoralOrange
                                     )
                                 }
                                 Surface(
@@ -1312,9 +1434,9 @@ private fun WrongAnswerNotebookCard(
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                            imageVector = Icons.AutoMirrored.Outlined.VolumeUp,
                                             contentDescription = "${w.word} 발음 듣기",
-                                            tint = SkyQuestBlueShadow,
+                                            tint = SkyQuestBlue,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }

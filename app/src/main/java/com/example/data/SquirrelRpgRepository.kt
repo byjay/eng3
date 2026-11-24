@@ -24,8 +24,8 @@ object SquirrelRpgRepository {
             baseAtk = 28,
             sheetRes = R.drawable.img_squirrel_heroes_sheet_a_1795421787418,
             columnIndex = 0,
-            accentHex = 0xFF148F68,
-            shadowHex = 0xFF0C684B
+            accentHex = 0xFF4F6EF7,
+            shadowHex = 0xFF3952CC
         ),
         SquirrelJobHero(
             id = "hero_stella",
@@ -58,8 +58,8 @@ object SquirrelRpgRepository {
             baseAtk = 31,
             sheetRes = R.drawable.img_squirrel_heroes_sheet_a_1795421787418,
             columnIndex = 2,
-            accentHex = 0xFF059669,
-            shadowHex = 0xFF047857
+            accentHex = 0xFF0EA5E9,
+            shadowHex = 0xFF0284C7
         ),
         SquirrelJobHero(
             id = "hero_mia",
@@ -75,8 +75,8 @@ object SquirrelRpgRepository {
             baseAtk = 27,
             sheetRes = R.drawable.img_squirrel_heroes_sheet_a_1795421787418,
             columnIndex = 3,
-            accentHex = 0xFFEAB308,
-            shadowHex = 0xFFC28E00
+            accentHex = 0xFFFF7A59,
+            shadowHex = 0xFFD95B3D
         ),
         SquirrelJobHero(
             id = "hero_leo",
@@ -217,14 +217,14 @@ object SquirrelRpgRepository {
                 titleKo = "초원의 장난꾸러기",
                 maxHp = 95,
                 atk = 14,
-                accentHex = 0xFF148F68,
+                accentHex = 0xFF4F6EF7,
                 intentLabelKo = "잉크 방울 튀기기 (14)",
                 battleQuoteKo = "몰랑몰랑~ 단어 뜻 맞히면 비켜줄게!"
             ),
             rewardCoins = 120,
             rewardXp = 60,
             castleHpBonus = 8,
-            accentHex = 0xFF148F68
+            accentHex = 0xFF4F6EF7
         ),
         EmeraldStoryChapter(
             number = 2,

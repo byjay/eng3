@@ -27,9 +27,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Celebration
-import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Celebration
+import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -99,8 +99,8 @@ fun DailyGoalStreakCardSection(
 
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = Color(0xFFFFF8EC),
-        border = BorderStroke(1.5.dp, TrophyGold.copy(alpha = 0.72f)),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = modifier
             .fillMaxWidth()
             .testTag("daily_goal_streak_card")
@@ -120,23 +120,23 @@ fun DailyGoalStreakCardSection(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = CoralOrange.copy(alpha = 0.16f)
+                        color = CoralOrange.copy(alpha = 0.15f)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.LocalFireDepartment,
-                                contentDescription = "Daily Goal Streak",
-                                tint = CoralOrangeShadow,
+                                imageVector = Icons.Outlined.LocalFireDepartment,
+                                contentDescription = "일일 목표 스트릭",
+                                tint = CoralOrange,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(3.dp))
                             Text(
-                                text = "Daily Goal Streak",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                color = CoralOrangeShadow
+                                text = "일일 목표",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = CoralOrange
                             )
                         }
                     }
@@ -151,7 +151,7 @@ fun DailyGoalStreakCardSection(
                     ) {
                         Text(
                             text = "${streakCount}회 달성",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = Color.White,
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                         )
@@ -160,8 +160,8 @@ fun DailyGoalStreakCardSection(
 
                 Text(
                     text = "$displayedStepWords/$DAILY_STREAK_WORD_STEP 단어",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
-                    color = TrophyGoldShadow,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.testTag("daily_goal_words_counter")
                 )
             }
@@ -170,11 +170,11 @@ fun DailyGoalStreakCardSection(
                 progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(9.dp)
+                    .height(8.dp)
                     .clip(RoundedCornerShape(999.dp))
                     .testTag("daily_goal_progress_bar"),
                 color = CoralOrange,
-                trackColor = TrophyGold.copy(alpha = 0.25f),
+                trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
                 strokeCap = StrokeCap.Round
             )
 
@@ -210,14 +210,14 @@ fun DailyGoalStreakCardSection(
                             horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.BarChart,
+                                imageVector = Icons.Outlined.BarChart,
                                 contentDescription = "주간 학습 리포트 보기",
                                 tint = SkyQuestBlue,
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
                                 text = "주간 리포트",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = SkyQuestBlue
                             )
                         }
@@ -263,14 +263,14 @@ fun StreakMilestoneConfettiOverlay(
     val particles = remember(event.triggeredAtMs) {
         val rng = Random(event.triggeredAtMs)
         val palette = listOf(
-            Color(0xFFFF4D6D),
-            Color(0xFFFFB703),
-            Color(0xFF14B8A6),
-            Color(0xFF3B82F6),
-            Color(0xFFA855F7),
-            Color(0xFF22C55E),
-            Color(0xFFF97316),
-            Color(0xFFEC4899)
+            Color(0xFF4F6EF7),
+            Color(0xFF0EA5E9),
+            Color(0xFFFF7A59),
+            Color(0xFF8B7CFF),
+            Color(0xFFE14D66),
+            Color(0xFF38BDF8),
+            Color(0xFFA78BFA),
+            Color(0xFFFB7185)
         )
         List(76) {
             ConfettiParticle(
@@ -374,8 +374,8 @@ fun StreakMilestoneConfettiOverlay(
         // Center Celebration Modal Card
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color(0xFFFFFDF8),
-            border = BorderStroke(2.5.dp, TrophyGold),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.5.dp, AdventureEmerald.copy(alpha = 0.65f)),
             shadowElevation = 14.dp,
             modifier = Modifier
                 .padding(horizontal = 24.dp)
@@ -394,11 +394,7 @@ fun StreakMilestoneConfettiOverlay(
         ) {
             Column(
                 modifier = Modifier
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color(0xFFFFF7E0), Color(0xFFFFFFFF))
-                        )
-                    )
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 22.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -413,15 +409,15 @@ fun StreakMilestoneConfettiOverlay(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Celebration,
+                            imageVector = Icons.Outlined.Celebration,
                             contentDescription = null,
-                            tint = CoralOrangeShadow,
+                            tint = CoralOrange,
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
                             text = milestoneBadgeText,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
-                            color = CoralOrangeShadow
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = CoralOrange
                         )
                     }
                 }
@@ -436,7 +432,7 @@ fun StreakMilestoneConfettiOverlay(
                 Text(
                     text = "Congratulations!",
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
-                    color = Color(0xFF1B2834),
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.testTag("confetti_congrats_title")
                 )
@@ -450,8 +446,8 @@ fun StreakMilestoneConfettiOverlay(
 
                 Surface(
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFFFFF4DC),
-                    border = BorderStroke(1.5.dp, TrophyGold),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -463,13 +459,13 @@ fun StreakMilestoneConfettiOverlay(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "Daily Goal Streak",
+                                text = "일일 스트릭",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = CoralOrangeShadow
+                                color = CoralOrange
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.LocalFireDepartment,
+                                    imageVector = Icons.Outlined.LocalFireDepartment,
                                     contentDescription = null,
                                     tint = CoralOrange,
                                     modifier = Modifier.size(22.dp)
@@ -478,7 +474,7 @@ fun StreakMilestoneConfettiOverlay(
                                 Text(
                                     text = "${event.newStreakCount}",
                                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                    color = CoralOrangeShadow
+                                    color = CoralOrange
                                 )
                             }
                         }
@@ -487,19 +483,19 @@ fun StreakMilestoneConfettiOverlay(
                             modifier = Modifier
                                 .width(1.dp)
                                 .height(34.dp)
-                                .background(TrophyGold.copy(alpha = 0.5f))
+                                .background(MaterialTheme.colorScheme.outline)
                         )
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "오늘 완료 단어",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = AdventureEmeraldShadow
+                                color = AdventureEmerald
                             )
                             Text(
                                 text = "${event.todayWordsCompleted}단어",
                                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                color = AdventureEmeraldShadow
+                                color = AdventureEmerald
                             )
                         }
                     }

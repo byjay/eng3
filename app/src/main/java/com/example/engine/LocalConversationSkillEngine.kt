@@ -498,13 +498,114 @@ object LocalConversationSkillEngine {
         return beats[turnIndex.coerceAtLeast(0) % beats.size]
     }
 
+    fun generateProactiveOpener(
+        tutor: AiHumanTutor,
+        learnerName: String,
+        activeTopicTag: String,
+        conversationGoalKo: String,
+        turnCount: Int,
+        isOpening: Boolean
+    ): AiCoachReply {
+        val enName = HybridAiCoachEngine.formatLearnerEnglishName(learnerName)
+        val koName = learnerName.trim().ifBlank { "원삐" }
+        val goal = conversationGoalKo.ifBlank { HybridAiCoachEngine.goalForTopic(activeTopicTag) }
+        val (replyEn, replyKo, mood, thoughtKo) = when {
+            activeTopicTag.contains("카페") -> if (isOpening) {
+                Quad(
+                    "Hey $enName! Welcome to the cozy corner cafe! What kind of coffee or sweet drink are you craving today?",
+                    "${koName}님, 아늑한 카페에 잘 왔어요! 오늘은 어떤 커피나 달콤한 음료가 당기나요?",
+                    "happy",
+                    "${koName}님이 좋아하는 음료를 먼저 물어보고 사이즈·얼음 옵션으로 대화를 이어가야지"
+                )
+            } else {
+                Quad(
+                    "Take your time, $enName! Our iced vanilla latte and warm croissants are super popular today. Want to try one?",
+                    "천천히 골라도 돼요, ${koName}님! 오늘 아이스 바닐라 라떼랑 따뜻한 크루아상이 인기예요. 드셔보실래요?",
+                    "curious",
+                    "잠시 고민 중이신 것 같아 인기 메뉴 선택지를 먼저 제안해 드려야지"
+                )
+            }
+            activeTopicTag.contains("공항") -> if (isOpening) {
+                Quad(
+                    "Good afternoon, $enName! Welcome to arrivals. May I ask what brings you to the city today?",
+                    "안녕하세요 ${koName}님! 입국장에 오신 걸 환영해요. 오늘 어떤 목적으로 방문하셨나요?",
+                    "curious",
+                    "${koName}님에게 방문 목적을 자연스럽게 물어보며 입국심사 목표를 시작하자"
+                )
+            } else {
+                Quad(
+                    "No rush, $enName! Are you here for sightseeing, or visiting friends? Just tell me in a short sentence!",
+                    "괜찮아요 ${koName}님! 관광하러 오신 건가요, 친구 만나러 오신 건가요? 짧게 말해보세요!",
+                    "happy",
+                    "${koName}님이 편하게 답할 수 있도록 관광/방문 선택지를 짚어주자"
+                )
+            }
+            activeTopicTag.contains("식당") || activeTopicTag.contains("레스토랑") -> Quad(
+                "Welcome in, $enName! We have a lovely table by the window ready. Would you like to hear today's chef special?",
+                "어서 오세요 ${koName}님! 창가 쪽 멋진 자리가 준비되어 있어요. 오늘의 셰프 추천 메뉴 들어보실래요?",
+                "excited",
+                "창가 자리와 추천 메뉴로 ${koName}님의 레스토랑 주문 목표를 이끌어보자"
+            )
+            activeTopicTag.contains("호텔") -> Quad(
+                "Hello $enName, welcome to our hotel! Checking in today? Let me know if you'd prefer a higher floor with a city view!",
+                "안녕하세요 ${koName}님, 호텔에 오신 걸 환영해요! 체크인이시죠? 시티뷰 고층 객실 원하시면 말씀해 주세요!",
+                "happy",
+                "체크인하면서 객실 선호도를 물어 ${koName}님이 능동적으로 요청하도록 유도하자"
+            )
+            activeTopicTag.contains("마트") -> Quad(
+                "Hi $enName! Looks like you picked some great snacks. Would you like a bag, or are you still looking for anything else?",
+                "안녕 ${koName}님! 맛있는 간식을 고르셨네요. 봉투 필요하신가요, 아니면 더 찾으시는 물건이 있나요?",
+                "happy",
+                "마트 계산대 상황에서 봉투와 결제 표현을 자연스럽게 꺼내보자"
+            )
+            activeTopicTag.contains("길찾기") -> Quad(
+                "Hey $enName, you look like you're checking the map! Where are you headed? I know a great shortcut!",
+                "${koName}님, 지도 보고 계신 것 같네요! 어디로 가시는 길이에요? 제가 좋은 지름길을 알아요!",
+                "curious",
+                "${koName}님이 목적지를 영어로 물어볼 수 있도록 먼저 말을 걸어보자"
+            )
+            activeTopicTag.contains("소개") -> Quad(
+                "So nice to meet you, $enName! I'm ${tutor.name}. What's something fun you've been really into lately?",
+                "만나서 정말 반가워요 ${koName}님! 저는 ${tutor.name}예요. 요즘 푹 빠져 있는 재미있는 취미가 있나요?",
+                "excited",
+                "${koName}님의 관심사를 먼저 물어보며 친근한 자기소개 대화를 열자"
+            )
+            else -> Quad(
+                "Hey $enName! So good to see you again! What's one highlight from your day so far?",
+                "${koName}님, 다시 만나서 너무 반가워요! 오늘 하루 중 가장 기억에 남는 일이 뭐예요?",
+                "happy",
+                "${koName}님의 오늘 이야기를 먼저 물어보며 가볍게 수다를 시작하자"
+            )
+        }
+        val hints = HybridAiCoachEngine.defaultSuggestedRepliesForTopic(activeTopicTag)
+        return AiCoachReply(
+            replyEn = replyEn,
+            translationKo = replyKo,
+            coachingTipKo = "목표: $goal — ${koName}님, 편하게 한 문장으로 답해 보세요!",
+            naturalRephraseEn = hints.firstOrNull()?.english ?: "I'm doing great today!",
+            grammarFixKo = "상황에 맞는 짧은 핵심 문장부터 말하면 대화가 술술 풀려요.",
+            suggestedReplies = hints,
+            engineBadge = "능동 스킬 코치 (오프라인)",
+            thoughtKo = thoughtKo,
+            goalProgressKo = goal,
+            characterMood = mood
+        )
+    }
+
+    private data class Quad(val a: String, val b: String, val c: String, val d: String)
+
     fun generateReply(
         tutor: AiHumanTutor,
         userText: String,
         history: List<TutorChatMessage>,
         activeTopicTag: String,
-        activeTwist: TravelTwist? = null
+        activeTwist: TravelTwist? = null,
+        learnerName: String = "원삐",
+        conversationGoalKo: String = ""
     ): AiCoachReply {
+        val enName = HybridAiCoachEngine.formatLearnerEnglishName(learnerName)
+        val koName = learnerName.trim().ifBlank { "원삐" }
+        val resolvedGoal = conversationGoalKo.ifBlank { HybridAiCoachEngine.goalForTopic(activeTopicTag) }
         val trimmed = userText.trim()
         val lower = trimmed.lowercase()
         val userTurns = history.count { !it.fromTutor }
@@ -516,8 +617,8 @@ object LocalConversationSkillEngine {
                 ?: "Could you please help me resolve this issue right away?"
             return if (matchedKeyword) {
                 AiCoachReply(
-                    replyEn = "Got it! Thank you for explaining that so clearly. I'll take care of it for you right away!",
-                    translationKo = "알겠습니다! 아주 명확하게 설명해 주셔서 감사해요. 제가 지금 바로 처리해 드릴게요!",
+                    replyEn = "Got it, $enName! Thank you for explaining that so clearly. I'll take care of it for you right away!",
+                    translationKo = "알겠습니다 ${koName}님! 아주 명확하게 설명해 주셔서 감사해요. 제가 지금 바로 처리해 드릴게요!",
                     coachingTipKo = "돌발 변수 핵심 키워드를 정확히 사용했어요! 다음엔 한 번 더 또렷하게 강세를 줘보세요.",
                     naturalRephraseEn = suggested,
                     grammarFixKo = "상황에 꼭 맞는 핵심 키워드와 정중한 요청 표현이 잘 어우러졌어요.",
@@ -526,12 +627,15 @@ object LocalConversationSkillEngine {
                         SuggestedReplyOption("How long will it take?", "얼마나 걸릴까요?"),
                         SuggestedReplyOption("I really appreciate your quick response.", "빠르게 대응해 주셔서 감사해요.")
                     ),
-                    engineBadge = "온디바이스 스킬 코치 (무료·0ms)"
+                    engineBadge = "온디바이스 스킬 코치 (무료·0ms)",
+                    thoughtKo = "${koName}님이 돌발 상황을 정확히 해결했으니 다음 단계로 이어주자",
+                    goalProgressKo = resolvedGoal,
+                    characterMood = "proud"
                 )
             } else {
                 AiCoachReply(
-                    replyEn = "I hear you! To solve this even faster, try saying: \"$suggested\"",
-                    translationKo = "무슨 말씀인지 알겠어요! 훨씬 빠르게 해결하려면 이렇게 말해보세요!",
+                    replyEn = "I hear you, $enName! To solve this even faster, try saying: \"$suggested\"",
+                    translationKo = "무슨 말씀인지 알겠어요 ${koName}님! 훨씬 빠르게 해결하려면 이렇게 말해보세요!",
                     coachingTipKo = "팁: ${activeTwist.strategyKo}",
                     naturalRephraseEn = suggested,
                     grammarFixKo = "Could you please ~ 패턴을 쓰면 현지 직원이 훨씬 친절하게 도와줘요.",
@@ -540,7 +644,10 @@ object LocalConversationSkillEngine {
                         SuggestedReplyOption("Could you check that for me again?", "다시 한 번 확인해 주시겠어요?"),
                         SuggestedReplyOption("Is there another option available?", "다른 대안이 있을까요?")
                     ),
-                    engineBadge = "온디바이스 스킬 코치 (무료·0ms)"
+                    engineBadge = "온디바이스 스킬 코치 (무료·0ms)",
+                    thoughtKo = "${koName}님이 핵심 요청 문장을 바로 써볼 수 있게 친절히 안내하자",
+                    goalProgressKo = resolvedGoal,
+                    characterMood = "curious"
                 )
             }
         }
@@ -570,14 +677,14 @@ object LocalConversationSkillEngine {
             val isKoreanAsk = trimmed.any { it in '\uAC00'..'\uD7A3' }
             val finalRephrase = grammarRephrase ?: matchedRule.nativeEn
             val finalReplyEn = if (isKoreanAsk) {
-                "Great question! Natives say: \"${matchedRule.nativeEn}\" Try saying it out loud to me!"
+                "Great question, $enName! Natives say: \"${matchedRule.nativeEn}\" Try saying it out loud to me!"
             } else {
-                matchedRule.replyEn
+                "Nice, $enName! ${matchedRule.replyEn}"
             }
             val finalReplyKo = if (isKoreanAsk) {
-                "좋은 질문이야! 원어민은 '${matchedRule.nativeEn}'라고 말해! 지금 나한테 소리 내어 말해볼래?"
+                "좋은 질문이야 ${koName}님! 원어민은 '${matchedRule.nativeEn}'라고 말해! 지금 나한테 소리 내어 말해볼래?"
             } else {
-                matchedRule.replyKo
+                "${koName}님 좋아요! ${matchedRule.replyKo}"
             }
             return AiCoachReply(
                 replyEn = finalReplyEn,
@@ -590,7 +697,10 @@ object LocalConversationSkillEngine {
                 } else {
                     matchedRule.nextHints
                 },
-                engineBadge = "온디바이스 스킬 코치 (무료·0ms)"
+                engineBadge = "온디바이스 스킬 코치 (무료·0ms)",
+                thoughtKo = "${koName}님의 의도를 파악해 '$activeTopicTag' 다음 상황으로 자연스럽게 넘어가자",
+                goalProgressKo = resolvedGoal,
+                characterMood = "happy"
             )
         }
 
@@ -605,19 +715,22 @@ object LocalConversationSkillEngine {
         }
 
         val replyEn = if (trimmed.endsWith("?") || lower.startsWith("what ") || lower.startsWith("do you ") || lower.startsWith("can you ")) {
-            "Ooh, good question! ${beat.replyEn}"
+            "Ooh, good question, $enName! ${beat.replyEn}"
         } else {
-            beat.replyEn
+            "Love that, $enName! ${beat.replyEn}"
         }
 
         return AiCoachReply(
             replyEn = replyEn,
-            translationKo = beat.replyKo,
+            translationKo = "${koName}님, ${beat.replyKo}",
             coachingTipKo = grammarTipMsg.ifBlank { "${beat.tipKo} (${tutor.accentLabel})" },
             naturalRephraseEn = polishedUserSentence,
             grammarFixKo = grammarFixMsg.ifBlank { beat.grammarKo },
             suggestedReplies = beat.hints,
-            engineBadge = "온디바이스 스킬 코치 (무료·0ms)"
+            engineBadge = "온디바이스 스킬 코치 (무료·0ms)",
+            thoughtKo = "${koName}님의 답변을 칭찬하고 '$activeTopicTag' 목표를 향해 한 걸음 더 질문하자",
+            goalProgressKo = resolvedGoal,
+            characterMood = "excited"
         )
     }
 }

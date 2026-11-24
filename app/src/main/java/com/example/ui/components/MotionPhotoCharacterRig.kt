@@ -126,7 +126,10 @@ fun LiveMotionPhotoFriendView(
     nanoBananaBlinkBitmap: Bitmap?,
     isSpeaking: Boolean,
     isListening: Boolean,
+    speechBeatIndex: Int = 0,
+    userRmsDb: Float = 0f,
     extraCropZoom: Float = 1.0f,
+    verticalOffsetFraction: Float = 0f,
     modifier: Modifier = Modifier
 ) {
     // 1. Natural randomized periodic blink state (used ONLY when photorealistic Nano Banana blink frame is ready)
@@ -155,25 +158,58 @@ fun LiveMotionPhotoFriendView(
         label = "nanoBlinkAlpha"
     )
 
-    // 2. GPU-only continuous gentle breathing (NEVER read in composition scope!)
+    // 2. GPU-only continuous gentle breathing + handheld camera micro-sway + speaking cadence beat
     val infinite = rememberInfiniteTransition(label = "gpuMotionPhoto")
     val breathPhaseState = infinite.animateFloat(
         initialValue = 0f,
         targetValue = (2f * PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4200, easing = LinearEasing),
+            animation = tween(durationMillis = 4400, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "breathPhase"
+    )
+    val swayPhaseState = infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 7300, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "cameraSwayPhase"
     )
     val talkPulseState = infinite.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 240, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "talkPulse"
+    )
+
+    // Organic word-synced speaking micro-nod that alternates gently on each spoken word!
+    val cadenceNodTarget = if (isSpeaking) {
+        when (speechBeatIndex % 4) {
+            0 -> 1.0f
+            1 -> -0.6f
+            2 -> 0.8f
+            else -> -0.3f
+        }
+    } else {
+        0f
+    }
+    val cadenceNodState = animateFloatAsState(
+        targetValue = cadenceNodTarget,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 260f),
+        label = "cadenceNod"
+    )
+
+    // Attentive lean-in zoom when user speaks loudly into mic
+    val voiceLeanState = animateFloatAsState(
+        targetValue = if (isListening) (userRmsDb.coerceIn(0f, 10f) / 10f) * 0.022f else 0f,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 180f),
+        label = "voiceLeanZoom"
     )
 
     // 3. Spring-damped target values for the 33 gestures (read ONLY inside graphicsLayer!)
@@ -193,7 +229,7 @@ fun LiveMotionPhotoFriendView(
         label = "gestureRotX"
     )
     val scaleState = animateFloatAsState(
-        targetValue = activeGesture.scaleBoost + if (isSpeaking) 0.012f else if (isListening) 0.025f else 0f,
+        targetValue = activeGesture.scaleBoost + if (isSpeaking) 0.015f else if (isListening) 0.028f else 0f,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = 210f),
         label = "gestureScale"
     )
@@ -206,29 +242,46 @@ fun LiveMotionPhotoFriendView(
     val sceneImageBitmap = remember(nanoBananaSceneBitmap) { nanoBananaSceneBitmap?.asImageBitmap() }
     val blinkImageBitmap = remember(nanoBananaBlinkBitmap) { nanoBananaBlinkBitmap?.asImageBitmap() }
     val effectiveCropZoom = if (sceneImageBitmap != null) 1.0f else extraCropZoom
+    val effectiveVerticalOffset = if (sceneImageBitmap != null) 0f else verticalOffsetFraction
 
     // Topic ambient studio lighting grade (instant 0ms visual transformation whenever topic changes — zero quota error!)
     val topicKey = remember(activeTopicTag) { NanoBananaMotionEngine.normalizeTopicKey(activeTopicTag) }
     val topicAtmosphereBrush = remember(topicKey) {
         when (topicKey) {
             "airport" -> Brush.verticalGradient(
-                listOf(Color(0xFF0284C7).copy(alpha = 0.28f), Color(0xFF38BDF8).copy(alpha = 0.08f), Color(0xFF0F172A).copy(alpha = 0.34f))
+                listOf(Color(0xFF0284C7).copy(alpha = 0.24f), Color(0xFF38BDF8).copy(alpha = 0.05f), Color(0xFF0F172A).copy(alpha = 0.28f))
             )
             "cafe" -> Brush.verticalGradient(
-                listOf(Color(0xFFB45309).copy(alpha = 0.30f), Color(0xFFF59E0B).copy(alpha = 0.10f), Color(0xFF451A03).copy(alpha = 0.32f))
+                listOf(Color(0xFF9A3412).copy(alpha = 0.22f), Color(0xFFFF7A59).copy(alpha = 0.06f), Color(0xFF1C1917).copy(alpha = 0.26f))
             )
             "mart" -> Brush.verticalGradient(
-                listOf(Color(0xFF059669).copy(alpha = 0.26f), Color(0xFF34D399).copy(alpha = 0.08f), Color(0xFF064E3B).copy(alpha = 0.28f))
+                listOf(Color(0xFF2563EB).copy(alpha = 0.20f), Color(0xFF38BDF8).copy(alpha = 0.05f), Color(0xFF0F172A).copy(alpha = 0.24f))
+            )
+            "restaurant" -> Brush.verticalGradient(
+                listOf(Color(0xFFC2410C).copy(alpha = 0.22f), Color(0xFFFB7185).copy(alpha = 0.06f), Color(0xFF1E1B2E).copy(alpha = 0.28f))
+            )
+            "hotel" -> Brush.verticalGradient(
+                listOf(Color(0xFF6D28D9).copy(alpha = 0.20f), Color(0xFF8B7CFF).copy(alpha = 0.06f), Color(0xFF1E1B4B).copy(alpha = 0.28f))
             )
             "intro" -> Brush.verticalGradient(
-                listOf(Color(0xFF16A34A).copy(alpha = 0.24f), Color(0xFFFACC15).copy(alpha = 0.09f), Color(0xFF14532D).copy(alpha = 0.24f))
+                listOf(Color(0xFF4F6EF7).copy(alpha = 0.20f), Color(0xFF38BDF8).copy(alpha = 0.06f), Color(0xFF0D0F14).copy(alpha = 0.24f))
             )
             "guam_beach" -> Brush.verticalGradient(
-                listOf(Color(0xFF06B6D4).copy(alpha = 0.22f), Color.Transparent, Color(0xFF0C4A6E).copy(alpha = 0.20f))
+                listOf(Color(0xFF0EA5E9).copy(alpha = 0.18f), Color.Transparent, Color(0xFF0C4A6E).copy(alpha = 0.18f))
             )
             else -> Brush.verticalGradient(
-                listOf(Color(0xFF1E3A8A).copy(alpha = 0.10f), Color.Transparent, Color(0xFF0F172A).copy(alpha = 0.16f))
+                listOf(Color(0xFF1E3A8A).copy(alpha = 0.10f), Color.Transparent, Color(0xFF0D0F14).copy(alpha = 0.16f))
             )
+        }
+    }
+    val bokehOrbColor = remember(topicKey) {
+        when (topicKey) {
+            "airport" -> Color(0xFF7DD3FC)
+            "cafe", "restaurant" -> Color(0xFFFFA891)
+            "hotel" -> Color(0xFFC4B5FD)
+            "mart", "intro" -> Color(0xFF93C5FD)
+            "guam_beach" -> Color(0xFF67E8F9)
+            else -> Color(0xFFA5B4FC)
         }
     }
 
@@ -238,16 +291,19 @@ fun LiveMotionPhotoFriendView(
         .fillMaxSize()
         .graphicsLayer {
             val breath = breathPhaseState.value
+            val sway = swayPhaseState.value
             val talk = if (isSpeaking) talkPulseState.value else 0f
-            val baseScale = 1.14f * effectiveCropZoom * scaleState.value
-            val clampedTiltZ = (sin(breath * 0.65f) * 0.45f + tiltState.value * 0.16f).coerceIn(-0.95f, 0.95f)
-            val clampedRotY = (rotYState.value * 0.35f + sin(breath) * 0.8f).coerceIn(-2.4f, 2.4f)
-            val clampedRotX = (rotXState.value * 0.30f + talk * 1.1f).coerceIn(-2.2f, 2.2f)
-            val clampedTx = (sin(breath * 0.8f) * 3.5f + rotYState.value * 1.1f).coerceIn(-12f, 12f)
-            val clampedTy = (cos(breath) * 3.0f + bounceYState.value * 0.55f - talk * 3.2f).coerceIn(-14f, 14f)
+            val nod = cadenceNodState.value
+            val baseScale = 1.14f * effectiveCropZoom * (scaleState.value + voiceLeanState.value)
+            val clampedTiltZ = (sin(sway * 0.7f) * 0.42f + tiltState.value * 0.15f + nod * 0.28f).coerceIn(-1.05f, 1.05f)
+            val clampedRotY = (rotYState.value * 0.32f + sin(breath) * 0.75f + nod * 0.65f).coerceIn(-2.5f, 2.5f)
+            val clampedRotX = (rotXState.value * 0.28f + talk * 0.95f + nod * 0.85f).coerceIn(-2.4f, 2.4f)
+            val clampedTx = (sin(sway * 0.85f) * 4.0f + rotYState.value * 1.0f).coerceIn(-13f, 13f)
+            val frameShiftY = size.height * effectiveVerticalOffset
+            val clampedTy = (cos(breath) * 2.8f + bounceYState.value * 0.48f - talk * 2.8f + nod * 2.4f).coerceIn(-14f, 14f) + frameShiftY
 
             scaleX = baseScale
-            scaleY = baseScale * (1f + talk * 0.008f)
+            scaleY = baseScale * (1f + talk * 0.007f)
             translationX = clampedTx
             translationY = clampedTy
             rotationZ = clampedTiltZ
@@ -258,7 +314,7 @@ fun LiveMotionPhotoFriendView(
         }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // Crossfade smoothly between base portrait and Nano Banana 2.1 photorealistic human portrait
+        // Crossfade smoothly between base real-human portrait and Nano Banana 2.1 scene portrait
         Crossfade(
             targetState = sceneImageBitmap to portraitRes,
             animationSpec = tween(480),
@@ -291,17 +347,20 @@ fun LiveMotionPhotoFriendView(
                     .fillMaxSize()
                     .graphicsLayer {
                         val breath = breathPhaseState.value
+                        val sway = swayPhaseState.value
                         val talk = if (isSpeaking) talkPulseState.value else 0f
-                        val baseScale = 1.14f * effectiveCropZoom * scaleState.value
-                        val clampedTiltZ = (sin(breath * 0.65f) * 0.45f + tiltState.value * 0.16f).coerceIn(-0.95f, 0.95f)
-                        val clampedRotY = (rotYState.value * 0.35f + sin(breath) * 0.8f).coerceIn(-2.4f, 2.4f)
-                        val clampedRotX = (rotXState.value * 0.30f + talk * 1.1f).coerceIn(-2.2f, 2.2f)
-                        val clampedTx = (sin(breath * 0.8f) * 3.5f + rotYState.value * 1.1f).coerceIn(-12f, 12f)
-                        val clampedTy = (cos(breath) * 3.0f + bounceYState.value * 0.55f - talk * 3.2f).coerceIn(-14f, 14f)
+                        val nod = cadenceNodState.value
+                        val baseScale = 1.14f * effectiveCropZoom * (scaleState.value + voiceLeanState.value)
+                        val clampedTiltZ = (sin(sway * 0.7f) * 0.42f + tiltState.value * 0.15f + nod * 0.28f).coerceIn(-1.05f, 1.05f)
+                        val clampedRotY = (rotYState.value * 0.32f + sin(breath) * 0.75f + nod * 0.65f).coerceIn(-2.5f, 2.5f)
+                        val clampedRotX = (rotXState.value * 0.28f + talk * 0.95f + nod * 0.85f).coerceIn(-2.4f, 2.4f)
+                        val clampedTx = (sin(sway * 0.85f) * 4.0f + rotYState.value * 1.0f).coerceIn(-13f, 13f)
+                        val frameShiftY = size.height * effectiveVerticalOffset
+                        val clampedTy = (cos(breath) * 2.8f + bounceYState.value * 0.48f - talk * 2.8f + nod * 2.4f).coerceIn(-14f, 14f) + frameShiftY
 
                         alpha = smoothBlinkState.value
                         scaleX = baseScale
-                        scaleY = baseScale * (1f + talk * 0.008f)
+                        scaleY = baseScale * (1f + talk * 0.007f)
                         translationX = clampedTx
                         translationY = clampedTy
                         rotationZ = clampedTiltZ
@@ -313,13 +372,48 @@ fun LiveMotionPhotoFriendView(
             )
         }
 
-        // Subtle topic-matched ambient color grade (instant visual cue while real-human scene loads)
+        // Subtle topic-matched ambient color grade + gentle cinema bokeh depth lights
         if (sceneImageBitmap == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(topicAtmosphereBrush)
             )
+            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                val p = swayPhaseState.value
+                val speakGlow = if (isSpeaking) 0.11f else 0.06f
+                // Soft upper-left & upper-right out-of-focus cinematic ambient light bokeh (never blocks face!)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(bokehOrbColor.copy(alpha = speakGlow), Color.Transparent),
+                        center = androidx.compose.ui.geometry.Offset(
+                            size.width * (0.14f + sin(p) * 0.03f),
+                            size.height * (0.16f + cos(p * 0.8f) * 0.02f)
+                        ),
+                        radius = size.width * 0.34f
+                    ),
+                    radius = size.width * 0.34f,
+                    center = androidx.compose.ui.geometry.Offset(
+                        size.width * (0.14f + sin(p) * 0.03f),
+                        size.height * (0.16f + cos(p * 0.8f) * 0.02f)
+                    )
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(bokehOrbColor.copy(alpha = speakGlow * 0.85f), Color.Transparent),
+                        center = androidx.compose.ui.geometry.Offset(
+                            size.width * (0.86f + cos(p * 0.9f) * 0.03f),
+                            size.height * (0.24f + sin(p * 0.7f) * 0.025f)
+                        ),
+                        radius = size.width * 0.30f
+                    ),
+                    radius = size.width * 0.30f,
+                    center = androidx.compose.ui.geometry.Offset(
+                        size.width * (0.86f + cos(p * 0.9f) * 0.03f),
+                        size.height * (0.24f + sin(p * 0.7f) * 0.025f)
+                    )
+                )
+            }
         }
     }
 }
