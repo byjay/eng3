@@ -207,6 +207,8 @@ private fun FamilyKingdomApp(
     val isHarvestingWords by viewModel.isHarvestingWords.collectAsStateWithLifecycle()
 
     val spartaState by viewModel.spartaState.collectAsStateWithLifecycle()
+    val vocabCardExamplePronunciation by viewModel.vocabCardExamplePronunciation.collectAsStateWithLifecycle()
+    val vocabCardExampleTarget by viewModel.vocabCardExampleTarget.collectAsStateWithLifecycle()
     val patternState by viewModel.patternState.collectAsStateWithLifecycle()
     val travelState by viewModel.travelState.collectAsStateWithLifecycle()
     val tutorCallState by viewModel.tutorCallState.collectAsStateWithLifecycle()
@@ -412,9 +414,12 @@ private fun FamilyKingdomApp(
                         streakCount = progress.streakCount,
                         todayWordsCompleted = progress.todayWordsCompleted,
                         wrongWords = wrongWordsList,
+                        harvestedApiWords = harvestedApiWords,
                         harvestedApiCount = harvestedApiWords.size,
                         harvestStatusKo = harvestStatusKo,
                         isHarvestingWords = isHarvestingWords,
+                        vocabExamplePronunciation = vocabCardExamplePronunciation,
+                        vocabExampleTarget = vocabCardExampleTarget,
                         onSelectGrade = { grade -> viewModel.selectVocabGrade(grade) },
                         onSelectTier1To5 = { tier -> viewModel.selectVocabTier1To5(tier) },
                         onStartLevelTest = { viewModel.startQuickLevelTest() },
@@ -440,6 +445,9 @@ private fun FamilyKingdomApp(
                         onListenSentence = { viewModel.listenSpartaSentence() },
                         onListenAllExamples = { viewModel.listenAllWordExamplesSequentially() },
                         onSpeakChunk = { text -> viewModel.speakWithActiveTutor(text) },
+                        onSpeakSlowSentence = { text -> viewModel.speakSlowSentence(text) },
+                        onStartExampleShadowing = { sentence -> viewModel.startVocabCardExampleShadowing(sentence) },
+                        onClearExamplePronunciation = { viewModel.clearVocabCardExamplePronunciation() },
                         onRecordFocusWordResult = { wordId, known ->
                             viewModel.recordMainFocusWordResult(wordId, known)
                         },

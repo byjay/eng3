@@ -220,6 +220,12 @@ class SpeakQuestViewModel(
     private val _streakMilestoneEvent = MutableStateFlow<StreakMilestoneEvent?>(null)
     val streakMilestoneEvent: StateFlow<StreakMilestoneEvent?> = _streakMilestoneEvent.asStateFlow()
 
+    private val _vocabCardExamplePronunciation = MutableStateFlow<PronunciationReport?>(null)
+    val vocabCardExamplePronunciation: StateFlow<PronunciationReport?> = _vocabCardExamplePronunciation.asStateFlow()
+
+    private val _vocabCardExampleTarget = MutableStateFlow("")
+    val vocabCardExampleTarget: StateFlow<String> = _vocabCardExampleTarget.asStateFlow()
+
     fun dismissStreakMilestoneEvent() {
         _streakMilestoneEvent.value = null
     }
@@ -557,7 +563,7 @@ class SpeakQuestViewModel(
         if (_isHarvestingWords.value) return
         viewModelScope.launch {
             _isHarvestingWords.value = true
-            _harvestStatusKo.value = "무료 단어 API에서 새 상황별 단어 50개+ 수집 중..."
+            _harvestStatusKo.value = "R2 샤드 · 3종 무료 API에서 새 단어 50개 수집 중..."
             val existingApiWords = localStore.harvestedWordsFlow.first()
             val existingSet = (VocabRepository.allWords + existingApiWords)
                 .map { it.word.lowercase() }
@@ -567,22 +573,61 @@ class SpeakQuestViewModel(
             val result = DailyWordHarvesterService.harvestDaily50PlusWords(
                 existingWordLowerSet = existingSet,
                 daySeed = daySeed,
-                preferredTopic = preferredTopic
+                preferredTopic = preferredTopic,
+                customCloudflareWorkerUrl = cloudflareWorkerUrl.value
             )
             result.onSuccess { res ->
                 val totalCount = localStore.appendHarvestedWords(res.newlyAddedWords)
-                _harvestStatusKo.value = "오늘 +${res.newlyAddedWords.size}단어 수집! (${res.topicLabelKo} · 누적 ${totalCount}개)"
+                _harvestStatusKo.value = "+${res.newlyAddedWords.size}단어 (${res.sourceLabel} · 누적 ${totalCount}개)"
                 if (!silent) {
-                    showToast("무료 API에서 새 단어 ${res.newlyAddedWords.size}개를 수집해 DB에 쌓았어요!")
+                    showToast("${res.sourceLabel}로 ${res.newlyAddedWords.size}단어(동의어 ${res.synonymGroupCount}그룹) 수집 완료!")
                 }
             }.onFailure { err ->
                 _harvestStatusKo.value = "오프라인/대기 (${err.message ?: "필수 교과 단어로 학습 가능"})"
                 if (!silent) {
-                    showToast("무료 단어 API 연결 실패: ${err.message ?: "네트워크 확인"}")
+                    showToast("단어 수집 연결 실패: ${err.message ?: "네트워크 확인"}")
                 }
             }
             _isHarvestingWords.value = false
         }
+    }
+
+    fun startVocabCardExampleShadowing(targetSentence: String) {
+        if (targetSentence.isBlank()) return
+        stopLoopPlayback()
+        _vocabCardExampleTarget.value = targetSentence
+        _vocabCardExamplePronunciation.value = null
+        val tutor = _tutorCallState.value.selectedTutor
+        voiceEngine.startListening(tutor.locale) { transcript, durationMs ->
+            val report = PronunciationAnalyzer.analyze(targetSentence, transcript, durationMs)
+            _vocabCardExamplePronunciation.value = report
+            if (report.passed) {
+                viewModelScope.launch {
+                    localStore.recordLearningAchievement(
+                        xpDelta = 10,
+                        coinsDelta = 6,
+                        castleHpDelta = 1,
+                        missionCompleted = false
+                    )
+                }
+                showToast("예문 발음 ${report.overallScore}점 통과! +6 코인")
+            }
+        }
+    }
+
+    fun clearVocabCardExamplePronunciation() {
+        _vocabCardExamplePronunciation.value = null
+        _vocabCardExampleTarget.value = ""
+    }
+
+    fun speakSlowSentence(text: String) {
+        val tutor = _tutorCallState.value.selectedTutor
+        voiceEngine.speak(
+            text = text,
+            locale = tutor.locale,
+            pitch = tutor.ttsPitch,
+            rate = 0.74f
+        )
     }
 
     // ==================== ANTI-ABC 5-TRACK VOCAB + 1~5 GRADE TIER + LEVEL TEST + 7-MISSION BOSS ====================

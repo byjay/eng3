@@ -1,0 +1,1257 @@
+{
+  "dataset_metadata": {
+    "schema_version": "1.0.0",
+    "corpus_period": "2017-2026 (10개년 전국연합학력평가·모의평가·수능, 2027학년도 수능 포함)",
+    "target_full_scale": {
+      "total_unique_lemmas": 6000,
+      "per_grade_quota": {
+        "고1": 2000,
+        "고2": 2000,
+        "고3": 2000
+      },
+      "examples_per_lemma": 3,
+      "total_examples": 18000,
+      "estimated_json_size_mb_pretty": 8.74,
+      "estimated_json_size_mb_compact": 7.03
+    },
+    "included_verified_sample": {
+      "lemma_count": 27,
+      "example_count": 81,
+      "duplicates_verified": 0,
+      "stage_coverage": "S1~S9 각 3단어씩 전 구간 포함"
+    },
+    "deduplication_policy": "Lemma(소문자 원형) 기준 G1 ∩ G2 ∩ G3 = ∅ 완전 상호 배타 배정; 평가원 핵심 다의어·변별 혼동어 고3 예외 승격 후 고1 → 고2 → 고3 순차 선점(Lock)",
+    "learning_stages": [
+      {
+        "stage": "S1",
+        "grade": "고1",
+        "name": "고1 핵심 최빈출 기초·공통",
+        "difficulty": "L1",
+        "cefr": "A2~B1",
+        "frequency": "F1",
+        "quota": 700
+      },
+      {
+        "stage": "S2",
+        "grade": "고1",
+        "name": "고1 독해 중심 고빈출",
+        "difficulty": "L2",
+        "cefr": "B1",
+        "frequency": "F2",
+        "quota": 800
+      },
+      {
+        "stage": "S3",
+        "grade": "고1",
+        "name": "고1 심화·전환 중빈출",
+        "difficulty": "L3",
+        "cefr": "B1~B2",
+        "frequency": "F3",
+        "quota": 500
+      },
+      {
+        "stage": "S4",
+        "grade": "고2",
+        "name": "고2 논리·학술 핵심 고빈출",
+        "difficulty": "L2~L3",
+        "cefr": "B1~B2",
+        "frequency": "F1~F2",
+        "quota": 700
+      },
+      {
+        "stage": "S5",
+        "grade": "고2",
+        "name": "고2 추상·인문사회 중빈출",
+        "difficulty": "L3",
+        "cefr": "B2",
+        "frequency": "F2~F3",
+        "quota": 800
+      },
+      {
+        "stage": "S6",
+        "grade": "고2",
+        "name": "고2 수능 도약 심화",
+        "difficulty": "L4",
+        "cefr": "B2~C1",
+        "frequency": "F3~F4",
+        "quota": 500
+      },
+      {
+        "stage": "S7",
+        "grade": "고3",
+        "name": "수능·평가원 최빈출 추상·다의어",
+        "difficulty": "L3~L4",
+        "cefr": "B2",
+        "frequency": "F1",
+        "quota": 600
+      },
+      {
+        "stage": "S8",
+        "grade": "고3",
+        "name": "수능 1등급 학술·추론 핵심",
+        "difficulty": "L4",
+        "cefr": "B2~C1",
+        "frequency": "F2~F3",
+        "quota": 900
+      },
+      {
+        "stage": "S9",
+        "grade": "고3",
+        "name": "수능 킬러·고난도 변별 어휘",
+        "difficulty": "L5",
+        "cefr": "C1~C2",
+        "frequency": "F4",
+        "quota": 500
+      }
+    ]
+  },
+  "vocabulary": [
+    {
+      "id": "G1-S1-0001",
+      "word": "develop",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "발달시키다",
+        "발전하다",
+        "개발하다",
+        "(병·습관이) 생기다"
+      ],
+      "grade": "고1",
+      "learning_stage": "S1",
+      "difficulty_level": "L1",
+      "cefr": "A2",
+      "frequency_tier": "F1",
+      "corpus_metrics": {
+        "g1_exams_appeared": "31/39",
+        "g2_exams_appeared": "34/39",
+        "g3_exams_appeared": "57/68",
+        "assigned_rationale": "고1·2·3 공통 최빈출 1위 표제어로, 고1 단계에서 우선 선점하여 중복 제거"
+      },
+      "curriculum_2022": "중학·고1 공통(1,200)",
+      "polysemy": true,
+      "examples": [
+        {
+          "en": "Eggs laid in the water must develop into water creatures if they are to survive.",
+          "ko": "물속에 낳은 알들은 살아남기 위해 수생 생물로 발달해야 한다.",
+          "context": "생물·진화 (2021-03 고1 기출 응용)"
+        },
+        {
+          "en": "Regular reading helps young learners develop strong critical thinking skills.",
+          "ko": "규칙적인 독서는 어린 학습자들이 탄탄한 비판적 사고 능력을 기르도록 돕는다.",
+          "context": "교육·심리"
+        },
+        {
+          "en": "Without proper rest, athletes can easily develop chronic knee injuries.",
+          "ko": "적절한 휴식이 없으면 운동선수들은 쉽게 만성 무릎 부상이 생길 수 있다.",
+          "context": "건강·의학(다의어 용법)"
+        }
+      ]
+    },
+    {
+      "id": "G1-S1-0002",
+      "word": "behavior",
+      "pos": [
+        "n."
+      ],
+      "meanings": [
+        "행동",
+        "행실",
+        "(물체·시스템의) 작동 방식"
+      ],
+      "grade": "고1",
+      "learning_stage": "S1",
+      "difficulty_level": "L1",
+      "cefr": "B1",
+      "frequency_tier": "F1",
+      "corpus_metrics": {
+        "g1_exams_appeared": "24/39",
+        "g2_exams_appeared": "30/39",
+        "g3_exams_appeared": "57/68",
+        "assigned_rationale": "고1 최빈출 3위 및 전 학년 핵심 심리·사회 표제어"
+      },
+      "curriculum_2022": "중학·고1 공통(1,200)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "It is common sense that people's inner beliefs may drive their external behavior.",
+          "ko": "사람들의 내적 신념이 외적 행동을 이끌 수 있다는 것은 상식이다.",
+          "context": "심리학 (2025-06 고1 기출 응용)"
+        },
+        {
+          "en": "Loyalty cards allow retailers to track customers' purchasing behavior over time.",
+          "ko": "멤버십 카드는 소매업체들이 시간에 따른 고객의 구매 행동을 추적하게 해 준다.",
+          "context": "경제·마케팅"
+        },
+        {
+          "en": "Biologists observed how extreme temperature changes altered the behavior of honeybees.",
+          "ko": "생물학자들은 극단적인 기온 변화가 꿀벌의 행동을 어떻게 바꾸는지 관찰했다.",
+          "context": "자연과학"
+        }
+      ]
+    },
+    {
+      "id": "G1-S1-0003",
+      "word": "involve",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "수반하다",
+        "포함하다",
+        "관련시키다",
+        "참여시키다"
+      ],
+      "grade": "고1",
+      "learning_stage": "S1",
+      "difficulty_level": "L1",
+      "cefr": "B1",
+      "frequency_tier": "F1",
+      "corpus_metrics": {
+        "g1_exams_appeared": "22/39",
+        "g2_exams_appeared": "25/39",
+        "g3_exams_appeared": "51/68",
+        "assigned_rationale": "고1 빈출 4위, 혼동어(evolve) 대비 필수 기본 동사"
+      },
+      "curriculum_2022": "중학·고1 공통(1,200)",
+      "polysemy": true,
+      "examples": [
+        {
+          "en": "Gardening involves a range of motions, from digging and planting to watering.",
+          "ko": "정원 가꾸기는 땅을 파고 심는 것부터 물 주기까지 다양한 동작을 수반한다.",
+          "context": "일상·실용 (2025-09 고1 기출 응용)"
+        },
+        {
+          "en": "Every major career choice involves some degree of uncertainty about the future.",
+          "ko": "모든 중요한 진로 선택은 미래에 대한 어느 정도의 불확실성을 포함한다.",
+          "context": "진로·의사결정"
+        },
+        {
+          "en": "The community project aims to involve local residents in urban park design.",
+          "ko": "그 지역사회 프로젝트는 지역 주민들을 도시 공원 설계에 참여시키는 것을 목표로 한다.",
+          "context": "사회·행정"
+        }
+      ]
+    },
+    {
+      "id": "G1-S2-0001",
+      "word": "encourage",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "격려하다",
+        "장려하다",
+        "조장하다",
+        "촉진하다"
+      ],
+      "grade": "고1",
+      "learning_stage": "S2",
+      "difficulty_level": "L2",
+      "cefr": "B1",
+      "frequency_tier": "F2",
+      "corpus_metrics": {
+        "g1_exams_appeared": "20/39",
+        "g2_exams_appeared": "22/39",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "고1 빈출 15위, 5형식(encourage O to V) 구문 핵심"
+      },
+      "curriculum_2022": "중학·고1 공통(1,200)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Teachers should encourage students to ask questions even when they feel unsure.",
+          "ko": "교사들은 학생들이 확신이 없을 때조차 질문하도록 격려해야 한다.",
+          "context": "교육"
+        },
+        {
+          "en": "Tax incentives were introduced to encourage companies to adopt renewable energy.",
+          "ko": "기업들이 재생 에너지를 채택하도록 장려하기 위해 세제 혜택이 도입되었다.",
+          "context": "정책·환경"
+        },
+        {
+          "en": "Open office layouts are often designed to encourage spontaneous collaboration among teams.",
+          "ko": "개방형 사무실 배치는 흔히 팀 간 자발적인 협업을 촉진하도록 설계된다.",
+          "context": "경영·조직"
+        }
+      ]
+    },
+    {
+      "id": "G1-S2-0002",
+      "word": "appreciate",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "진가를 알아보다",
+        "감사하다",
+        "이해하다",
+        "(가치가) 오르다"
+      ],
+      "grade": "고1",
+      "learning_stage": "S2",
+      "difficulty_level": "L2",
+      "cefr": "B1",
+      "frequency_tier": "F2",
+      "corpus_metrics": {
+        "g1_exams_appeared": "18/39",
+        "g2_exams_appeared": "고빈출",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "고1 빈출 28위, 대표적인 모의고사 다의어"
+      },
+      "curriculum_2022": "중학·고1 공통(1,200)",
+      "polysemy": true,
+      "examples": [
+        {
+          "en": "We would greatly appreciate your prompt feedback on our revised proposal.",
+          "ko": "수정된 제안서에 대해 신속한 피드백을 주시면 대단히 감사하겠습니다.",
+          "context": "목적·실용문(18번 유형)"
+        },
+        {
+          "en": "It takes years of practice to fully appreciate the subtle harmony of classical music.",
+          "ko": "클래식 음악의 미묘한 화음을 온전히 감상하고 진가를 알아보려면 수년의 연습이 필요하다.",
+          "context": "예술·인문"
+        },
+        {
+          "en": "Only after experiencing failure did she begin to appreciate the difficulty of leadership.",
+          "ko": "실패를 경험하고 나서야 비로소 그녀는 리더십의 어려움을 이해하기 시작했다.",
+          "context": "심리·성찰"
+        }
+      ]
+    },
+    {
+      "id": "G1-S2-0003",
+      "word": "survive",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "살아남다",
+        "생존하다",
+        "(위기·충격을) 견뎌내다"
+      ],
+      "grade": "고1",
+      "learning_stage": "S2",
+      "difficulty_level": "L2",
+      "cefr": "B1",
+      "frequency_tier": "F2",
+      "corpus_metrics": {
+        "g1_exams_appeared": "19/39",
+        "g2_exams_appeared": "고빈출",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "고1 빈출 22위, 생태·진화 지문 핵심 동사"
+      },
+      "curriculum_2022": "중학·고1 공통(1,200)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Desert plants have specialized roots that help them survive long periods of drought.",
+          "ko": "사막 식물은 긴 가뭄 기간을 살아남도록 돕는 특수한 뿌리를 가지고 있다.",
+          "context": "생태·과학"
+        },
+        {
+          "en": "Small bookstores struggled to survive the rapid rise of online shopping platforms.",
+          "ko": "소규모 서점들은 온라인 쇼핑 플랫폼의 급격한 부상 속에서 버텨내기 위해 고군분투했다.",
+          "context": "경제·사회"
+        },
+        {
+          "en": "Remarkably, several ancient manuscripts managed to survive the devastating fire.",
+          "ko": "놀랍게도 여러 점의 고대 필사본이 파괴적인 화재 속에서도 남아 있을 수 있었다.",
+          "context": "역사·문화"
+        }
+      ]
+    },
+    {
+      "id": "G1-S3-0001",
+      "word": "emphasize",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "강조하다",
+        "중요시하다",
+        "두드러지게 하다"
+      ],
+      "grade": "고1",
+      "learning_stage": "S3",
+      "difficulty_level": "L3",
+      "cefr": "B2",
+      "frequency_tier": "F3",
+      "corpus_metrics": {
+        "g1_exams_appeared": "중빈출",
+        "g2_exams_appeared": "고빈출",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "2022 개정 교육과정 중학·고1 신규 추가 필수 어휘, 주장·요지 시그널 동사"
+      },
+      "curriculum_2022": "중학·고1 공통(신규 13어)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "The report tends to emphasize preventive care rather than emergency treatment.",
+          "ko": "그 보고서는 응급 치료보다 예방적 관리를 강조하는 경향이 있다.",
+          "context": "보건·정책"
+        },
+        {
+          "en": "Speakers often pause briefly before a key phrase to emphasize its importance.",
+          "ko": "연사들은 흔히 핵심 어구 앞에서 잠시 멈춤으로써 그 중요성을 두드러지게 한다.",
+          "context": "언어·화법"
+        },
+        {
+          "en": "Modern curricula increasingly emphasize collaborative problem-solving over rote memorization.",
+          "ko": "현대 교육과정은 단순 암기보다 협력적 문제 해결을 점점 더 중요시한다.",
+          "context": "교육"
+        }
+      ]
+    },
+    {
+      "id": "G1-S3-0002",
+      "word": "evidence",
+      "pos": [
+        "n."
+      ],
+      "meanings": [
+        "증거",
+        "근거",
+        "흔적"
+      ],
+      "grade": "고1",
+      "learning_stage": "S3",
+      "difficulty_level": "L3",
+      "cefr": "B1",
+      "frequency_tier": "F3",
+      "corpus_metrics": {
+        "g1_exams_appeared": "중빈출",
+        "g2_exams_appeared": "고빈출",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "2022 개정 중학·고1 신규 추가 어휘, 논증·실험 지문 핵심 명사"
+      },
+      "curriculum_2022": "중학·고1 공통(신규 13어)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Archaeologists uncovered compelling evidence of early agricultural trade along the river.",
+          "ko": "고고학자들은 강을 따라 이루어진 초기 농산물 교역의 설득력 있는 증거를 발굴했다.",
+          "context": "역사·고고학"
+        },
+        {
+          "en": "In light of recent clinical evidence, doctors updated the daily dosage guidelines.",
+          "ko": "최근 임상 근거에 비추어 의사들은 일일 복용량 지침을 개정했다.",
+          "context": "의학·과학"
+        },
+        {
+          "en": "There is little evidence that multitasking improves overall work efficiency.",
+          "ko": "다중 작업이 전반적인 업무 효율을 높인다는 증거는 거의 없다.",
+          "context": "인지심리"
+        }
+      ]
+    },
+    {
+      "id": "G1-S3-0003",
+      "word": "instance",
+      "pos": [
+        "n."
+      ],
+      "meanings": [
+        "사례",
+        "경우",
+        "예시"
+      ],
+      "grade": "고1",
+      "learning_stage": "S3",
+      "difficulty_level": "L3",
+      "cefr": "B2",
+      "frequency_tier": "F3",
+      "corpus_metrics": {
+        "g1_exams_appeared": "21/39",
+        "g2_exams_appeared": "26/39",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "고1 빈출 12위, 예시 연결어(for instance) 및 단락 전개 표지"
+      },
+      "curriculum_2022": "중학·고1 공통(1,200)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Certain animals, for instance dolphins and crows, display remarkable problem-solving abilities.",
+          "ko": "예를 들어 돌고래와 까마귀 같은 특정 동물들은 놀라운 문제 해결 능력을 보여 준다.",
+          "context": "동물행동학"
+        },
+        {
+          "en": "In this particular instance, delaying the product launch prevented a costly recall.",
+          "ko": "이 특정한 경우에서는 제품 출시를 연기한 것이 막대한 비용이 드는 리콜을 막았다.",
+          "context": "경영·사례"
+        },
+        {
+          "en": "Historians documented multiple instances where trade routes accelerated cultural exchange.",
+          "ko": "역사가들은 무역로가 문화 교류를 가속화한 여러 사례를 기록했다.",
+          "context": "인문·역사"
+        }
+      ]
+    },
+    {
+      "id": "G2-S4-0001",
+      "word": "assume",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "가정하다",
+        "추정하다",
+        "(책임·역할을) 맡다",
+        "(특정한 양상을) 띠다"
+      ],
+      "grade": "고2",
+      "learning_stage": "S4",
+      "difficulty_level": "L2",
+      "cefr": "B2",
+      "frequency_tier": "F1",
+      "corpus_metrics": {
+        "g1_exams_appeared": "저·중빈출",
+        "g2_exams_appeared": "20/39",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "고2 빈출 22위, 반박 구조(People often assume that~) 핵심 동사"
+      },
+      "curriculum_2022": "고2·3 선택(1,000)",
+      "polysemy": true,
+      "examples": [
+        {
+          "en": "Many consumers mistakenly assume that higher prices always guarantee superior quality.",
+          "ko": "많은 소비자들은 더 높은 가격이 항상 뛰어난 품질을 보장한다고 잘못 가정한다.",
+          "context": "소비자심리"
+        },
+        {
+          "en": "Following the merger, she will assume full responsibility for international operations.",
+          "ko": "합병 이후 그녀는 해외 사업 운영에 대한 전적인 책임을 맡게 될 것이다.",
+          "context": "비즈니스(다의어)"
+        },
+        {
+          "en": "Over the decades, digital privacy has assumed central importance in legal debates.",
+          "ko": "수십 년에 걸쳐 디지털 프라이버시는 법적 논쟁에서 핵심적인 중요성을 띠게 되었다.",
+          "context": "법·사회(다의어)"
+        }
+      ]
+    },
+    {
+      "id": "G2-S4-0002",
+      "word": "establish",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "확립하다",
+        "설립하다",
+        "수립하다",
+        "입증하다"
+      ],
+      "grade": "고2",
+      "learning_stage": "S4",
+      "difficulty_level": "L2",
+      "cefr": "B2",
+      "frequency_tier": "F1",
+      "corpus_metrics": {
+        "g1_exams_appeared": "중빈출",
+        "g2_exams_appeared": "20/39",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "고2 빈출 25위, 학술·제도 지문 핵심 동사"
+      },
+      "curriculum_2022": "고2·3 선택(1,000)",
+      "polysemy": true,
+      "examples": [
+        {
+          "en": "Consistent sleep routines help establish a stable biological clock in adolescents.",
+          "ko": "규칙적인 수면 습관은 청소년에게 안정적인 생체 시계를 확립하는 데 도움이 된다.",
+          "context": "생리·건강"
+        },
+        {
+          "en": "The city council voted to establish a public archive dedicated to regional history.",
+          "ko": "시의회는 지역 역사에 헌정된 공공 기록관을 설립하기로 의결했다.",
+          "context": "사회·제도"
+        },
+        {
+          "en": "Further experiments are required to establish a direct causal link between the variables.",
+          "ko": "변수들 사이의 직접적인 인과 관계를 입증하기 위해서는 추가 실험이 필요하다.",
+          "context": "과학연구(다의어)"
+        }
+      ]
+    },
+    {
+      "id": "G2-S4-0003",
+      "word": "conduct",
+      "pos": [
+        "v.",
+        "n."
+      ],
+      "meanings": [
+        "수행하다",
+        "실시하다",
+        "지휘하다",
+        "(열·전기를) 전도하다",
+        "(n.) 행위, 처신"
+      ],
+      "grade": "고2",
+      "learning_stage": "S4",
+      "difficulty_level": "L3",
+      "cefr": "B2",
+      "frequency_tier": "F1",
+      "corpus_metrics": {
+        "g1_exams_appeared": "저·중빈출",
+        "g2_exams_appeared": "20/39",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "고2 빈출 29위, 실험 지문(conduct an experiment) 필수 품사 전환 어휘"
+      },
+      "curriculum_2022": "고2·3 선택(1,000)",
+      "polysemy": true,
+      "examples": [
+        {
+          "en": "Psychologists conducted a longitudinal study involving over five hundred volunteers.",
+          "ko": "심리학자들은 500명 이상의 자원자를 대상으로 종단 연구를 실시했다.",
+          "context": "심리실험"
+        },
+        {
+          "en": "Copper wires are widely used in electronics because they conduct electricity efficiently.",
+          "ko": "구리선은 전기를 효율적으로 전도하기 때문에 전자제품에 널리 사용된다.",
+          "context": "물리·공학(다의어)"
+        },
+        {
+          "en": "The professional association revised its code of conduct to address AI ethics.",
+          "ko": "그 전문가 협회는 인공지능 윤리를 다루기 위해 행동 강령을 개정했다.",
+          "context": "윤리·명사 용법"
+        }
+      ]
+    },
+    {
+      "id": "G2-S5-0001",
+      "word": "alter",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "바꾸다",
+        "변경하다",
+        "변형시키다"
+      ],
+      "grade": "고2",
+      "learning_stage": "S5",
+      "difficulty_level": "L3",
+      "cefr": "B2",
+      "frequency_tier": "F2",
+      "corpus_metrics": {
+        "g1_exams_appeared": "고1 TOP500 외",
+        "g2_exams_appeared": "13/39",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "고2 신규 진입 최상위 어휘(13/39회), 변화·인과 지문 핵심"
+      },
+      "curriculum_2022": "고2·3 선택(1,000)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Even minor shifts in ocean temperature can dramatically alter marine food webs.",
+          "ko": "해수 온도의 미세한 변화조차 해양 먹이 그물을 극적으로 바꿀 수 있다.",
+          "context": "환경·생태"
+        },
+        {
+          "en": "Emotional stress may alter how individuals recall the sequence of past events.",
+          "ko": "정서적 스트레스는 개인이 과거 사건의 순서를 회상하는 방식을 변형시킬 수 있다.",
+          "context": "인지심리"
+        },
+        {
+          "en": "The architect refused to alter the building's historic facade despite budget pressures.",
+          "ko": "그 건축가는 예산 압박에도 불구하고 건물의 역사적 외관을 변경하기를 거부했다.",
+          "context": "건축·문화"
+        }
+      ]
+    },
+    {
+      "id": "G2-S5-0002",
+      "word": "imply",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "암시하다",
+        "내포하다",
+        "은연중에 의미하다"
+      ],
+      "grade": "고2",
+      "learning_stage": "S5",
+      "difficulty_level": "L3",
+      "cefr": "B2",
+      "frequency_tier": "F2",
+      "corpus_metrics": {
+        "g1_exams_appeared": "고1 TOP500 외",
+        "g2_exams_appeared": "12/39",
+        "g3_exams_appeared": "평가원 혼동어 핵심",
+        "assigned_rationale": "고2 신규 진입 빈출(12/39회), infer와의 혼동 대비 필수"
+      },
+      "curriculum_2022": "고2·3 선택(1,000)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Statistical correlation does not necessarily imply a direct cause-and-effect relationship.",
+          "ko": "통계적 상관관계가 반드시 직접적인 인과 관계를 의미하는 것은 아니다.",
+          "context": "과학방법론"
+        },
+        {
+          "en": "Her hesitant tone seemed to imply that the team was not ready for launch.",
+          "ko": "그녀의 망설이는 어조는 팀이 출시할 준비가 되지 않았음을 암시하는 듯했다.",
+          "context": "담화·심리"
+        },
+        {
+          "en": "This geological finding implies that sufficient fresh snow must accumulate every winter.",
+          "ko": "이 지질학적 발견은 매년 겨울 충분한 신설이 쌓여야 함을 시사한다.",
+          "context": "지구과학 (2026-06 모평 응용)"
+        }
+      ]
+    },
+    {
+      "id": "G2-S5-0003",
+      "word": "distribute",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "분배하다",
+        "유통하다",
+        "배포하다",
+        "퍼뜨리다"
+      ],
+      "grade": "고2",
+      "learning_stage": "S5",
+      "difficulty_level": "L3",
+      "cefr": "B2",
+      "frequency_tier": "F2",
+      "corpus_metrics": {
+        "g1_exams_appeared": "고1 TOP500 외",
+        "g2_exams_appeared": "11/39",
+        "g3_exams_appeared": "평가원 혼동어 핵심",
+        "assigned_rationale": "고2 신규 진입 빈출(11/39회), attribute/contribute 어근군 핵심"
+      },
+      "curriculum_2022": "고2·3 선택(1,000)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Historical records show that agricultural wealth was not evenly distributed across regions.",
+          "ko": "역사 기록은 농업적 부가 지역 간에 고르게 분배되지 않았음을 보여 준다.",
+          "context": "경제사 (2025-09 모평 응용)"
+        },
+        {
+          "en": "Digital networks allow independent filmmakers to distribute their work globally at low cost.",
+          "ko": "디지털 네트워크는 독립 영화 제작자들이 낮은 비용으로 작품을 전 세계에 유통할 수 있게 한다.",
+          "context": "미디어·기술"
+        },
+        {
+          "en": "Volunteers worked overnight to distribute emergency medical supplies to remote villages.",
+          "ko": "자원봉사자들은 외딴 마을에 긴급 의료 물품을 배포하기 위해 밤새 일했다.",
+          "context": "사회·구호"
+        }
+      ]
+    },
+    {
+      "id": "G2-S6-0001",
+      "word": "maximize",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "최대화하다",
+        "극대화하다"
+      ],
+      "grade": "고2",
+      "learning_stage": "S6",
+      "difficulty_level": "L4",
+      "cefr": "C1",
+      "frequency_tier": "F3",
+      "corpus_metrics": {
+        "g1_exams_appeared": "고1 TOP500 외",
+        "g2_exams_appeared": "12/39",
+        "g3_exams_appeared": "고빈출",
+        "assigned_rationale": "고2 신규 진입(12/39회), 경제학·진화생물학 최적화 지문 핵심"
+      },
+      "curriculum_2022": "고2·3 선택(파생형)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Foraging animals adjust their travel routes to maximize energy gain per unit of time.",
+          "ko": "먹이를 찾는 동물들은 단위 시간당 에너지 획득을 극대화하기 위해 이동 경로를 조정한다.",
+          "context": "진화생태학"
+        },
+        {
+          "en": "Short-term policies aimed only to maximize quarterly profits often undermine innovation.",
+          "ko": "분기별 이익만을 극대화하려는 단기 정책은 종종 혁신을 저해한다.",
+          "context": "경제·경영"
+        },
+        {
+          "en": "Spaced repetition schedules are designed to maximize long-term memory retention.",
+          "ko": "간격 반복 일정은 장기 기억 유지율을 최대화하도록 설계된다.",
+          "context": "인지·학습"
+        }
+      ]
+    },
+    {
+      "id": "G2-S6-0002",
+      "word": "distinct",
+      "pos": [
+        "adj."
+      ],
+      "meanings": [
+        "뚜렷한",
+        "분명한",
+        "별개의",
+        "독특한"
+      ],
+      "grade": "고2",
+      "learning_stage": "S6",
+      "difficulty_level": "L4",
+      "cefr": "B2",
+      "frequency_tier": "F3",
+      "corpus_metrics": {
+        "g1_exams_appeared": "저빈출",
+        "g2_exams_appeared": "중빈출",
+        "g3_exams_appeared": "평가원 혼동어 핵심",
+        "assigned_rationale": "2022 개정 고2·3 신규 추가 4어 중 1개, instinct/extinct 혼동 주의"
+      },
+      "curriculum_2022": "고2·3 선택(신규 4어)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Early cinema eventually evolved to form a distinct category of public entertainment.",
+          "ko": "초기 영화는 결국 대중 오락의 별개의 범주를 형성하도록 발전했다.",
+          "context": "문화·예술 (2026 수능 응용)"
+        },
+        {
+          "en": "Each dialect retains distinct phonetic patterns shaped by geographic isolation.",
+          "ko": "각 방언은 지리적 고립으로 형성된 뚜렷한 음성학적 패턴을 유지한다.",
+          "context": "언어학"
+        },
+        {
+          "en": "Researchers draw a distinct boundary between passive exposure and active learning.",
+          "ko": "연구자들은 수동적 노출과 능동적 학습 사이에 분명한 경계를 긋는다.",
+          "context": "교육심리"
+        }
+      ]
+    },
+    {
+      "id": "G2-S6-0003",
+      "word": "hierarchy",
+      "pos": [
+        "n."
+      ],
+      "meanings": [
+        "위계",
+        "계층 구조",
+        "서열"
+      ],
+      "grade": "고2",
+      "learning_stage": "S6",
+      "difficulty_level": "L4",
+      "cefr": "C1",
+      "frequency_tier": "F4",
+      "corpus_metrics": {
+        "g1_exams_appeared": "극저빈출",
+        "g2_exams_appeared": "중·저빈출",
+        "g3_exams_appeared": "학술 빈출",
+        "assigned_rationale": "2022 개정 고2·3 신규 추가 4어 중 1개, 사회학·조직론 핵심 추상어"
+      },
+      "curriculum_2022": "고2·3 선택(신규 4어)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Strict social hierarchy in primate groups helps minimize violent conflict over food.",
+          "ko": "영장류 집단의 엄격한 사회적 서열은 먹이를 둘러싼 폭력적 갈등을 최소화하는 데 도움이 된다.",
+          "context": "동물행동학"
+        },
+        {
+          "en": "Flat organizations attempt to reduce rigid hierarchy so ideas can flow freely.",
+          "ko": "수평적 조직은 아이디어가 자유롭게 흐를 수 있도록 경직된 위계 구조를 줄이려 시도한다.",
+          "context": "조직경영"
+        },
+        {
+          "en": "Visual designers rely on typographic hierarchy to guide the reader's eye across a page.",
+          "ko": "시각 디자이너들은 페이지 전체에서 독자의 시선을 유도하기 위해 타이포그래피 위계에 의존한다.",
+          "context": "디자인·인지"
+        }
+      ]
+    },
+    {
+      "id": "G3-S7-0001",
+      "word": "observe",
+      "pos": [
+        "v."
+      ],
+      "meanings": [
+        "관찰하다",
+        "(법·규칙을) 준수하다",
+        "(의견을) 말하다, 언급하다"
+      ],
+      "grade": "고3",
+      "learning_stage": "S7",
+      "difficulty_level": "L3",
+      "cefr": "B2",
+      "frequency_tier": "F1",
+      "corpus_metrics": {
+        "g1_exams_appeared": "중빈출",
+        "g2_exams_appeared": "중빈출",
+        "g3_exams_appeared": "평가원 28회/29회급",
+        "assigned_rationale": "평가원 10개년 최빈출 다의어 1위(28회), '준수하다·말하다' 변별 출제"
+      },
+      "curriculum_2022": "중학·고1 공통(고3 다의어 승격)",
+      "polysemy": true,
+      "examples": [
+        {
+          "en": "Astronomers used radio telescopes to observe faint signals from distant galaxies.",
+          "ko": "천문학자들은 먼 은하에서 오는 미약한 신호를 관찰하기 위해 전파 망원경을 사용했다.",
+          "context": "자연과학(관찰하다)"
+        },
+        {
+          "en": "All participating laboratories must strictly observe international bioethics protocols.",
+          "ko": "모든 참여 연구실은 국제 생명윤리 규정을 엄격히 준수해야 한다.",
+          "context": "법·윤리(준수하다)"
+        },
+        {
+          "en": "As the philosopher wisely observed, absolute certainty rarely exists in human affairs.",
+          "ko": "그 철학자가 현명하게 언급했듯이, 인간사에는 절대적인 확실성이 거의 존재하지 않는다.",
+          "context": "인문·철학(말하다)"
+        }
+      ]
+    },
+    {
+      "id": "G3-S7-0002",
+      "word": "construct",
+      "pos": [
+        "v.",
+        "n."
+      ],
+      "meanings": [
+        "구성하다",
+        "건설하다",
+        "만들어 내다",
+        "(n.) 구성 개념, 관념"
+      ],
+      "grade": "고3",
+      "learning_stage": "S7",
+      "difficulty_level": "L3",
+      "cefr": "B2",
+      "frequency_tier": "F1",
+      "corpus_metrics": {
+        "g1_exams_appeared": "고1·2 TOP500 외",
+        "g2_exams_appeared": "고1·2 TOP500 외",
+        "g3_exams_appeared": "24/68",
+        "assigned_rationale": "고3 신규 진입 빈출 2위(24/68회), 인문사회 '사회적 구성물(social construct)' 빈출"
+      },
+      "curriculum_2022": "고2·3 선택(1,000)",
+      "polysemy": true,
+      "examples": [
+        {
+          "en": "Readers actively construct meaning by combining textual clues with prior knowledge.",
+          "ko": "독자들은 텍스트의 단서와 사전 지식을 결합하여 능동적으로 의미를 구성한다.",
+          "context": "인지·독해론"
+        },
+        {
+          "en": "Historians argued that the concept of childhood is largely a modern cultural construct.",
+          "ko": "역사가들은 아동기라는 개념이 대체로 근대적 문화 구성물이라고 주장했다.",
+          "context": "사회학(명사 다의어)"
+        },
+        {
+          "en": "Roman engineers developed waterproof concrete to construct durable Mediterranean harbors.",
+          "ko": "로마 공학자들은 내구성 있는 지중해 항구를 건설하기 위해 방수 콘크리트를 개발했다.",
+          "context": "역사·공학"
+        }
+      ]
+    },
+    {
+      "id": "G3-S7-0003",
+      "word": "insight",
+      "pos": [
+        "n."
+      ],
+      "meanings": [
+        "통찰",
+        "통찰력",
+        "깊은 이해"
+      ],
+      "grade": "고3",
+      "learning_stage": "S7",
+      "difficulty_level": "L3",
+      "cefr": "B2",
+      "frequency_tier": "F1",
+      "corpus_metrics": {
+        "g1_exams_appeared": "고1·2 TOP500 외",
+        "g2_exams_appeared": "고1·2 TOP500 외",
+        "g3_exams_appeared": "23/68",
+        "assigned_rationale": "고3 신규 진입 핵심(23/68회), 연구 의의·결론 문장 필수 명사"
+      },
+      "curriculum_2022": "고2·3 선택(1,000)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Analyzing fossilized pollen offers valuable insight into prehistoric climate fluctuations.",
+          "ko": "화석화된 꽃가루를 분석하는 것은 선사 시대 기후 변동에 대한 귀중한 통찰을 제공한다.",
+          "context": "고생물·기후학"
+        },
+        {
+          "en": "Sudden creative insight frequently emerges after a period of unconscious incubation.",
+          "ko": "갑작스러운 창의적 통찰은 흔히 무의식적 숙성 기간 이후에 나타난다.",
+          "context": "인지심리"
+        },
+        {
+          "en": "Cross-cultural interviews gave sociologists fresh insight into changing family norms.",
+          "ko": "비교문화 면담은 사회학자들에게 변화하는 가족 규범에 대한 새로운 이해를 안겨 주었다.",
+          "context": "사회학"
+        }
+      ]
+    },
+    {
+      "id": "G3-S8-0001",
+      "word": "contemporary",
+      "pos": [
+        "adj.",
+        "n."
+      ],
+      "meanings": [
+        "동시대의",
+        "현대의",
+        "(n.) 동시대 사람"
+      ],
+      "grade": "고3",
+      "learning_stage": "S8",
+      "difficulty_level": "L4",
+      "cefr": "B2",
+      "frequency_tier": "F2",
+      "corpus_metrics": {
+        "g1_exams_appeared": "고1·2 TOP500 외",
+        "g2_exams_appeared": "고1·2 TOP500 외",
+        "g3_exams_appeared": "20/68",
+        "assigned_rationale": "고3 신규 진입 핵심(20/68회), 역사·예술 지문 '동시대 vs 현대' 문맥 구분 필수"
+      },
+      "curriculum_2022": "고2·3 선택(1,000)",
+      "polysemy": true,
+      "examples": [
+        {
+          "en": "Contemporary urban planners prioritize walkable neighborhoods over highway expansion.",
+          "ko": "현대의 도시 계획가들은 고속도로 확장보다 보행 친화적 주거지를 우선시한다.",
+          "context": "도시학(현대의)"
+        },
+        {
+          "en": "Galileo's telescopic sketches stunned many of his contemporary European astronomers.",
+          "ko": "갈릴레오의 망원경 스케치는 그와 동시대의 많은 유럽 천문학자들을 놀라게 했다.",
+          "context": "과학사(동시대의)"
+        },
+        {
+          "en": "Unlike his contemporaries, the composer rejected rigid classical symphonic structures.",
+          "ko": "동시대 인물들과 달리 그 작곡가는 엄격한 고전 교향곡 구조를 거부했다.",
+          "context": "예술사(명사 용법)"
+        }
+      ]
+    },
+    {
+      "id": "G3-S8-0002",
+      "word": "interpretation",
+      "pos": [
+        "n."
+      ],
+      "meanings": [
+        "해석",
+        "설명",
+        "(예술 작품의) 연주·표현 방식"
+      ],
+      "grade": "고3",
+      "learning_stage": "S8",
+      "difficulty_level": "L4",
+      "cefr": "B2",
+      "frequency_tier": "F2",
+      "corpus_metrics": {
+        "g1_exams_appeared": "고1·2 TOP500 외",
+        "g2_exams_appeared": "고1·2 TOP500 외",
+        "g3_exams_appeared": "21/68",
+        "assigned_rationale": "고3 신규 진입 핵심(21/68회), 인문·미학·과학철학 지문 핵심 명사"
+      },
+      "curriculum_2022": "고2·3 선택(파생형)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Ambiguous legal statutes often remain open to competing judicial interpretations.",
+          "ko": "모호한 법률 조항은 종종 상충하는 사법적 해석의 여지로 남아 있다.",
+          "context": "법학"
+        },
+        {
+          "en": "Raw experimental data rarely speak for themselves without theoretical interpretation.",
+          "ko": "가공되지 않은 실험 데이터는 이론적 해석 없이 스스로 의미를 드러내는 경우가 드물다.",
+          "context": "과학철학"
+        },
+        {
+          "en": "The pianist's bold interpretation breathed unexpected tension into the familiar sonata.",
+          "ko": "그 피아니스트의 대담한 해석은 친숙한 소나타에 뜻밖의 긴장감을 불어넣었다.",
+          "context": "예술·미학"
+        }
+      ]
+    },
+    {
+      "id": "G3-S8-0003",
+      "word": "competent",
+      "pos": [
+        "adj."
+      ],
+      "meanings": [
+        "유능한",
+        "능숙한",
+        "적격의"
+      ],
+      "grade": "고3",
+      "learning_stage": "S8",
+      "difficulty_level": "L4",
+      "cefr": "C1",
+      "frequency_tier": "F3",
+      "corpus_metrics": {
+        "g1_exams_appeared": "극저빈출",
+        "g2_exams_appeared": "저빈출",
+        "g3_exams_appeared": "평가원 혼동어 핵심",
+        "assigned_rationale": "2027학년도 9월 모평 29번 등 출제, competitive/compatible 혼동 변별"
+      },
+      "curriculum_2022": "교육과정 외(확장 학술)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Effective leaders deliberately surround themselves with competent employees who challenge assumptions.",
+          "ko": "유능한 리더들은 의도적으로 전제에 의문을 제기하는 유능한 직원들을 곁에 둔다.",
+          "context": "경영·조직 (2027-09 모평 응용)"
+        },
+        {
+          "en": "A competent translator must capture cultural nuance rather than merely replacing words.",
+          "ko": "능숙한 번역가는 단순히 단어를 치환하는 것이 아니라 문화적 뉘앙스를 포착해야 한다.",
+          "context": "언어·번역"
+        },
+        {
+          "en": "Only a competent court has the authority to overturn an administrative ruling.",
+          "ko": "관할권이 있는 적격 법원만이 행정 결정을 뒤집을 권한을 가진다.",
+          "context": "법학"
+        }
+      ]
+    },
+    {
+      "id": "G3-S9-0001",
+      "word": "empirical",
+      "pos": [
+        "adj."
+      ],
+      "meanings": [
+        "경험적인",
+        "실증적인",
+        "관찰·실험에 근거한"
+      ],
+      "grade": "고3",
+      "learning_stage": "S9",
+      "difficulty_level": "L5",
+      "cefr": "C1",
+      "frequency_tier": "F4",
+      "corpus_metrics": {
+        "g1_exams_appeared": "0~1회",
+        "g2_exams_appeared": "저빈출",
+        "g3_exams_appeared": "수능 3점 킬러 빈출",
+        "assigned_rationale": "2026학년도 수능 37번 등 3점 고배점 추상·과학철학 지문 핵심 변별어"
+      },
+      "curriculum_2022": "교육과정 외(NAWL/C1)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Abstract philosophical models often need to be supplemented by empirical findings.",
+          "ko": "추상적인 철학적 모형은 종종 실증적 발견으로 보완될 필요가 있다.",
+          "context": "과학철학 (2026 수능 37번 응용)"
+        },
+        {
+          "en": "Without empirical verification, even the most elegant hypothesis remains speculative.",
+          "ko": "경험적 검증이 없다면 아무리 정교한 가설이라도 추측에 머무른다.",
+          "context": "연구방법론"
+        },
+        {
+          "en": "Economists analyzed decades of wage records to build an empirical test of the theory.",
+          "ko": "경제학자들은 그 이론에 대한 실증적 검증을 구축하기 위해 수십 년간의 임금 기록을 분석했다.",
+          "context": "경제학"
+        }
+      ]
+    },
+    {
+      "id": "G3-S9-0002",
+      "word": "compatible",
+      "pos": [
+        "adj."
+      ],
+      "meanings": [
+        "양립할 수 있는",
+        "호환되는",
+        "조화를 이루는"
+      ],
+      "grade": "고3",
+      "learning_stage": "S9",
+      "difficulty_level": "L5",
+      "cefr": "C1",
+      "frequency_tier": "F4",
+      "corpus_metrics": {
+        "g1_exams_appeared": "0~1회",
+        "g2_exams_appeared": "저빈출",
+        "g3_exams_appeared": "평가원 혼동어·빈칸 핵심",
+        "assigned_rationale": "논리적 양립성(compatible with) 추론 및 competitive/competent 혼동 변별"
+      },
+      "curriculum_2022": "교육과정 외(NAWL/C1)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "The essay asks whether rapid industrial growth is truly compatible with ecological preservation.",
+          "ko": "그 에세이는 급속한 산업 성장이 생태 보존과 진정으로 양립할 수 있는지 묻는다.",
+          "context": "환경윤리"
+        },
+        {
+          "en": "Open file standards ensure that archived documents remain compatible with future software.",
+          "ko": "개방형 파일 표준은 보관된 문서가 미래의 소프트웨어와 계속 호환되도록 보장한다.",
+          "context": "정보기술"
+        },
+        {
+          "en": "Two competing scientific theories may prove compatible once viewed at different scales.",
+          "ko": "상충하는 두 과학 이론은 서로 다른 규모에서 바라보면 양립 가능함이 드러날 수 있다.",
+          "context": "과학철학"
+        }
+      ]
+    },
+    {
+      "id": "G3-S9-0003",
+      "word": "prospective",
+      "pos": [
+        "adj."
+      ],
+      "meanings": [
+        "장래의",
+        "예비의",
+        "예상되는"
+      ],
+      "grade": "고3",
+      "learning_stage": "S9",
+      "difficulty_level": "L5",
+      "cefr": "C1",
+      "frequency_tier": "F4",
+      "corpus_metrics": {
+        "g1_exams_appeared": "0회",
+        "g2_exams_appeared": "저빈출",
+        "g3_exams_appeared": "2026 수능 33번 등 출제",
+        "assigned_rationale": "perspective(관점)와의 고난도 철자 혼동 및 3점 빈칸 지문 핵심 변별어"
+      },
+      "curriculum_2022": "교육과정 외(C1)",
+      "polysemy": false,
+      "examples": [
+        {
+          "en": "Architects improved usability by involving prospective building users during the early design phase.",
+          "ko": "건축가들은 초기 설계 단계에 장래의 건물 이용자들을 참여시킴으로써 사용성을 개선했다.",
+          "context": "건축·설계 (2026 수능 33번 응용)"
+        },
+        {
+          "en": "Prospective investors carefully scrutinize supply chain risks before committing capital.",
+          "ko": "예비 투자자들은 자본을 투입하기 전에 공급망 위험을 면밀히 검토한다.",
+          "context": "금융·경제"
+        },
+        {
+          "en": "Longitudinal prospective studies track participants forward in time to minimize recall bias.",
+          "ko": "종단적 전향 연구는 회상 편향을 최소화하기 위해 참가자들을 시간 순으로 추적한다.",
+          "context": "역학·통계"
+        }
+      ]
+    }
+  ]
+}

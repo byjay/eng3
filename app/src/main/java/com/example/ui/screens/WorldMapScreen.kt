@@ -93,14 +93,23 @@ import com.example.ui.theme.AdventureEmerald
 import com.example.ui.theme.AdventureEmeraldShadow
 import com.example.ui.theme.CoralOrange
 import com.example.ui.theme.CoralOrangeShadow
+import com.example.ui.theme.GlacierCyan
+import com.example.ui.theme.GlacierCyanSoft
 import com.example.ui.theme.RoyalPurple
 import com.example.ui.theme.RoyalPurpleShadow
 import com.example.ui.theme.SkyQuestBlue
 import com.example.ui.theme.SkyQuestBlueShadow
 import com.example.ui.theme.SpartaRed
 import com.example.ui.theme.SpartaRedShadow
+import com.example.ui.theme.StudioCobalt
+import com.example.ui.theme.StudioCobaltSoft
+import com.example.ui.theme.StudioCoral
+import com.example.ui.theme.StudioCoralSoft
+import com.example.ui.theme.StudioIris
+import com.example.ui.theme.StudioIrisSoft
 import com.example.ui.theme.TrophyGold
 import com.example.ui.theme.TrophyGoldShadow
+import androidx.compose.material.icons.outlined.MenuBook
 
 @Composable
 fun WorldMapScreen(
@@ -308,62 +317,84 @@ fun WorldMapScreen(
             }
         }
 
-        // 2-A. Clean Daily Vocabulary Hub Launcher (Vocabulary Memorization lives in its own dedicated tab!)
+        // 2-A. Top-30 EdTech Compact Daily Streak Strip + Clean 2x2 Quick-Launch Action Grid
         item {
-            Elevated3DCard(accentShadow = SkyQuestBlueShadow.copy(alpha = 0.28f)) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    DailyGoalStreakCardSection(
-                        todayWordsCompleted = progress.todayWordsCompleted,
-                        streakCount = progress.streakCount,
-                        onOpenWeeklyReport = onOpenWeeklyReport
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "오늘의 단어암기 · 해마 그림 + 3단 블록",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "누적 마스터 ${masteredWordsCount}단어 · 오답 복습 ${wrongWords.size}단어 대기 중",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Tactile3DButton(
-                            text = "단어암기 바로 시작",
-                            icon = Icons.Outlined.PlayArrow,
-                            containerColor = AdventureEmerald,
-                            shadowColor = AdventureEmeraldShadow,
-                            height = 48.dp,
-                            modifier = Modifier.weight(1.25f),
-                            tag = "home_launch_vocab_tab",
-                            onClick = { onStartVocabTrack(VocabStudyTrack.CSAT_FREQUENCY) }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(modifier = Modifier.padding(14.dp)) {
+                        DailyGoalStreakCardSection(
+                            todayWordsCompleted = progress.todayWordsCompleted,
+                            streakCount = progress.streakCount,
+                            onOpenWeeklyReport = onOpenWeeklyReport
                         )
-                        if (wrongWords.isNotEmpty()) {
-                            Tactile3DButton(
-                                text = "오답 (${wrongWords.size})",
-                                icon = Icons.Outlined.Refresh,
-                                containerColor = CoralOrange,
-                                shadowColor = CoralOrangeShadow,
-                                height = 48.dp,
-                                modifier = Modifier.weight(0.85f),
-                                tag = "home_launch_wrong_review_tab",
-                                onClick = { onStartVocabTrack(VocabStudyTrack.SMART_REVIEW) }
-                            )
-                        }
                     }
+                }
+
+                // 2x2 Modern Learning-App Action Grid (Zero nested box clutter!)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_quick_launch_row_1"),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    HomeQuickActionTile(
+                        title = "단어암기",
+                        subtitle = "카드·속성 · 마스터 ${masteredWordsCount}",
+                        badge = "오늘 ${progress.todayWordsCompleted}/10",
+                        icon = Icons.Outlined.MenuBook,
+                        accent = StudioCobalt,
+                        softBg = StudioCobaltSoft,
+                        tag = "home_launch_vocab_tab",
+                        modifier = Modifier.weight(1f),
+                        onClick = { onStartVocabTrack(VocabStudyTrack.CSAT_FREQUENCY) }
+                    )
+                    HomeQuickActionTile(
+                        title = "오답 집중 복습",
+                        subtitle = if (wrongWords.isEmpty()) "현재 오답 모두 정복!" else "${wrongWords.size}단어 집중 복습",
+                        badge = if (wrongWords.isEmpty()) "ALL CLEAR" else "복습 ${wrongWords.size}",
+                        icon = Icons.Outlined.Refresh,
+                        accent = StudioCoral,
+                        softBg = StudioCoralSoft,
+                        tag = "home_launch_wrong_review_tab",
+                        modifier = Modifier.weight(1f),
+                        onClick = { onStartVocabTrack(VocabStudyTrack.SMART_REVIEW) }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_quick_launch_row_2"),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    HomeQuickActionTile(
+                        title = "360° 거리뷰 여행",
+                        subtitle = "구글 스트리트뷰 실전 회화",
+                        badge = "$clearedScenariosCount/100 클리어",
+                        icon = Icons.Outlined.Flight,
+                        accent = GlacierCyan,
+                        softBg = GlacierCyanSoft,
+                        tag = "home_launch_travel_grid",
+                        modifier = Modifier.weight(1f),
+                        onClick = { onOpenTravelZone(1) }
+                    )
+                    HomeQuickActionTile(
+                        title = "LIVE 원어민 회화",
+                        subtitle = "${activeTutor.name} · 33종 모션 리깅",
+                        badge = "실시간 립싱크",
+                        icon = Icons.Outlined.MicNone,
+                        accent = StudioIris,
+                        softBg = StudioIrisSoft,
+                        tag = "home_launch_tutor_grid",
+                        modifier = Modifier.weight(1f),
+                        onClick = onOpenTutorVideoCall
+                    )
                 }
             }
         }
@@ -799,6 +830,84 @@ fun WorldMapScreen(
         }
 
         item { Spacer(Modifier.height(20.dp)) }
+    }
+}
+
+@Composable
+private fun HomeQuickActionTile(
+    title: String,
+    subtitle: String,
+    badge: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    softBg: Color,
+    tag: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.2.dp, accent.copy(alpha = 0.28f)),
+        shadowElevation = 2.dp,
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .testTag(tag)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = softBg,
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = title,
+                            tint = accent,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = softBg
+                ) {
+                    Text(
+                        text = badge,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        color = accent,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                    )
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }
 

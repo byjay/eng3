@@ -1,0 +1,25 @@
+name = "suneung-vocab-r2-worker"
+main = "src/index.js"
+compatibility_date = "2025-11-01"
+
+# Cloudflare R2 bucket binding for unlimited 500-word sharded vocabulary storage
+[[r2_buckets]]
+binding = "VOCAB_R2"
+bucket_name = "suneung-vocab-r2"
+
+# 5 non-uniform daily Cron triggers (10 words per run x 5 = 50 words/day)
+# Spread across UTC hours to respect free API rate limits and Worker CPU ceilings
+[triggers]
+crons = [
+  "17 0 * * *",
+  "43 4 * * *",
+  "11 9 * * *",
+  "29 14 * * *",
+  "52 19 * * *"
+]
+
+[vars]
+SHARD_SIZE = "500"
+WORDS_PER_CRON = "10"
+MIN_QUEUE_THRESHOLD = "50"
+ALLOWED_ORIGIN = "*"

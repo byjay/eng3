@@ -79,6 +79,7 @@ import com.example.data.VocabRepository
 import com.example.engine.VocabMnemonicEngine
 import com.example.engine.VoiceEngineState
 import com.example.model.LoopRepeatMode
+import com.example.model.PronunciationReport
 import com.example.model.VocabLearningMethod
 import com.example.model.VocabStudyTrack
 import com.example.model.VocabTopic
@@ -121,9 +122,12 @@ fun SpartaVocabScreen(
     streakCount: Int,
     todayWordsCompleted: Int,
     wrongWords: List<VocabWord>,
+    harvestedApiWords: List<VocabWord>,
     harvestedApiCount: Int,
     harvestStatusKo: String,
     isHarvestingWords: Boolean,
+    vocabExamplePronunciation: PronunciationReport?,
+    vocabExampleTarget: String,
     onSelectGrade: (Int) -> Unit,
     onSelectTier1To5: (Int) -> Unit,
     onStartLevelTest: () -> Unit,
@@ -142,6 +146,9 @@ fun SpartaVocabScreen(
     onListenSentence: () -> Unit,
     onListenAllExamples: () -> Unit,
     onSpeakChunk: (String) -> Unit,
+    onSpeakSlowSentence: (String) -> Unit,
+    onStartExampleShadowing: (String) -> Unit,
+    onClearExamplePronunciation: () -> Unit,
     onRecordFocusWordResult: (wordId: String, known: Boolean) -> Unit,
     onOpenWeeklyReport: () -> Unit,
     onStartVoiceShadowing: () -> Unit,
@@ -314,9 +321,17 @@ fun SpartaVocabScreen(
                     streakCount = streakCount,
                     todayWordsCompleted = todayWordsCompleted,
                     wrongWords = wrongWords,
+                    harvestedApiWords = harvestedApiWords,
                     harvestedApiCount = harvestedApiCount,
+                    voiceState = voiceState,
+                    vocabExamplePronunciation = vocabExamplePronunciation,
+                    vocabExampleTarget = vocabExampleTarget,
                     onSelectGrade = onSelectGrade,
                     onSpeakEnglish = onSpeakChunk,
+                    onSpeakSlowSentence = onSpeakSlowSentence,
+                    onStartExampleShadowing = onStartExampleShadowing,
+                    onClearExamplePronunciation = onClearExamplePronunciation,
+                    onStopVoice = onStopVoice,
                     onRecordWordResult = onRecordFocusWordResult,
                     onOpenWeeklyReport = onOpenWeeklyReport,
                     onOpenYouTubeWord = { query -> youtubeClipQuery = query },

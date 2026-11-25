@@ -330,6 +330,7 @@ fun GoogleStreetViewStage(
                         },
                         aiMood = proactiveMood,
                         liveThoughtKo = proactiveThoughtKo,
+                        spokenSentence = proactiveLineEn,
                         isSpeaking = isSpeaking,
                         isListening = isListening,
                         isThinking = isThinking,

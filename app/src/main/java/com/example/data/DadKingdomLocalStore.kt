@@ -905,7 +905,7 @@ class DadKingdomLocalStore(private val context: Context) {
         var totalAfter = 0
         context.dadKingdomDataStore.edit { prefs ->
             val existing = parseHarvestedWords(prefs[harvestedWordsKey])
-            val merged = (existing + newWords).distinctBy { it.word.lowercase() }.takeLast(600)
+            val merged = (existing + newWords).distinctBy { it.word.lowercase() }.takeLast(2500)
             totalAfter = merged.size
             prefs[harvestedWordsKey] = serializeHarvestedWords(merged)
             prefs[lastHarvestDateKey] = todayIso()
@@ -929,6 +929,10 @@ class DadKingdomLocalStore(private val context: Context) {
             }
             val distArr = JSONArray()
             w.distractors.forEach { distArr.put(it) }
+            val synArr = JSONArray()
+            w.synonyms.forEach { synArr.put(it) }
+            val antArr = JSONArray()
+            w.antonyms.forEach { antArr.put(it) }
             arr.put(
                 JSONObject().apply {
                     put("id", w.id)
@@ -944,6 +948,9 @@ class DadKingdomLocalStore(private val context: Context) {
                     put("tipKo", w.pronunciationTipKo)
                     put("examples", exArr)
                     put("distractors", distArr)
+                    put("synGroupId", w.synonymGroupId)
+                    put("synonyms", synArr)
+                    put("antonyms", antArr)
                 }
             )
         }
@@ -976,6 +983,18 @@ class DadKingdomLocalStore(private val context: Context) {
                 } else {
                     emptyList()
                 }
+                val synArr = o.optJSONArray("synonyms")
+                val synonyms = if (synArr != null) {
+                    (0 until synArr.length()).mapNotNull { j -> synArr.optString(j).takeIf(String::isNotBlank) }
+                } else {
+                    emptyList()
+                }
+                val antArr = o.optJSONArray("antonyms")
+                val antonyms = if (antArr != null) {
+                    (0 until antArr.length()).mapNotNull { j -> antArr.optString(j).takeIf(String::isNotBlank) }
+                } else {
+                    emptyList()
+                }
                 val topicEnum = com.example.model.VocabTopic.entries.firstOrNull {
                     it.name == o.optString("topic")
                 } ?: com.example.model.VocabTopic.SCHOOL_EXAM
@@ -994,7 +1013,10 @@ class DadKingdomLocalStore(private val context: Context) {
                     exampleKo = examples.firstOrNull()?.korean ?: "",
                     examples = examples,
                     pronunciationTipKo = o.optString("tipKo"),
-                    distractors = distractors
+                    distractors = distractors,
+                    synonymGroupId = o.optString("synGroupId"),
+                    synonyms = synonyms,
+                    antonyms = antonyms
                 )
             }
         }.getOrDefault(emptyList())

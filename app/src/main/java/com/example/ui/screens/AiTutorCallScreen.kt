@@ -369,6 +369,7 @@ fun AiTutorCallScreen(
                     activeGesture = activeGesture,
                     aiMood = state.aiMood,
                     liveThoughtKo = state.liveThoughtKo,
+                    spokenSentence = state.liveSubtitleEn,
                     isSpeaking = voiceState.isSpeaking,
                     isListening = voiceState.isListening,
                     isThinking = state.isThinking,

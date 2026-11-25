@@ -49,7 +49,10 @@ data class VocabWord(
     val exampleKo: String,
     val examples: List<VocabExample>, // 4 sentences per word (Read, Listen & Speak)
     val pronunciationTipKo: String,
-    val distractors: List<String>
+    val distractors: List<String>,
+    val synonymGroupId: String = "",
+    val synonyms: List<String> = emptyList(),
+    val antonyms: List<String> = emptyList()
 )
 
 data class PatternSlot(
