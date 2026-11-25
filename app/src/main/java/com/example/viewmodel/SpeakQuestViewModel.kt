@@ -8,6 +8,7 @@ import com.example.data.CloudflareLevelPayload
 import com.example.data.CloudflareLevelSyncService
 import com.example.data.DadKingdomLocalStore
 import com.example.data.DailyWordHarvesterService
+import com.example.data.FamilyLeaderboardRepository
 import com.example.data.HumanTutorRepository
 import com.example.data.KakaoAuthAndFriendsService
 import com.example.data.KakaoGuestInviteService
@@ -17,14 +18,35 @@ import com.example.data.PatternSentenceRepository
 import com.example.data.SquirrelRpgRepository
 import com.example.data.TravelCurriculumRepository
 import com.example.data.VocabRepository
+import com.example.engine.EnGameMathEngine
+import com.example.engine.EnGameMode
+import com.example.engine.EnGamePhase
+import com.example.engine.EnGameUiState
 import com.example.engine.HybridAiCoachEngine
+import com.example.engine.LearningMission
+import com.example.engine.MediaReviewStatus
+import com.example.engine.MemoryPalaceEntry
+import com.example.engine.MemoryPalaceRoom
+import com.example.engine.MissionKind
 import com.example.engine.NanoBananaMotionEngine
 import com.example.engine.PronunciationAnalyzer
+import com.example.engine.QuestCelebrationEvent
+import com.example.engine.RecallGrade
+import com.example.engine.RewardConfig
+import com.example.engine.RewardEventType
+import com.example.engine.RewardTransaction
 import com.example.engine.SuggestedReplyOption
+import com.example.engine.TypedRecallEvaluator
+import com.example.engine.TypedRecallResult
+import com.example.engine.VocabAnalyticsTracker
+import com.example.engine.VocabMnemonicEngine
 import com.example.engine.VoiceCommandParser
 import com.example.engine.VoiceEngineState
 import com.example.engine.VoiceSettingCommand
 import com.example.engine.VoiceSpeechEngine
+import com.example.engine.WordLearningProgress
+import com.example.engine.WordLearningStatus
+import com.example.ui.components.FamilyLeaderboardUiState
 import com.example.ui.components.MotionPhotoGesture
 import com.example.ui.components.StreakMilestoneEvent
 import com.example.ui.components.WeeklyStudyReportData
@@ -64,6 +86,7 @@ import com.example.model.VocabStudyTrack
 import com.example.model.VocabTopic
 import com.example.model.VocabWord
 import com.example.model.WordKnowledgeStatus
+import com.example.model.WrongNoteRecord
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,7 +96,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -208,7 +234,8 @@ class SpeakQuestViewModel(
     private val localStore: DadKingdomLocalStore,
     private val llmSlotStore: LlmSlotStore,
     private val voiceEngine: VoiceSpeechEngine,
-    private val aiCoachEngine: HybridAiCoachEngine
+    private val aiCoachEngine: HybridAiCoachEngine,
+    private val familyLeaderboardRepository: FamilyLeaderboardRepository? = null
 ) : ViewModel() {
 
     private val nanoBananaEngine = NanoBananaMotionEngine()
@@ -216,9 +243,25 @@ class SpeakQuestViewModel(
     private var tutorReplyJob: Job? = null
     private var twistReplyJob: Job? = null
     private var travelProactiveJob: Job? = null
+    private var familyLeaderboardSyncJob: Job? = null
+
+    private val _firebaseUserUid = MutableStateFlow<String?>(null)
+    private val _firebaseDisplayName = MutableStateFlow<String?>(null)
+    val firebaseDisplayName: StateFlow<String?> = _firebaseDisplayName.asStateFlow()
+
+    private val _familyLeaderboardState =
+        MutableStateFlow<FamilyLeaderboardUiState>(FamilyLeaderboardUiState.SignedOut)
+    val familyLeaderboardState: StateFlow<FamilyLeaderboardUiState> =
+        _familyLeaderboardState.asStateFlow()
+
+    val shareStreakWithFriends: StateFlow<Boolean> = localStore.shareStreakWithFriendsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
 
     private val _streakMilestoneEvent = MutableStateFlow<StreakMilestoneEvent?>(null)
     val streakMilestoneEvent: StateFlow<StreakMilestoneEvent?> = _streakMilestoneEvent.asStateFlow()
+
+    private val _questCelebrationEvent = MutableStateFlow<QuestCelebrationEvent?>(null)
+    val questCelebrationEvent: StateFlow<QuestCelebrationEvent?> = _questCelebrationEvent.asStateFlow()
 
     private val _vocabCardExamplePronunciation = MutableStateFlow<PronunciationReport?>(null)
     val vocabCardExamplePronunciation: StateFlow<PronunciationReport?> = _vocabCardExamplePronunciation.asStateFlow()
@@ -228,6 +271,10 @@ class SpeakQuestViewModel(
 
     fun dismissStreakMilestoneEvent() {
         _streakMilestoneEvent.value = null
+    }
+
+    fun dismissQuestCelebrationEvent() {
+        _questCelebrationEvent.value = null
     }
 
     val voiceState: StateFlow<VoiceEngineState> = voiceEngine.state
@@ -244,11 +291,30 @@ class SpeakQuestViewModel(
     val parentProfiles: StateFlow<ParentProfiles> = localStore.parentProfilesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), ParentProfiles())
 
+    // v2 Master Spec StateFlows (SM-2, Idempotent Reward Ledger, Daily Missions, Memory Palace)
+    val wordSm2Progress: StateFlow<Map<String, WordLearningProgress>> = localStore.wordSm2ProgressFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyMap())
+
+    val rewardLedger: StateFlow<List<RewardTransaction>> = localStore.rewardLedgerFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    val dailyVocabMissions: StateFlow<List<LearningMission>> = localStore.dailyMissionsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    val memoryPalaceEntries: StateFlow<Map<String, MemoryPalaceEntry>> = localStore.memoryPalaceFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyMap())
+
+    val mediaReviewOverrides: StateFlow<Map<String, MediaReviewStatus>> = localStore.mediaReviewOverridesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyMap())
+
     val masteredWordIds: StateFlow<Set<String>> = localStore.masteredWordIdsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
 
     val weakWordIds: StateFlow<Set<String>> = localStore.weakWordIdsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
+
+    val wrongNoteRecords: StateFlow<Map<String, WrongNoteRecord>> = localStore.wrongNoteRecordsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyMap())
 
     val harvestedApiWords: StateFlow<List<VocabWord>> = localStore.harvestedWordsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
@@ -306,6 +372,11 @@ class SpeakQuestViewModel(
 
     private val _rpgState = MutableStateFlow(RpgGameUiState())
     val rpgState: StateFlow<RpgGameUiState> = _rpgState.asStateFlow()
+
+    private val _enGameState = MutableStateFlow(EnGameUiState())
+    val enGameState: StateFlow<EnGameUiState> = _enGameState.asStateFlow()
+    private var enGameTimerJob: Job? = null
+    private val enGameRecentWordIds = ArrayDeque<String>()
 
     val guestInviteSession: StateFlow<GuestInviteSession> = localStore.guestInviteSessionFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), GuestInviteSession())
@@ -489,7 +560,7 @@ class SpeakQuestViewModel(
                     sessionFuzzyCount = st.sessionFuzzyCount + 1,
                     showAnswerRevealed = true,
                     lastWasMiss = true,
-                    lastFeedbackKo = "'${word.word}' 애매해요(△) — 해마·연상법 힌트를 보고 2문제 뒤 다시 확인합니다!"
+                    lastFeedbackKo = "'${word.word}' 애매해요(△) — 장면·어근 연상 힌트를 보고 2문제 뒤 다시 확인합니다!"
                 )
                 viewModelScope.launch {
                     localStore.markWordWeak(word.id)
@@ -508,7 +579,7 @@ class SpeakQuestViewModel(
                     sessionUnknownCount = st.sessionUnknownCount + 1,
                     showAnswerRevealed = true,
                     lastWasMiss = true,
-                    lastFeedbackKo = "'${word.word}' 몰라요(X) — 지금 해마학습법·단어연상법으로 각인하고 바로 복습 대기열에 넣었어요!"
+                    lastFeedbackKo = "'${word.word}' 몰라요(X) — 장면 연상과 어근을 확인하고 복습 대기열에 넣었어요!"
                 )
                 viewModelScope.launch {
                     localStore.markWordWeak(word.id)
@@ -535,7 +606,7 @@ class SpeakQuestViewModel(
         _bannerToast.value = null
     }
 
-    private fun showToast(msg: String) {
+    fun showToast(msg: String) {
         _bannerToast.value = msg
     }
 
@@ -603,14 +674,18 @@ class SpeakQuestViewModel(
             _vocabCardExamplePronunciation.value = report
             if (report.passed) {
                 viewModelScope.launch {
-                    localStore.recordLearningAchievement(
-                        xpDelta = 10,
-                        coinsDelta = 6,
-                        castleHpDelta = 1,
-                        missionCompleted = false
+                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                    val spec = RewardConfig.specFor(RewardEventType.LISTENING_QUIZ_CORRECT)
+                    localStore.grantIdempotentReward(
+                        eventId = "shadow_${today}_${targetSentence.lowercase().hashCode()}",
+                        eventType = RewardEventType.LISTENING_QUIZ_CORRECT,
+                        xpDelta = spec.xp,
+                        coinDelta = spec.coins,
+                        reason = "예문 따라 말하기 통과 (${report.overallScore}점)"
                     )
+                    localStore.advanceVocabMission(MissionKind.DAILY_LISTENING_SPEAK, 1)
                 }
-                showToast("예문 발음 ${report.overallScore}점 통과! +6 코인")
+                showToast("예문 발음 ${report.overallScore}점 통과! +${RewardConfig.specFor(RewardEventType.LISTENING_QUIZ_CORRECT).xp} XP")
             }
         }
     }
@@ -628,6 +703,9 @@ class SpeakQuestViewModel(
             pitch = tutor.ttsPitch,
             rate = 0.74f
         )
+        viewModelScope.launch {
+            localStore.advanceVocabMission(MissionKind.DAILY_LISTENING_SPEAK, 1)
+        }
     }
 
     // ==================== ANTI-ABC 5-TRACK VOCAB + 1~5 GRADE TIER + LEVEL TEST + 7-MISSION BOSS ====================
@@ -2054,9 +2132,21 @@ class SpeakQuestViewModel(
     // ==================== PARENTS (DAD/MOM), GIFT REQUESTS, ALLOWANCE, SCORECARD, SCHEDULE, KAKAO, CLOUDFLARE ====================
 
     fun saveParentProfiles(profiles: ParentProfiles) {
+        val rawPin = profiles.parentPin.trim()
+        if (rawPin.isNotBlank()) {
+            if (!com.example.engine.ParentPinCrypto.isValidPinFormat(rawPin)) {
+                showToast("부모님 PIN은 숫자 4~6자리로 입력해 주세요.")
+                return
+            }
+            if (com.example.engine.ParentPinCrypto.isWeakPin(rawPin)) {
+                showToast("1234, 0000 등 추측하기 쉬운 번호는 사용할 수 없어요. 다른 PIN을 입력해 주세요.")
+                return
+            }
+        }
         viewModelScope.launch {
             localStore.saveParentProfiles(profiles)
-            showToast("가족 왕국 구성원(${profiles.dadName} · ${profiles.momName} · ${profiles.daughterName}) 저장 완료!")
+            val pinNotice = if (rawPin.isNotBlank()) " · PIN 암호화 저장 완료" else ""
+            showToast("가족 왕국 구성원(${profiles.dadName} · ${profiles.momName} · ${profiles.daughterName}) 저장 완료$pinNotice!")
         }
     }
 
@@ -2123,20 +2213,40 @@ class SpeakQuestViewModel(
         }
     }
 
-    fun approveGiftRequestWithPin(giftId: String, enteredPin: String): Boolean {
-        val correctPin = parentProfiles.value.parentPin
-        if (enteredPin.trim() != correctPin) {
-            showToast("부모님 PIN 번호가 일치하지 않아요! (기본 PIN: $correctPin)")
-            return false
+    fun approveGiftRequestWithPin(
+        giftId: String,
+        enteredPin: String,
+        onResult: (Boolean) -> Unit = {}
+    ) {
+        if (!parentProfiles.value.isPinConfigured) {
+            showToast("먼저 '가족' 탭에서 부모님 PIN(4~6자리)을 설정해 주세요.")
+            onResult(false)
+            return
         }
         viewModelScope.launch {
-            val updated = giftRequests.value.map { g ->
-                if (g.id == giftId) g.copy(isApproved = true) else g
+            when (val result = localStore.verifyParentPinWithLockout(enteredPin)) {
+                is com.example.engine.PinVerificationResult.Verified -> {
+                    val updated = giftRequests.value.map { g ->
+                        if (g.id == giftId) g.copy(isApproved = true) else g
+                    }
+                    localStore.saveGiftRequests(updated, consumeTicket = false)
+                    showToast("왕실 선물 약속 승인 기록 완료! ${parentProfiles.value.daughterName} 최고예요!")
+                    onResult(true)
+                }
+                is com.example.engine.PinVerificationResult.LockedOut -> {
+                    showToast("PIN 입력 오류 초과로 ${result.retryAfterSeconds}초 동안 잠겼습니다. 잠시 후 다시 시도해 주세요.")
+                    onResult(false)
+                }
+                is com.example.engine.PinVerificationResult.Invalid -> {
+                    showToast("부모님 PIN이 일치하지 않아요. (남은 시도 ${result.remainingAttempts}회)")
+                    onResult(false)
+                }
+                is com.example.engine.PinVerificationResult.NotConfigured -> {
+                    showToast("먼저 '가족' 탭에서 부모님 PIN(4~6자리)을 설정해 주세요.")
+                    onResult(false)
+                }
             }
-            localStore.saveGiftRequests(updated, consumeTicket = false)
-            showToast("왕실 선물 승인 완료!! ${parentProfiles.value.daughterName} 최고예요!")
         }
-        return true
     }
 
     fun shareGiftRequestToKakao(context: Context, gift: GiftRequestItem) {
@@ -2179,33 +2289,111 @@ class SpeakQuestViewModel(
                 if (m.id == missionId) m.copy(isCompletedByDaughter = true) else m
             }
             localStore.saveDadMissions(updated)
-            showToast("완료 보고 올렸어요! 아빠·엄마 PIN 승인을 받으면 용돈이 지급됩니다!")
+            showToast("완료 보고 올렸어요! 부모님 PIN 승인을 받으면 가족 용돈 약속이 기록됩니다.")
         }
     }
 
-    fun approveMissionWithPin(missionId: String, enteredPin: String): Boolean {
-        val correctPin = parentProfiles.value.parentPin
-        if (enteredPin.trim() != correctPin) {
-            showToast("부모님 PIN 번호가 일치하지 않아요!")
-            return false
+    fun approveMissionWithPin(
+        missionId: String,
+        enteredPin: String,
+        onResult: (Boolean) -> Unit = {}
+    ) {
+        if (!parentProfiles.value.isPinConfigured) {
+            showToast("먼저 '가족' 탭에서 부모님 PIN(4~6자리)을 설정해 주세요.")
+            onResult(false)
+            return
         }
-        val target = dadMissions.value.firstOrNull { it.id == missionId } ?: return false
-        if (target.isApprovedByDad) return true
+        val target = dadMissions.value.firstOrNull { it.id == missionId }
+        if (target == null) {
+            onResult(false)
+            return
+        }
+        if (target.isApprovedByDad) {
+            onResult(true)
+            return
+        }
         viewModelScope.launch {
-            val updated = dadMissions.value.map { m ->
-                if (m.id == missionId) m.copy(isCompletedByDaughter = true, isApprovedByDad = true) else m
+            when (val result = localStore.verifyParentPinWithLockout(enteredPin)) {
+                is com.example.engine.PinVerificationResult.Verified -> {
+                    val updated = dadMissions.value.map { m ->
+                        if (m.id == missionId) m.copy(isCompletedByDaughter = true, isApprovedByDad = true) else m
+                    }
+                    localStore.saveDadMissions(updated, allowanceDeltaWon = target.rewardWon, castleBonus = target.castleHpBonus)
+                    val (boss, lvlUp) = localStore.recordLearningAchievement(
+                        xpDelta = 60,
+                        coinsDelta = 50,
+                        castleHpDelta = target.castleHpBonus,
+                        missionCompleted = true
+                    )
+                    notifySpecialMilestones(boss, lvlUp)
+                    showToast("승인 완료! 가족 용돈 약속 +${target.rewardWon}원 기록 (앱 내 송금 없음) & 성채 HP +${target.castleHpBonus}%!")
+                    onResult(true)
+                }
+                is com.example.engine.PinVerificationResult.LockedOut -> {
+                    showToast("PIN 입력 오류 초과로 ${result.retryAfterSeconds}초 동안 잠겼습니다. 잠시 후 다시 시도해 주세요.")
+                    onResult(false)
+                }
+                is com.example.engine.PinVerificationResult.Invalid -> {
+                    showToast("부모님 PIN이 일치하지 않아요. (남은 시도 ${result.remainingAttempts}회)")
+                    onResult(false)
+                }
+                is com.example.engine.PinVerificationResult.NotConfigured -> {
+                    showToast("먼저 '가족' 탭에서 부모님 PIN(4~6자리)을 설정해 주세요.")
+                    onResult(false)
+                }
             }
-            localStore.saveDadMissions(updated, allowanceDeltaWon = target.rewardWon, castleBonus = target.castleHpBonus)
-            val (boss, lvlUp) = localStore.recordLearningAchievement(
-                xpDelta = 60,
-                coinsDelta = 50,
-                castleHpDelta = target.castleHpBonus,
-                missionCompleted = true
-            )
-            notifySpecialMilestones(boss, lvlUp)
-            showToast("승인 완료! 용돈 +${target.rewardWon}원 적립 & 성채 HP +${target.castleHpBonus}%!")
         }
-        return true
+    }
+
+    /**
+     * Google Play Account & Data Deletion compliance flow:
+     * 1) Deletes user's Firestore familyStreaks entries
+     * 2) Deletes user's Firestore /users/{uid} profile and subcollections
+     * 3) Clears all local DataStore preferences & saved PIN/settings
+     * 4) Deletes (or signs out if re-auth required) the Firebase Auth account
+     */
+    fun deleteAccountAndAllData(
+        context: Context,
+        onFinished: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val kakaoId = kakaoSession.value.kakaoUserId
+            val streakDel = runCatching {
+                familyLeaderboardRepository?.deleteOwnFamilyStreakEntries(kakaoId)
+            }
+            val cloudDel = runCatching {
+                com.example.data.UserProgressRepository(context).deleteAllUserCloudData()
+            }
+
+            // Always wipe all on-device DataStore records regardless of network state
+            localStore.clearAllLocalData()
+            llmSlotStore.clearAll()
+
+            var authDeleteNote = ""
+            val currentUser = Firebase.auth.currentUser
+            if (currentUser != null) {
+                val authDel = runCatching {
+                    currentUser.delete().await()
+                }
+                if (authDel.isFailure) {
+                    authDeleteNote = " (보안상 최근 로그인 확인이 필요해 로그아웃 처리되었습니다. 다시 로그인 후 계정 삭제를 완료할 수 있습니다.)"
+                }
+                runCatching { Firebase.auth.signOut() }
+            }
+
+            _firebaseUserUid.value = null
+            _firebaseDisplayName.value = null
+            _familyLeaderboardState.value = FamilyLeaderboardUiState.SignedOut
+
+            val cloudOk = streakDel.isSuccess && cloudDel.isSuccess
+            val msg = if (cloudOk) {
+                "모든 학습 기록과 클라우드·기기 데이터가 안전하게 삭제되었습니다.$authDeleteNote"
+            } else {
+                "기기 데이터 삭제 및 로그아웃이 완료되었습니다. 네트워크 확인 후 클라우드 동기화 상태를 다시 확인해 주세요.$authDeleteNote"
+            }
+            showToast(msg)
+            onFinished(cloudOk, msg)
+        }
     }
 
     fun addScorecardEntry(examTitleKo: String, subjectKo: String, score: Int, targetScore: Int) {
@@ -2280,6 +2468,106 @@ class SpeakQuestViewModel(
         }
     }
 
+    fun onFirebaseAuthStateChanged(uid: String?, displayName: String?) {
+        _firebaseUserUid.value = uid
+        _firebaseDisplayName.value = displayName
+        if (uid.isNullOrBlank()) {
+            familyLeaderboardSyncJob?.cancel()
+            _familyLeaderboardState.value = FamilyLeaderboardUiState.SignedOut
+        } else {
+            refreshFamilyLeaderboard(manual = false)
+        }
+    }
+
+    fun refreshFamilyLeaderboard(manual: Boolean = false) {
+        val repo = familyLeaderboardRepository
+        val uid = _firebaseUserUid.value
+        if (repo == null || uid.isNullOrBlank()) {
+            _familyLeaderboardState.value = FamilyLeaderboardUiState.SignedOut
+            return
+        }
+
+        val previousMembers = when (val cur = _familyLeaderboardState.value) {
+            is FamilyLeaderboardUiState.Success -> cur.members
+            is FamilyLeaderboardUiState.Loading -> cur.previousMembers
+            is FamilyLeaderboardUiState.Error -> cur.cachedMembers
+            FamilyLeaderboardUiState.SignedOut -> emptyList()
+        }
+
+        familyLeaderboardSyncJob?.cancel()
+        familyLeaderboardSyncJob = viewModelScope.launch {
+            _familyLeaderboardState.value = FamilyLeaderboardUiState.Loading(previousMembers)
+            val progress = localStore.userProgressFlow.first()
+            val kakao = localStore.kakaoSessionFlow.first()
+            val parents = localStore.parentProfilesFlow.first()
+            val shareEnabled = localStore.shareStreakWithFriendsFlow.first()
+
+            val resolvedDisplayName = kakao.nickname
+                .ifBlank { parents.daughterName }
+                .ifBlank { _firebaseDisplayName.value.orEmpty() }
+                .ifBlank { "가족 수호기사" }
+
+            val syncResult = repo.syncUserStreakAndKakaoFriends(
+                displayName = resolvedDisplayName,
+                avatarUrl = kakao.profileImageUrl,
+                streakCount = progress.streakCount,
+                todayWordsCompleted = progress.todayWordsCompleted,
+                totalXp = progress.totalXp,
+                coins = progress.coins,
+                hearts = progress.hearts,
+                dailyGoal = progress.dailyGoal,
+                selectedGrade = progress.selectedGrade,
+                selectedTeacherId = progress.selectedTeacherId,
+                lastStudyDate = progress.lastStudyDate,
+                kakaoUserId = kakao.kakaoUserId,
+                connectedFriends = kakao.friends,
+                shareWithFriends = shareEnabled
+            )
+
+            val ownEntry = syncResult.getOrNull()
+            val fetchResult = repo.fetchKakaoFriendsLeaderboard(
+                ownKakaoUserId = kakao.kakaoUserId,
+                connectedFriends = kakao.friends,
+                fallbackOwnEntry = ownEntry
+            )
+
+            fetchResult.onSuccess { snapshot ->
+                _familyLeaderboardState.value = FamilyLeaderboardUiState.Success(
+                    members = snapshot.rankedMembers,
+                    unlinkedKakaoFriends = snapshot.unlinkedKakaoFriends,
+                    shareWithFriends = shareEnabled,
+                    syncedAtLabel = snapshot.syncedAtLabel
+                )
+                if (manual) {
+                    showToast("가족 리더보드 동기화 완료 (${snapshot.rankedMembers.size}명 순위 반영)")
+                }
+            }.onFailure { err ->
+                val message = err.localizedMessage?.takeIf { it.isNotBlank() }
+                    ?: "가족 리더보드를 불러오지 못했습니다. 네트워크와 로그인 상태를 확인해 주세요."
+                _familyLeaderboardState.value = FamilyLeaderboardUiState.Error(
+                    message = message,
+                    cachedMembers = previousMembers
+                )
+                if (manual) {
+                    showToast("리더보드 동기화 실패: $message")
+                }
+            }
+        }
+    }
+
+    fun toggleShareStreakWithFriends(enabled: Boolean) {
+        viewModelScope.launch {
+            localStore.setShareStreakWithFriends(enabled)
+            showToast(
+                if (enabled) "내 일일 스트릭을 카카오톡 친구들에게 공개합니다."
+                else "내 일일 스트릭을 비공개로 전환했습니다."
+            )
+            if (!_firebaseUserUid.value.isNullOrBlank()) {
+                refreshFamilyLeaderboard(manual = false)
+            }
+        }
+    }
+
     fun handleKakaoOAuthRedirectCode(authCode: String) {
         viewModelScope.launch {
             showToast("카카오톡 계정 및 친구 목록을 불러오는 중...")
@@ -2289,9 +2577,13 @@ class SpeakQuestViewModel(
                     nickname = auth.nickname,
                     profileImageUrl = auth.profileImageUrl,
                     accessToken = auth.accessToken,
-                    friends = auth.friends
+                    friends = auth.friends,
+                    kakaoUserId = auth.kakaoUserId
                 )
                 showToast("카카오톡 로그인 성공! ${auth.nickname}님 (친구 ${auth.friends.size}명 연동)")
+                if (!_firebaseUserUid.value.isNullOrBlank()) {
+                    refreshFamilyLeaderboard(manual = false)
+                }
             }.onFailure { err ->
                 showToast("카카오 연동 오류: ${err.message ?: "다시 시도해 주세요"}")
             }
@@ -2304,8 +2596,17 @@ class SpeakQuestViewModel(
             val res = KakaoAuthAndFriendsService.refreshFriends(token)
             res.onSuccess { list ->
                 val cur = kakaoSession.value
-                localStore.saveKakaoSession(cur.nickname, cur.profileImageUrl, cur.accessToken, list)
+                localStore.saveKakaoSession(
+                    nickname = cur.nickname,
+                    profileImageUrl = cur.profileImageUrl,
+                    accessToken = cur.accessToken,
+                    friends = list,
+                    kakaoUserId = cur.kakaoUserId
+                )
                 showToast("카카오톡 친구 ${list.size}명 최신 동기화 완료!")
+                if (!_firebaseUserUid.value.isNullOrBlank()) {
+                    refreshFamilyLeaderboard(manual = false)
+                }
             }.onFailure { err ->
                 showToast(err.message ?: "먼저 카카오톡 로그인을 진행해 주세요.")
             }
@@ -2316,6 +2617,9 @@ class SpeakQuestViewModel(
         viewModelScope.launch {
             localStore.clearKakaoSession()
             showToast("카카오톡 연동이 해제되었습니다. (테스트 모드로 계속 이용 가능)")
+            if (!_firebaseUserUid.value.isNullOrBlank()) {
+                refreshFamilyLeaderboard(manual = false)
+            }
         }
     }
 
@@ -2651,33 +2955,230 @@ class SpeakQuestViewModel(
     }
 
     fun recordMainFocusWordResult(wordId: String, known: Boolean) {
-        val matchedWord = VocabRepository.allWords.firstOrNull { it.id == wordId }
+        val matchedWord = (VocabRepository.allWords + harvestedApiWords.value).firstOrNull { it.id == wordId }
         val wordText = matchedWord?.word ?: wordId
         val meaningText = matchedWord?.meaningKo ?: "수능 빈출 영단어"
+        recordVocabCardSm2Recall(
+            wordId = wordId,
+            wordText = wordText,
+            meaningKo = meaningText,
+            grade = if (known) RecallGrade.GOOD else RecallGrade.AGAIN,
+            fromMnemonic = false
+        )
+    }
+
+    /**
+     * v2 Master Spec SM-2 Recall + Idempotent Reward + Daily Mission Progress.
+     * Repeated taps on the same word on the same day never double-pay XP/Coins.
+     */
+    fun recordVocabCardSm2Recall(
+        wordId: String,
+        wordText: String,
+        meaningKo: String,
+        grade: RecallGrade,
+        fromMnemonic: Boolean = false
+    ) {
+        val known = grade == RecallGrade.GOOD || grade == RecallGrade.EASY
         if (known) {
             _spartaState.value = _spartaState.value.copy(
                 sessionKnownCount = _spartaState.value.sessionKnownCount + 1
             )
-            viewModelScope.launch {
-                localStore.markWordMastered(wordId)
-                localStore.recordDailyWordOutcome(wordId, wordText, meaningText, known = true)
-                val result = localStore.recordLearningAchievement(
-                    xpDelta = 12,
-                    coinsDelta = 8,
-                    wordsDelta = 1,
-                    castleHpDelta = 2,
-                    missionCompleted = false
-                )
-                notifySpecialMilestones(result)
-            }
+            VocabAnalyticsTracker.log("recall_correct", wordId = wordId, meta = grade.name)
         } else {
             _spartaState.value = _spartaState.value.copy(
                 sessionUnknownCount = _spartaState.value.sessionUnknownCount + 1
             )
-            viewModelScope.launch {
-                localStore.markWordWeak(wordId)
-                localStore.recordDailyWordOutcome(wordId, wordText, meaningText, known = false)
+            VocabAnalyticsTracker.log("recall_wrong", wordId = wordId, meta = grade.name)
+        }
+
+        viewModelScope.launch {
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val existingSm2 = wordSm2Progress.value[wordId]
+            val isFirstTimeWord = existingSm2 == null
+            val wasWeakOrDue = wordId in weakWordIds.value || (existingSm2?.dueAtMs ?: 0L) in 1L..System.currentTimeMillis()
+            val updatedSm2 = localStore.recordWordSm2Recall(wordId = wordId, grade = grade)
+            localStore.recordDailyWordOutcome(wordId, wordText, meaningKo, known = known)
+            VocabAnalyticsTracker.log("word_recall_graded", wordId = wordId, meta = grade.name)
+
+            val matchedWord = (VocabRepository.allWords + harvestedApiWords.value).firstOrNull { it.id == wordId }
+
+            if (known) {
+                // Anti-farming: true first-time word learning gets a one-time ever eventId
+                val (eventId, eventType) = when {
+                    isFirstTimeWord -> "new_word_$wordId" to RewardEventType.NEW_WORD_LEARNED
+                    wasWeakOrDue -> "review_${today}_$wordId" to RewardEventType.DAILY_REVIEW_COMPLETED
+                    else -> "recall_${today}_$wordId" to RewardEventType.ACTIVE_RECALL_CORRECT
+                }
+                val spec = RewardConfig.specFor(eventType)
+                val reward = localStore.grantIdempotentReward(
+                    eventId = eventId,
+                    eventType = eventType,
+                    xpDelta = spec.xp,
+                    coinDelta = spec.coins,
+                    reason = "단어 회상 완료 ($wordText · ${grade.labelKo})",
+                    wordId = wordId
+                )
+                if (reward.granted) {
+                    localStore.advanceVocabMission(MissionKind.DAILY_NEW_WORDS, 1)
+                    localStore.advanceVocabMission(MissionKind.WEEKLY_UNIQUE_WORDS, 1)
+                }
+                if (wasWeakOrDue) {
+                    localStore.advanceVocabMission(MissionKind.DAILY_REVIEW_DUE, 1)
+                    localStore.advanceVocabMission(MissionKind.DAILY_WRONG_RETRY, 1)
+                }
+                if (fromMnemonic) {
+                    localStore.advanceVocabMission(MissionKind.DAILY_MNEMONIC_RECALL, 1)
+                }
+                // Advance Story/Exploration missions based on word topic & verified morpheme
+                if (matchedWord != null && reward.granted) {
+                    if (matchedWord.topic == VocabTopic.TRAVEL_DAILY) {
+                        localStore.advanceVocabMission(MissionKind.STORY_TRAVEL_WORDS, 1)
+                    }
+                    if (matchedWord.topic == VocabTopic.EMOTION_MIND) {
+                        localStore.advanceVocabMission(MissionKind.STORY_EMOTION_WORDS, 1)
+                    }
+                    if (VocabMnemonicEngine.buildStructuredGuide(matchedWord).hasVerifiedMorpheme) {
+                        localStore.advanceVocabMission(MissionKind.STORY_VERIFIED_ROOTS, 1)
+                    }
+                }
+
+                val streakResult = localStore.recordLearningAchievement(
+                    xpDelta = 0,
+                    coinsDelta = 0,
+                    wordsDelta = 1,
+                    castleHpDelta = if (reward.granted) 1 else 0,
+                    missionCompleted = false
+                )
+
+                // Session daily goal milestone bonus (idempotent once per day)
+                val dailyGoal = userProgress.value.dailyGoal.coerceIn(5, 30)
+                if (streakResult.todayWordsCompleted >= dailyGoal) {
+                    val sessionSpec = RewardConfig.specFor(RewardEventType.TEN_WORD_SESSION_COMPLETED)
+                    localStore.grantIdempotentReward(
+                        eventId = "daily_goal_session_$today",
+                        eventType = RewardEventType.TEN_WORD_SESSION_COMPLETED,
+                        xpDelta = sessionSpec.xp,
+                        coinDelta = sessionSpec.coins,
+                        reason = "오늘 목표 ${dailyGoal}단어 세션 완료 보너스"
+                    )
+                }
+
+                if (reward.leveledUpTo != null) {
+                    _questCelebrationEvent.value = QuestCelebrationEvent(
+                        titleKo = "레벨 업 달성!",
+                        xpEarned = spec.xp,
+                        coinsEarned = spec.coins,
+                        streakCount = userProgress.value.streakCount,
+                        leveledUpTitleKo = "Lv.${reward.leveledUpTo.level} ${reward.leveledUpTo.titleKo}"
+                    )
+                } else if (reward.granted) {
+                    val nextLabel = if (updatedSm2.intervalDays > 0) "${updatedSm2.intervalDays}일 뒤 복습" else "잠시 뒤 복습"
+                    showToast("+$wordText · +${spec.xp} XP +${spec.coins} 코인 ($nextLabel)")
+                }
+                notifySpecialMilestones(streakResult)
+            } else {
+                if (grade == RecallGrade.HARD) {
+                    localStore.advanceVocabMission(MissionKind.DAILY_REVIEW_DUE, 1)
+                }
+                val retryLabel = if (grade == RecallGrade.AGAIN) "10분 뒤 다시 복습" else "1일 뒤 다시 복습"
+                showToast("오답·복습 큐 등록 ($wordText · $retryLabel)")
             }
+        }
+    }
+
+    /**
+     * Section 3.3 & 12: Inline typed active recall evaluation with 1-char typo tolerance.
+     */
+    fun submitTypedVocabRecall(word: VocabWord, rawInput: String): TypedRecallResult {
+        val result = TypedRecallEvaluator.evaluate(rawInput, word.word)
+        if (result.isPassed) {
+            VocabAnalyticsTracker.log("typing_correct", wordId = word.id, meta = result.outcome.name)
+            viewModelScope.launch {
+                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                val spec = RewardConfig.specFor(RewardEventType.TYPING_SPELLING_CORRECT)
+                val reward = localStore.grantIdempotentReward(
+                    eventId = "typing_${today}_${word.id}",
+                    eventType = RewardEventType.TYPING_SPELLING_CORRECT,
+                    xpDelta = spec.xp,
+                    coinDelta = spec.coins,
+                    reason = "철자 직접 입력 회상 성공 (${word.word})",
+                    wordId = word.id
+                )
+                localStore.recordWordSm2Recall(wordId = word.id, grade = RecallGrade.GOOD)
+                localStore.recordDailyWordOutcome(word.id, word.word, word.meaningKo, known = true)
+                if (reward.granted) {
+                    localStore.advanceVocabMission(MissionKind.DAILY_NEW_WORDS, 1)
+                    localStore.advanceVocabMission(MissionKind.WEEKLY_UNIQUE_WORDS, 1)
+                    if (VocabMnemonicEngine.buildStructuredGuide(word).hasVerifiedMorpheme) {
+                        localStore.advanceVocabMission(MissionKind.STORY_VERIFIED_ROOTS, 1)
+                    }
+                    showToast("철자 정답! ${word.word} (+${spec.xp} XP · +${spec.coins} 코인)")
+                }
+            }
+        } else {
+            VocabAnalyticsTracker.log("recall_wrong", wordId = word.id, meta = "TYPING_MISS")
+        }
+        return result
+    }
+
+    fun setDailyWordGoal(goal: Int) {
+        viewModelScope.launch {
+            localStore.setDailyWordGoal(goal)
+            showToast("오늘 단어 목표를 ${goal.coerceIn(5, 30)}개로 설정했어요!")
+        }
+    }
+
+    fun toggleSuspendWord(wordId: String, wordLabel: String) {
+        viewModelScope.launch {
+            val updated = localStore.toggleSuspendWord(wordId)
+            val msg = if (updated.learningStatus == WordLearningStatus.SUSPENDED) {
+                "'$wordLabel' 복습 대기열에서 제외(숨김)했어요."
+            } else {
+                "'$wordLabel' 복습 대기열에 다시 포함했어요."
+            }
+            showToast(msg)
+        }
+    }
+
+    fun setMediaReviewStatus(wordId: String, status: MediaReviewStatus) {
+        viewModelScope.launch {
+            localStore.setMediaReviewStatus(wordId, status)
+            val label = if (status == MediaReviewStatus.APPROVED) "승인" else "보류"
+            showToast("미디어·연상 검수 상태를 '${label}'로 저장했어요.")
+        }
+    }
+
+    fun claimVocabMissionReward(missionId: String) {
+        viewModelScope.launch {
+            val (mission, reward) = localStore.claimVocabMission(missionId)
+            if (mission != null && reward != null && reward.granted) {
+                _questCelebrationEvent.value = QuestCelebrationEvent(
+                    titleKo = mission.titleKo,
+                    xpEarned = mission.rewardXp,
+                    coinsEarned = mission.rewardCoins,
+                    streakCount = userProgress.value.streakCount,
+                    leveledUpTitleKo = reward.leveledUpTo?.let { "Lv.${it.level} ${it.titleKo}" }
+                )
+            } else {
+                showToast("이미 수령했거나 진행 중인 미션입니다.")
+            }
+        }
+    }
+
+    fun saveWordToMemoryPalace(wordId: String, room: MemoryPalaceRoom, memoKo: String) {
+        viewModelScope.launch {
+            localStore.saveMemoryPalaceEntry(wordId, room, memoKo)
+            localStore.advanceVocabMission(MissionKind.DAILY_MNEMONIC_RECALL, 1)
+            localStore.advanceVocabMission(MissionKind.WEEKLY_PALACE_ROOMS, 1)
+            VocabAnalyticsTracker.log("memory_palace_saved", wordId = wordId, meta = room.name)
+            showToast("'${room.titleKo}' 기억의 궁전에 배치했어요!")
+        }
+    }
+
+    fun logVocabAudioListen() {
+        VocabAnalyticsTracker.log("pronunciation_played")
+        viewModelScope.launch {
+            localStore.advanceVocabMission(MissionKind.DAILY_LISTENING_SPEAK, 1)
         }
     }
 
@@ -2943,12 +3444,390 @@ class SpeakQuestViewModel(
         startRpgChapter(curNum)
     }
 
+    // ==================== ENGAME 2.0 4-MODE ARCADE ENGINE ====================
+
+    fun openEnGameHub() {
+        enGameTimerJob?.cancel()
+        stopVoiceIo()
+        val cur = _enGameState.value
+        _enGameState.value = cur.copy(
+            phase = EnGamePhase.MODE_HUB,
+            lastFeedbackKo = ""
+        )
+    }
+
+    fun closeEnGameOverlay() {
+        enGameTimerJob?.cancel()
+        stopVoiceIo()
+        _enGameState.value = _enGameState.value.copy(phase = EnGamePhase.CLOSED)
+    }
+
+    fun backToEnGameHub() {
+        enGameTimerJob?.cancel()
+        stopVoiceIo()
+        _enGameState.value = _enGameState.value.copy(
+            phase = EnGamePhase.MODE_HUB,
+            lastFeedbackKo = ""
+        )
+    }
+
+    fun startEnGameMode(mode: EnGameMode) {
+        enGameTimerJob?.cancel()
+        stopVoiceIo()
+        enGameRecentWordIds.clear()
+        onEnterStudyActivity("EnGame ${mode.titleKo}")
+
+        val cur = _enGameState.value
+        val firstQuestion = nextEnGameQuestion(mode = mode, elo = cur.eloRating)
+        _enGameState.value = EnGameUiState(
+            phase = EnGamePhase.PLAYING,
+            mode = mode,
+            eloRating = cur.eloRating,
+            highScore = cur.highScore,
+            lives = 3,
+            maxLives = 3,
+            timeLeftSec = mode.durationSec,
+            totalTimeSec = mode.durationSec,
+            waveNumber = 1,
+            bossHp = 100,
+            bossMaxHp = 100,
+            currentQuestion = firstQuestion,
+            lastFeedbackKo = "${mode.titleKo} 시작! 빠르게 맞혀 피버 게이지를 채우세요!"
+        )
+
+        if (mode == EnGameMode.VOICE_BOSS_RUSH) {
+            listenRpgEnglish(firstQuestion.audioTextEn)
+        }
+
+        enGameTimerJob = viewModelScope.launch {
+            while (_enGameState.value.phase == EnGamePhase.PLAYING) {
+                delay(1000L)
+                val now = _enGameState.value
+                if (now.phase != EnGamePhase.PLAYING) break
+                val nextSec = (now.timeLeftSec - 1).coerceAtLeast(0)
+                if (nextSec <= 0) {
+                    finishEnGameSession(now.copy(timeLeftSec = 0))
+                    break
+                } else {
+                    _enGameState.value = now.copy(timeLeftSec = nextSec)
+                }
+            }
+        }
+    }
+
+    fun submitEnGameChoice(selected: String) {
+        val cur = _enGameState.value
+        val q = cur.currentQuestion ?: return
+        if (cur.phase != EnGamePhase.PLAYING) return
+        val correct = selected.equals(q.correctAnswer, ignoreCase = true)
+        val elapsedMs = System.currentTimeMillis() - q.startedAtMs
+        applyEnGameEvaluation(
+            cur = cur,
+            isCorrect = correct,
+            elapsedMs = elapsedMs,
+            isVoiceCritical = false
+        )
+    }
+
+    fun tapEnGameScrambledToken(tokenIndex: Int) {
+        val cur = _enGameState.value
+        val q = cur.currentQuestion ?: return
+        val isTileMode = q.mode == EnGameMode.SENTENCE_BUILDER || q.mode == EnGameMode.SPELLING_TILES
+        if (cur.phase != EnGamePhase.PLAYING || !isTileMode) return
+        if (tokenIndex !in q.scrambledTokens.indices || tokenIndex in cur.selectedTokens) return
+        _enGameState.value = cur.copy(selectedTokens = cur.selectedTokens + tokenIndex)
+    }
+
+    fun removeEnGameSelectedToken(positionInTray: Int) {
+        val cur = _enGameState.value
+        if (positionInTray !in cur.selectedTokens.indices) return
+        val updated = cur.selectedTokens.toMutableList().apply { removeAt(positionInTray) }
+        _enGameState.value = cur.copy(selectedTokens = updated)
+    }
+
+    fun clearEnGameSentenceTokens() {
+        _enGameState.value = _enGameState.value.copy(selectedTokens = emptyList())
+    }
+
+    fun submitEnGameSentenceBuilder() {
+        val cur = _enGameState.value
+        val q = cur.currentQuestion ?: return
+        val isTileMode = q.mode == EnGameMode.SENTENCE_BUILDER || q.mode == EnGameMode.SPELLING_TILES
+        if (cur.phase != EnGamePhase.PLAYING || !isTileMode) return
+        val separator = if (q.mode == EnGameMode.SPELLING_TILES) "" else " "
+        val assembled = cur.selectedTokens.mapNotNull { q.scrambledTokens.getOrNull(it) }.joinToString(separator)
+        val correct = assembled.equals(q.correctAnswer, ignoreCase = true)
+        val elapsedMs = System.currentTimeMillis() - q.startedAtMs
+        applyEnGameEvaluation(
+            cur = cur,
+            isCorrect = correct,
+            elapsedMs = elapsedMs,
+            isVoiceCritical = false
+        )
+    }
+
+    /**
+     * P6 Section 8.2: Interactive 4-pair Memory Flip matching game.
+     * Matches English word card with Korean meaning card, updates SM-2 on each matched pair,
+     * and advances to a fresh board when all 4 pairs are cleared.
+     */
+    fun tapEnGameMemoryFlipCard(cardIndex: Int) {
+        val cur = _enGameState.value
+        val q = cur.currentQuestion ?: return
+        if (cur.phase != EnGamePhase.PLAYING || q.mode != EnGameMode.MEMORY_FLIP) return
+        val card = q.memoryFlipCards.getOrNull(cardIndex) ?: return
+        if (card.pairId in cur.matchedPairIds) return
+
+        // If 2 mismatched cards were already open, start fresh from the newly tapped card
+        val open = if (cur.flippedCardIndices.size >= 2) emptyList() else cur.flippedCardIndices
+        if (cardIndex in open) return
+
+        val nextOpen = open + cardIndex
+        if (card.isEnglish) {
+            listenRpgEnglish(card.label)
+        }
+
+        if (nextOpen.size < 2) {
+            _enGameState.value = cur.copy(flippedCardIndices = nextOpen)
+            return
+        }
+
+        val first = q.memoryFlipCards[nextOpen[0]]
+        val second = q.memoryFlipCards[nextOpen[1]]
+        val isMatch = first.pairId == second.pairId && first.isEnglish != second.isEnglish
+        if (isMatch) {
+            val nextMatched = cur.matchedPairIds + first.pairId
+            val allPairsCount = q.memoryFlipCards.map { it.pairId }.distinct().size
+            viewModelScope.launch {
+                localStore.recordWordSm2Recall(wordId = first.wordId, grade = RecallGrade.GOOD)
+                localStore.advanceVocabMission(MissionKind.DAILY_NEW_WORDS, 1)
+                localStore.advanceVocabMission(MissionKind.WEEKLY_UNIQUE_WORDS, 1)
+            }
+            if (nextMatched.size >= allPairsCount) {
+                val elapsedMs = System.currentTimeMillis() - q.startedAtMs
+                applyEnGameEvaluation(
+                    cur = cur.copy(flippedCardIndices = emptyList(), matchedPairIds = emptySet()),
+                    isCorrect = true,
+                    elapsedMs = elapsedMs.coerceAtMost(4500L),
+                    isVoiceCritical = false
+                )
+            } else {
+                _enGameState.value = cur.copy(
+                    flippedCardIndices = emptyList(),
+                    matchedPairIds = nextMatched,
+                    score = cur.score + 45,
+                    combo = cur.combo + 1,
+                    maxCombo = maxOf(cur.maxCombo, cur.combo + 1),
+                    hitPulseTick = cur.hitPulseTick + 1,
+                    lastFeedbackKo = "짝 일치! +45점 (${nextMatched.size}/$allPairsCount 쌍 완료)",
+                    lastSpeedTagKo = "MATCH!"
+                )
+            }
+        } else {
+            _enGameState.value = cur.copy(
+                flippedCardIndices = nextOpen,
+                combo = 0,
+                missPulseTick = cur.missPulseTick + 1,
+                lastFeedbackKo = "짝이 달라요! 위치를 기억하고 다시 뒤집어 보세요.",
+                lastSpeedTagKo = "RETRY"
+            )
+        }
+    }
+
+    fun startEnGameVoiceBossAttack() {
+        val cur = _enGameState.value
+        val q = cur.currentQuestion ?: return
+        if (cur.phase != EnGamePhase.PLAYING) return
+        voiceEngine.startListening(
+            locale = Locale.US,
+            onResult = { spoken, durationMs ->
+                val report = PronunciationAnalyzer.analyze(
+                    targetText = q.audioTextEn,
+                    recognizedText = spoken,
+                    durationMs = durationMs
+                )
+                val passed = report.overallScore >= 45 || spoken.trim().split(Regex("\\s+")).size >= 2
+                applyEnGameEvaluation(
+                    cur = _enGameState.value,
+                    isCorrect = passed,
+                    elapsedMs = durationMs,
+                    isVoiceCritical = true
+                )
+            }
+        )
+    }
+
+    private fun applyEnGameEvaluation(
+        cur: EnGameUiState,
+        isCorrect: Boolean,
+        elapsedMs: Long,
+        isVoiceCritical: Boolean
+    ) {
+        val q = cur.currentQuestion ?: return
+        val eval = EnGameMathEngine.evaluateAnswer(
+            state = cur,
+            isCorrect = isCorrect,
+            elapsedMs = elapsedMs,
+            isVoiceCritical = isVoiceCritical,
+            correctLabel = q.correctAnswer
+        )
+
+        val nextScore = cur.score + eval.scoreDelta
+        val nextHighScore = maxOf(cur.highScore, nextScore)
+        val nextMaxCombo = maxOf(cur.maxCombo, eval.nextCombo)
+        val nextLives = if (isCorrect) cur.lives else (cur.lives - 1).coerceAtLeast(0)
+        val nextFeverTurns = when {
+            eval.feverJustActivated -> 5
+            cur.feverTurnsLeft > 0 && isCorrect -> (cur.feverTurnsLeft - 1).coerceAtLeast(0)
+            !isCorrect -> 0
+            else -> 0
+        }
+        val nextFeverGauge = if (nextFeverTurns == 0 && cur.feverTurnsLeft > 0) 0 else eval.nextFeverGauge
+
+        var nextWave = cur.waveNumber
+        var nextBossHp = cur.bossHp
+        var nextBossMaxHp = cur.bossMaxHp
+        var waveBonusFeedback = eval.feedbackKo
+        if (cur.mode == EnGameMode.VOICE_BOSS_RUSH && isCorrect) {
+            nextBossHp = (cur.bossHp - eval.bossDamage).coerceAtLeast(0)
+            if (nextBossHp <= 0) {
+                nextWave += 1
+                nextBossMaxHp = 100 + (nextWave - 1) * 35
+                nextBossHp = nextBossMaxHp
+                waveBonusFeedback = "WAVE ${nextWave - 1} 보스 격파!! 다음 보스 출현! (+${eval.scoreDelta}점)"
+            }
+        }
+
+        val updatedMissed = if (!isCorrect) {
+            cur.missedWords + (q.audioTextEn to q.correctAnswer)
+        } else {
+            cur.missedWords
+        }
+
+        // Persist SM-2 recall, daily missions & wrong-answer notebook automatically
+        val wordId = q.wordId
+        if (!wordId.isNullOrBlank()) {
+            viewModelScope.launch {
+                val grade = if (isCorrect) RecallGrade.GOOD else RecallGrade.AGAIN
+                localStore.recordWordSm2Recall(wordId = wordId, grade = grade)
+                if (isCorrect) {
+                    localStore.recordDailyWordOutcome(wordId, q.audioTextEn, q.correctAnswer, known = true)
+                    localStore.advanceVocabMission(MissionKind.DAILY_NEW_WORDS, 1)
+                    if (cur.mode == EnGameMode.VOICE_BOSS_RUSH) {
+                        localStore.advanceVocabMission(MissionKind.DAILY_LISTENING_SPEAK, 1)
+                    }
+                } else {
+                    localStore.recordDailyWordOutcome(wordId, q.audioTextEn, q.correctAnswer, known = false)
+                }
+            }
+        }
+
+        val updatedState = cur.copy(
+            eloRating = eval.nextElo,
+            score = nextScore,
+            highScore = nextHighScore,
+            combo = eval.nextCombo,
+            maxCombo = nextMaxCombo,
+            lives = nextLives,
+            feverGauge = nextFeverGauge,
+            feverTurnsLeft = nextFeverTurns,
+            waveNumber = nextWave,
+            bossHp = nextBossHp,
+            bossMaxHp = nextBossMaxHp,
+            totalAnswered = cur.totalAnswered + 1,
+            correctCount = cur.correctCount + (if (isCorrect) 1 else 0),
+            selectedTokens = emptyList(),
+            lastFeedbackKo = waveBonusFeedback,
+            lastSpeedTagKo = eval.speedTagKo,
+            lastScoreDelta = eval.scoreDelta,
+            hitPulseTick = if (isCorrect) cur.hitPulseTick + 1 else cur.hitPulseTick,
+            missPulseTick = if (!isCorrect) cur.missPulseTick + 1 else cur.missPulseTick,
+            missedWords = updatedMissed
+        )
+
+        if (nextLives <= 0) {
+            finishEnGameSession(updatedState)
+            return
+        }
+
+        val nextQuestion = nextEnGameQuestion(mode = updatedState.mode, elo = updatedState.eloRating)
+        _enGameState.value = updatedState.copy(currentQuestion = nextQuestion)
+        if (updatedState.mode == EnGameMode.VOICE_BOSS_RUSH) {
+            listenRpgEnglish(nextQuestion.audioTextEn)
+        }
+    }
+
+    private fun nextEnGameQuestion(mode: EnGameMode, elo: Int): com.example.engine.EnGameQuestion {
+        val vocabPool = (VocabRepository.allWords + harvestedApiWords.value).distinctBy { it.id }
+        val travelSentences = TravelCurriculumRepository.allScenarios.flatMap { it.sentences }
+        val q = EnGameMathEngine.generateQuestion(
+            mode = mode,
+            eloRating = elo,
+            vocabPool = vocabPool,
+            weakWordIds = weakWordIds.value,
+            travelSentences = travelSentences,
+            recentIds = enGameRecentWordIds.toSet()
+        )
+        q.wordId?.let { id ->
+            enGameRecentWordIds.addLast(id)
+            while (enGameRecentWordIds.size > 12) enGameRecentWordIds.removeFirst()
+        }
+        return q
+    }
+
+    private fun finishEnGameSession(finalState: EnGameUiState) {
+        if (finalState.phase == EnGamePhase.RESULT) return
+        enGameTimerJob?.cancel()
+        stopVoiceIo()
+        val baseSpec = RewardConfig.specFor(RewardEventType.MINIGAME_COMPLETED)
+        val coins = (baseSpec.coins + finalState.score / 30).coerceIn(5, 80)
+        val xp = (baseSpec.xp + finalState.correctCount * 3).coerceIn(12, 120)
+        val castleBonus = if (finalState.correctCount >= 5) 5 else 2
+        val sessionId = "engame_${finalState.mode.name}_${finalState.score}_${finalState.totalAnswered}_${System.currentTimeMillis() / 10000L}"
+
+        _enGameState.value = finalState.copy(
+            phase = EnGamePhase.RESULT,
+            earnedCoins = coins,
+            earnedXp = xp,
+            currentQuestion = null
+        )
+
+        viewModelScope.launch {
+            val ledgerResult = localStore.grantIdempotentReward(
+                eventId = sessionId,
+                eventType = RewardEventType.MINIGAME_COMPLETED,
+                xpDelta = xp,
+                coinDelta = coins,
+                reason = "EnGame ${finalState.mode.titleKo} 완료 (${finalState.score}점)",
+                sessionId = sessionId
+            )
+            if (finalState.correctCount >= 3) {
+                localStore.advanceVocabMission(MissionKind.DAILY_REVIEW_DUE, 1)
+            }
+            val result = localStore.recordLearningAchievement(
+                xpDelta = 0,
+                coinsDelta = 0,
+                wordsDelta = finalState.correctCount.coerceAtLeast(1),
+                castleHpDelta = castleBonus,
+                missionCompleted = finalState.correctCount >= 5
+            )
+            if (ledgerResult.leveledUpTo != null) {
+                showToast("레벨 업! Lv.${ledgerResult.leveledUpTo.level} ${ledgerResult.leveledUpTo.titleKo}!")
+            }
+            notifySpecialMilestones(result)
+            flushActiveStudyTimeLog(showConfirmation = false)
+        }
+    }
+
     private fun notifySpecialMilestones(result: LearningAchievementResult) {
         if (result.streakMilestoneHit != null) {
             _streakMilestoneEvent.value = StreakMilestoneEvent(
                 newStreakCount = result.streakMilestoneHit,
                 todayWordsCompleted = result.todayWordsCompleted
             )
+        }
+        if (!_firebaseUserUid.value.isNullOrBlank()) {
+            refreshFamilyLeaderboard(manual = false)
         }
         notifySpecialMilestones(result.unlockedBoss, result.leveledUp)
     }
@@ -2966,6 +3845,8 @@ class SpeakQuestViewModel(
         loopJob?.cancel()
         callClockJob?.cancel()
         studyStopwatchJob?.cancel()
+        enGameTimerJob?.cancel()
+        familyLeaderboardSyncJob?.cancel()
         voiceEngine.release()
     }
 }

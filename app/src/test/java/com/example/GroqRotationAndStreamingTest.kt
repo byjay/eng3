@@ -224,41 +224,12 @@ class GroqRotationAndStreamingTest {
     }
 
     @Test
-    fun `groq live BuildConfig keys diagnostic probe`() = runBlocking {
+    fun `production BuildConfig does not bundle any client-side Groq API keys`() {
         val engine = HybridAiCoachEngine(slotStore = null)
-        val activeKeys = engine.configuredGroqEnvKeys()
-
-        println("===== GROQ 5-KEY ENV DIAGNOSTIC =====")
-        println("Configured real keys in BuildConfig: ${activeKeys.size} / 5")
-        val configuredIndices = activeKeys.map { it.first }.toSet()
-        for (i in 1..5) {
-            val status = if (i in configuredIndices) "REGISTERED" else "NOT_SET (placeholder or empty)"
-            println("  GROQ_API_KEY_$i: $status")
-        }
-
-        if (activeKeys.isEmpty()) {
-            println("No real GROQ_API_KEY_1..5 registered yet in AI Studio Secrets. Skipping live network calls.")
-            return@runBlocking
-        }
-
-        var successCount = 0
-        for ((idx, key) in activeKeys) {
-            val result = engine.probeGroqKey(
-                keyNum = idx,
-                apiKey = key,
-                userMessage = "Reply with only: Hello from Groq key $idx!"
-            )
-            println(
-                "  [LIVE PROBE] Key #$idx -> success=${result.success}, http=${result.httpCode}, " +
-                    "latency=${result.latencyMs}ms, chunks=${result.chunkCount}, " +
-                    "preview=\"${result.responsePreview}\", error=${result.errorMessage}"
-            )
-            if (result.success) successCount++
-        }
-        println("===== GROQ LIVE SUMMARY: $successCount / ${activeKeys.size} keys passed =====")
+        val bundledKeys = engine.configuredGroqEnvKeys()
         assertTrue(
-            "Expected at least one registered Groq key to succeed live, but 0/${activeKeys.size} succeeded",
-            successCount > 0
+            "APK BuildConfig must never bundle Groq API keys; use Firebase AI Logic instead",
+            bundledKeys.isEmpty()
         )
     }
 }

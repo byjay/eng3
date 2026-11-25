@@ -75,20 +75,51 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.PatternSentenceRepository
+import com.example.data.SquirrelRpgRepository
 import com.example.data.VocabRepository
+import com.example.engine.LearningMission
+import com.example.engine.MediaReviewStatus
+import com.example.engine.MemoryPalaceEntry
+import com.example.engine.MemoryPalaceRoom
+import com.example.engine.RecallGrade
+import com.example.engine.RewardTransaction
+import com.example.engine.TypedRecallResult
+import com.example.engine.VocabMediaResolver
 import com.example.engine.VocabMnemonicEngine
 import com.example.engine.VoiceEngineState
+import com.example.engine.WordLearningProgress
 import com.example.model.LoopRepeatMode
 import com.example.model.PronunciationReport
+import com.example.model.SquirrelJobHero
+import com.example.model.UserProgress
 import com.example.model.VocabLearningMethod
 import com.example.model.VocabStudyTrack
 import com.example.model.VocabTopic
 import com.example.model.VocabWord
 import com.example.model.WordKnowledgeStatus
+import com.example.model.WrongNoteRecord
+import androidx.compose.material.icons.rounded.BookmarkAdd
+import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.HelpOutline
+import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.School
+import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material.icons.rounded.Verified
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.runtime.LaunchedEffect
 import com.example.ui.components.Elevated3DCard
+import com.example.ui.components.MaterialButtonStyle
+import com.example.ui.components.MaterialLearningButton
+import com.example.ui.components.MediaAuditAndAnalyticsSheetContent
 import com.example.ui.components.PronunciationReportCard
+import com.example.ui.components.StitchIconButton
+import com.example.ui.components.StitchIconPillTab
 import com.example.ui.components.Tactile3DButton
 import com.example.ui.components.VisualMnemonicAndChunkCard
+import com.example.ui.components.VocabAdventureHubSection
 import com.example.ui.components.VocabMemorizationDeckView
 import com.example.ui.components.VoiceWaveformOrb3D
 import com.example.ui.components.YouTubeWordContextDialog
@@ -163,13 +194,45 @@ fun SpartaVocabScreen(
     onTogglePatternKorean: () -> Unit,
     onSpeakPattern: () -> Unit,
     onStartPatternSpeech: () -> Unit,
-    onEvaluateTypedPattern: (String) -> Unit
+    onEvaluateTypedPattern: (String) -> Unit,
+    userProgress: UserProgress = UserProgress(),
+    wordSm2Progress: Map<String, WordLearningProgress> = emptyMap(),
+    dailyVocabMissions: List<LearningMission> = emptyList(),
+    memoryPalaceEntries: Map<String, MemoryPalaceEntry> = emptyMap(),
+    onRecordSm2Recall: (VocabWord, RecallGrade, Boolean) -> Unit = { w, g, _ ->
+        onRecordFocusWordResult(w.id, g == RecallGrade.GOOD || g == RecallGrade.EASY)
+    },
+    onClaimMission: (String) -> Unit = {},
+    onSaveMemoryPalace: (String, MemoryPalaceRoom, String) -> Unit = { _, _, _ -> },
+    onOpenEnGameHub: () -> Unit = {},
+    onLogAudioListen: () -> Unit = {},
+    activeSquirrelHero: SquirrelJobHero = SquirrelRpgRepository.findHeroById(""),
+    playerNickname: String = "모험가",
+    weakWordIds: Set<String> = emptySet(),
+    dailyGoalTarget: Int = 10,
+    rewardLedger: List<RewardTransaction> = emptyList(),
+    mediaReviewOverrides: Map<String, MediaReviewStatus> = emptyMap(),
+    onSetDailyWordGoal: (Int) -> Unit = {},
+    onToggleSuspendWord: (String, String) -> Unit = { _, _ -> },
+    onSubmitTypedRecall: ((VocabWord, String) -> TypedRecallResult)? = null,
+    onSetMediaReviewStatus: (String, MediaReviewStatus) -> Unit = { _, _ -> },
+    dueReviewLaunchNonce: Int = 0,
+    wrongNoteRecords: Map<String, WrongNoteRecord> = emptyMap()
 ) {
     val context = LocalContext.current
     var activeSubMode by remember { mutableIntStateOf(0) } // 0 = 단어암기 카드, 1 = 퀴즈·발음, 2 = 패턴 블록
+    var isDueReviewMode by remember { mutableStateOf(false) }
     var manualInput by remember(state.currentWord?.id, activeSubMode, patternState.activeDrillIndex) { mutableStateOf("") }
     var youtubeClipQuery by remember { mutableStateOf<String?>(null) }
     var showSettingsSheet by remember { mutableStateOf(false) }
+    var showAuditSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(dueReviewLaunchNonce) {
+        if (dueReviewLaunchNonce > 0) {
+            activeSubMode = 0
+            isDueReviewMode = true
+        }
+    }
 
     val micLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -211,9 +274,13 @@ fun SpartaVocabScreen(
             VocabSettingsBottomSheetContent(
                 state = state,
                 activeStudySec = activeStudySec,
+                dailyGoalTarget = dailyGoalTarget,
+                harvestedApiWords = harvestedApiWords,
                 harvestedApiCount = harvestedApiCount,
                 harvestStatusKo = harvestStatusKo,
                 isHarvestingWords = isHarvestingWords,
+                mediaReviewOverrides = mediaReviewOverrides,
+                onSelectDailyWordGoal = onSetDailyWordGoal,
                 onSelectTier1To5 = onSelectTier1To5,
                 onSelectTrack = onSelectTrack,
                 onSelectTopic = onSelectTopic,
@@ -230,7 +297,30 @@ fun SpartaVocabScreen(
                 onFlushStudyLog = {
                     onFlushStudyLog()
                     showSettingsSheet = false
+                },
+                onOpenAuditAndAnalytics = {
+                    showSettingsSheet = false
+                    showAuditSheet = true
                 }
+            )
+        }
+    }
+
+    if (showAuditSheet) {
+        val combinedAuditWords = remember(harvestedApiWords) {
+            (VocabRepository.allWords + harvestedApiWords).distinctBy { it.id }
+        }
+        ModalBottomSheet(
+            onDismissRequest = { showAuditSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            MediaAuditAndAnalyticsSheetContent(
+                allWords = combinedAuditWords,
+                reviewOverrides = mediaReviewOverrides,
+                rewardLedger = rewardLedger,
+                onSetMediaReviewStatus = onSetMediaReviewStatus,
+                onClose = { showAuditSheet = false }
             )
         }
     }
@@ -242,7 +332,7 @@ fun SpartaVocabScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 1. Clean Learning-App Top Mode Switch: 단어암기 | 퀴즈·발음 | 패턴 블록 + 설정
+        // 1. Google Stitch Icon-First Mode Dock: 암기 | 퀴즈 | 패턴 + 설정 아이콘
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -250,8 +340,8 @@ fun SpartaVocabScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -259,27 +349,27 @@ fun SpartaVocabScreen(
                         modifier = Modifier.padding(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        ModeSegmentTab(
-                            label = "암기 카드",
+                        StitchIconPillTab(
                             icon = Icons.Outlined.Style,
+                            label = "암기",
                             selected = activeSubMode == 0,
                             accent = StudioCobalt,
                             tag = "tab_vocab_flashcards",
                             modifier = Modifier.weight(1f),
                             onClick = { activeSubMode = 0 }
                         )
-                        ModeSegmentTab(
-                            label = "퀴즈·발음",
+                        StitchIconPillTab(
                             icon = Icons.Outlined.Quiz,
+                            label = "퀴즈",
                             selected = activeSubMode == 1,
                             accent = SkyQuestBlue,
                             tag = "tab_vocab_anti_abc",
                             modifier = Modifier.weight(1f),
                             onClick = { activeSubMode = 1 }
                         )
-                        ModeSegmentTab(
-                            label = "패턴 블록",
+                        StitchIconPillTab(
                             icon = Icons.Outlined.SwapHoriz,
+                            label = "패턴",
                             selected = activeSubMode == 2,
                             accent = StudioIris,
                             tag = "tab_pattern_studio",
@@ -289,31 +379,44 @@ fun SpartaVocabScreen(
                     }
                 }
                 if (activeSubMode != 2) {
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { showSettingsSheet = true }
-                            .testTag("vocab_open_settings_sheet")
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Outlined.Tune,
-                                contentDescription = "학습 설정",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
+                    StitchIconButton(
+                        icon = Icons.Outlined.Tune,
+                        contentDescription = "학습 설정",
+                        accent = StudioCobalt,
+                        size = 52.dp,
+                        iconSize = 22.dp,
+                        tag = "vocab_open_settings_sheet",
+                        onClick = { showSettingsSheet = true }
+                    )
                 }
             }
         }
 
         if (activeSubMode == 0) {
-            // === MODE 0: DEDICATED LEARNING-APP VOCABULARY MEMORIZATION FLASHCARD STUDIO ===
+            // === MODE 0: v2 VOCAB ADVENTURE HUB + IMAGE-FIRST MEMORIZATION STUDIO ===
+            item {
+                val combinedPool = remember(harvestedApiWords) {
+                    (VocabRepository.allWords + harvestedApiWords).distinctBy { it.id }
+                }
+                VocabAdventureHubSection(
+                    progress = userProgress,
+                    wordSm2Progress = wordSm2Progress,
+                    dailyMissions = dailyVocabMissions,
+                    memoryPalaceEntries = memoryPalaceEntries,
+                    allWordsPool = combinedPool,
+                    isDueReviewActive = isDueReviewMode,
+                    onToggleDueReview = { isDueReviewMode = !isDueReviewMode },
+                    onClaimMission = onClaimMission,
+                    onOpenEnGameHub = onOpenEnGameHub,
+                    onSpeakEnglish = onSpeakChunk,
+                    onSaveMemoryPalace = onSaveMemoryPalace,
+                    hero = activeSquirrelHero,
+                    playerNickname = playerNickname,
+                    weakWordIds = weakWordIds,
+                    masteredWordsCount = masteredWordsCount,
+                    rewardLedger = rewardLedger
+                )
+            }
             item {
                 VocabMemorizationDeckView(
                     selectedGrade = state.grade,
@@ -339,7 +442,18 @@ fun SpartaVocabScreen(
                         val sentence = targetWord.examples.firstOrNull()?.english ?: targetWord.exampleEn
                         onSpeakChunk(sentence)
                         activeSubMode = 1
-                    }
+                    },
+                    wordSm2Progress = wordSm2Progress,
+                    memoryPalaceEntries = memoryPalaceEntries,
+                    isDueReviewMode = isDueReviewMode,
+                    onExitDueReviewMode = { isDueReviewMode = false },
+                    onRecordSm2Recall = onRecordSm2Recall,
+                    onSaveMemoryPalace = onSaveMemoryPalace,
+                    onLogAudioListen = onLogAudioListen,
+                    dailyGoalTarget = dailyGoalTarget,
+                    onSubmitTypedRecall = onSubmitTypedRecall,
+                    onToggleSuspendWord = onToggleSuspendWord,
+                    wrongNoteRecords = wrongNoteRecords
                 )
             }
         } else if (activeSubMode == 1) {
@@ -739,33 +853,32 @@ fun SpartaVocabScreen(
 
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
-                                                Tactile3DButton(
-                                                    text = "알아요",
-                                                    containerColor = AdventureEmerald,
-                                                    shadowColor = AdventureEmeraldShadow,
-                                                    height = 44.dp,
-                                                    modifier = Modifier.weight(1f),
+                                                MaterialLearningButton(
+                                                    text = "완벽 암기",
+                                                    icon = Icons.Rounded.Verified,
+                                                    accent = StudioCobalt,
+                                                    style = MaterialButtonStyle.FILLED,
+                                                    modifier = Modifier.weight(1.1f),
                                                     tag = "vocab_know_button",
                                                     onClick = { onMarkWordKnowledge(WordKnowledgeStatus.KNOWN) }
                                                 )
-                                                Tactile3DButton(
+                                                MaterialLearningButton(
                                                     text = "애매",
-                                                    containerColor = TrophyGold,
-                                                    shadowColor = TrophyGoldShadow,
-                                                    contentColor = Color.White,
-                                                    height = 44.dp,
-                                                    modifier = Modifier.weight(0.9f),
+                                                    icon = Icons.Rounded.HelpOutline,
+                                                    accent = TrophyGoldShadow,
+                                                    style = MaterialButtonStyle.TONAL,
+                                                    modifier = Modifier.weight(0.85f),
                                                     tag = "vocab_fuzzy_button",
                                                     onClick = { onMarkWordKnowledge(WordKnowledgeStatus.FUZZY) }
                                                 )
-                                                Tactile3DButton(
-                                                    text = "몰라요",
-                                                    containerColor = SpartaRed,
-                                                    shadowColor = SpartaRedShadow,
-                                                    height = 44.dp,
-                                                    modifier = Modifier.weight(1f),
+                                                MaterialLearningButton(
+                                                    text = "오답 노트",
+                                                    icon = Icons.Rounded.BookmarkAdd,
+                                                    accent = SpartaRed,
+                                                    style = MaterialButtonStyle.OUTLINED,
+                                                    modifier = Modifier.weight(1.1f),
                                                     tag = "vocab_unknown_button",
                                                     onClick = { onMarkWordKnowledge(WordKnowledgeStatus.UNKNOWN) }
                                                 )
@@ -883,21 +996,19 @@ fun SpartaVocabScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Tactile3DButton(
-                                            text = if (state.isLoopPlaying) "중지" else "예문 듣기",
-                                            icon = if (state.isLoopPlaying) Icons.Outlined.Stop else Icons.AutoMirrored.Outlined.VolumeUp,
-                                            containerColor = SkyQuestBlue,
-                                            shadowColor = SkyQuestBlueShadow,
-                                            height = 46.dp,
+                                        MaterialLearningButton(
+                                            text = if (state.isLoopPlaying) "중지" else "듣기",
+                                            icon = if (state.isLoopPlaying) Icons.Outlined.Stop else Icons.Rounded.Headphones,
+                                            accent = StudioCobalt,
+                                            style = MaterialButtonStyle.FILLED,
                                             modifier = Modifier.weight(1f),
                                             onClick = { if (state.isLoopPlaying) onStopVoice() else onListenSentence() }
                                         )
-                                        Tactile3DButton(
+                                        MaterialLearningButton(
                                             text = "연속 듣기",
                                             icon = Icons.Outlined.Repeat,
-                                            containerColor = StudioIris,
-                                            shadowColor = RoyalPurpleShadow,
-                                            height = 46.dp,
+                                            accent = StudioIris,
+                                            style = MaterialButtonStyle.TONAL,
                                             modifier = Modifier.weight(1f),
                                             onClick = onListenAllExamples
                                         )
@@ -1113,22 +1224,21 @@ fun SpartaVocabScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Tactile3DButton(
+                            MaterialLearningButton(
                                 text = if (patternState.isLoopPlaying) "반복 중지" else "반복 듣기",
                                 icon = if (patternState.isLoopPlaying) Icons.Outlined.Stop else Icons.Outlined.Loop,
-                                containerColor = SkyQuestBlue,
-                                shadowColor = SkyQuestBlueShadow,
-                                height = 46.dp,
+                                accent = StudioCobalt,
+                                style = MaterialButtonStyle.FILLED,
                                 modifier = Modifier.weight(1f),
                                 tag = "pattern_loop_play_button",
                                 onClick = { if (patternState.isLoopPlaying) onStopVoice() else onSpeakPattern() }
                             )
-                            Tactile3DButton(
+                            MaterialLearningButton(
                                 text = if (patternState.showKorean) "해석 숨김" else "해석 보기",
-                                containerColor = CoralOrange,
-                                shadowColor = CoralOrangeShadow,
-                                height = 46.dp,
-                                modifier = Modifier.weight(0.75f),
+                                icon = Icons.Rounded.Translate,
+                                accent = StudioCoral,
+                                style = MaterialButtonStyle.TONAL,
+                                modifier = Modifier.weight(0.85f),
                                 onClick = onTogglePatternKorean
                             )
                         }
@@ -1244,9 +1354,13 @@ private fun ModeSegmentTab(
 private fun VocabSettingsBottomSheetContent(
     state: SpartaDrillState,
     activeStudySec: Int,
+    dailyGoalTarget: Int,
+    harvestedApiWords: List<VocabWord>,
     harvestedApiCount: Int,
     harvestStatusKo: String,
     isHarvestingWords: Boolean,
+    mediaReviewOverrides: Map<String, MediaReviewStatus>,
+    onSelectDailyWordGoal: (Int) -> Unit,
     onSelectTier1To5: (Int) -> Unit,
     onSelectTrack: (VocabStudyTrack) -> Unit,
     onSelectTopic: (VocabTopic) -> Unit,
@@ -1254,9 +1368,16 @@ private fun VocabSettingsBottomSheetContent(
     onStartLevelTest: () -> Unit,
     onStartPreviewMode: () -> Unit,
     onHarvestDaily50Words: () -> Unit,
-    onFlushStudyLog: () -> Unit
+    onFlushStudyLog: () -> Unit,
+    onOpenAuditAndAnalytics: () -> Unit
 ) {
     val clockText = "%02d:%02d".format(activeStudySec / 60, activeStudySec % 60)
+    val auditSummary = remember(harvestedApiWords, mediaReviewOverrides) {
+        VocabMediaResolver.auditStats(
+            words = (VocabRepository.allWords + harvestedApiWords).distinctBy { it.id },
+            reviewOverrides = mediaReviewOverrides
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -1293,26 +1414,57 @@ private fun VocabSettingsBottomSheetContent(
             }
         }
 
-        // Learning Method
+        // Learning Method with M3 Visual Icons
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("학습법", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(VocabLearningMethod.entries) { method ->
                     val active = state.learningMethod == method
+                    val methodIcon = when (method) {
+                        VocabLearningMethod.HIPPOCAMPUS -> Icons.Rounded.Lightbulb
+                        VocabLearningMethod.WORD_ASSOCIATION -> Icons.Rounded.Extension
+                        VocabLearningMethod.EBBINGHAUS_SM2 -> Icons.Rounded.Replay
+                        VocabLearningMethod.ACTIVE_RECALL -> Icons.Rounded.Visibility
+                        VocabLearningMethod.CONTEXT_SPEAKING -> Icons.Rounded.RecordVoiceOver
+                    }
+                    MaterialLearningButton(
+                        text = method.labelKo,
+                        icon = methodIcon,
+                        accent = StudioIris,
+                        style = if (active) MaterialButtonStyle.FILLED else MaterialButtonStyle.TONAL,
+                        tag = "vocab_method_${method.name}",
+                        onClick = { onSelectLearningMethod(method) }
+                    )
+                }
+            }
+        }
+
+        // Daily Word Goal Customization (5 / 10 / 15 / 20 words)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = "하루 단어 목표 (${dailyGoalTarget}개)",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(5, 10, 15, 20).forEach { goalVal ->
+                    val selected = dailyGoalTarget == goalVal
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = if (active) StudioIris else MaterialTheme.colorScheme.surfaceVariant,
+                        color = if (selected) AdventureEmerald else MaterialTheme.colorScheme.surfaceVariant,
                         modifier = Modifier
+                            .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .clickable { onSelectLearningMethod(method) }
-                            .testTag("vocab_method_${method.name}")
+                            .clickable { onSelectDailyWordGoal(goalVal) }
+                            .testTag("vocab_daily_goal_$goalVal")
                     ) {
-                        Text(
-                            text = method.labelKo,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (active) Color.White else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
-                        )
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 8.dp)) {
+                            Text(
+                                text = "${goalVal}단어",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }
@@ -1391,25 +1543,25 @@ private fun VocabSettingsBottomSheetContent(
             }
         }
 
-        // Quick Tools: Level Test, Preview, +50 API Harvest
+        // Quick Tools: Level Test, Preview (Material 3 Icon Buttons)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Tactile3DButton(
+            MaterialLearningButton(
                 text = "레벨테스트",
-                containerColor = StudioCoral,
-                shadowColor = CoralOrangeShadow,
-                height = 44.dp,
+                icon = Icons.Rounded.School,
+                accent = StudioCoral,
+                style = MaterialButtonStyle.FILLED,
                 modifier = Modifier.weight(1f),
                 tag = "start_level_test_chip",
                 onClick = onStartLevelTest
             )
-            Tactile3DButton(
+            MaterialLearningButton(
                 text = "예습 모드",
-                containerColor = StudioIris,
-                shadowColor = RoyalPurpleShadow,
-                height = 44.dp,
+                icon = Icons.Rounded.Visibility,
+                accent = StudioIris,
+                style = MaterialButtonStyle.TONAL,
                 modifier = Modifier.weight(1f),
                 onClick = onStartPreviewMode
             )
@@ -1445,6 +1597,50 @@ private fun VocabSettingsBottomSheetContent(
                     }
                     Text("+50 수집", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = SkyQuestBlue)
                 }
+            }
+        }
+
+        // P7 Media & Mnemonic Audit Status Dashboard + Section 13 Analytics Launcher
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = AdventureEmerald.copy(alpha = 0.08f),
+            border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.32f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClick = onOpenAuditAndAnalytics)
+                .testTag("vocab_media_audit_card")
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "이미지·연상 검수 & 학습 분석 (P7)",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold),
+                        color = AdventureEmerald
+                    )
+                    Text(
+                        text = "상세 열기 >",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = StudioCobalt
+                    )
+                }
+                Text(
+                    text = "총 ${auditSummary.totalWords}단어 · 의미 일러스트 ${auditSummary.bundledVisualCount}개 · 검증 어근 ${auditSummary.verifiedMorphemeCount}개 · 검수 대기 ${auditSummary.needsHumanReviewCount}개",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "라이선스: ${auditSummary.approvedLicenseLabel}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
 

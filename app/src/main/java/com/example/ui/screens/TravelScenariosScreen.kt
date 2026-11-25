@@ -59,11 +59,15 @@ import com.example.engine.VoiceEngineState
 import com.example.model.AiHumanTutor
 import com.example.model.ScenarioProgress
 import com.example.model.TravelScenario
+import androidx.compose.material.icons.outlined.RecordVoiceOver
 import com.example.ui.components.Elevated3DCard
 import com.example.ui.components.GoogleStreetViewStage
 import com.example.ui.components.PronunciationReportCard
+import com.example.ui.components.StitchIconBadge
+import com.example.ui.components.StitchIconPillTab
 import com.example.ui.components.Tactile3DButton
 import com.example.ui.components.VoiceWaveformOrb3D
+import com.example.ui.components.travelZoneStitchIcon
 import com.example.ui.theme.AdventureEmerald
 import com.example.ui.theme.AdventureEmeraldShadow
 import com.example.ui.theme.CoralOrange
@@ -144,33 +148,38 @@ fun TravelScenariosScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. 10 Adventure Travel Zones
+        // 1. Google Stitch Iconified 10 Adventure Travel Zones
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "여행자 100가지 상황 · 10개 어드벤처 월드",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(TravelCurriculumRepository.zones) { zone ->
-                        val selected = zone.id == state.selectedZoneId
-                        val accent = Color(zone.accentHex)
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = if (selected) accent else MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.5.dp, if (selected) accent else MaterialTheme.colorScheme.outline),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .clickable { onSelectZone(zone.id) }
-                                .testTag("travel_zone_${zone.id}")
-                        ) {
-                            Text(
-                                text = "W${zone.id} ${zone.titleKo}",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                            )
-                        }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(TravelCurriculumRepository.zones) { zone ->
+                    val selected = zone.id == state.selectedZoneId
+                    val accent = Color(zone.accentHex)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onSelectZone(zone.id) }
+                            .padding(horizontal = 2.dp, vertical = 2.dp)
+                            .testTag("travel_zone_${zone.id}")
+                    ) {
+                        StitchIconBadge(
+                            icon = travelZoneStitchIcon(zone.id),
+                            contentDescription = zone.titleKo,
+                            accent = accent,
+                            filled = selected,
+                            size = 50.dp,
+                            iconSize = 23.dp,
+                            cornerBadgeText = "${zone.id}"
+                        )
+                        Text(
+                            text = zone.titleKo.take(4),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold
+                            ),
+                            color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
                     }
                 }
             }
@@ -254,33 +263,37 @@ fun TravelScenariosScreen(
             }
         }
 
-        // 3. Mode Toggle: 30-Sentence Shadowing vs Dynamic Twist Roleplay
+        // 3. Google Stitch Icon Mode Dock: 30문장 말하기 vs 돌발 대응
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Tactile3DButton(
-                    text = "30문장 듣고 말하기",
-                    containerColor = if (activeSubTab == 0) SkyQuestBlue else MaterialTheme.colorScheme.surface,
-                    shadowColor = if (activeSubTab == 0) SkyQuestBlueShadow else MaterialTheme.colorScheme.outline,
-                    contentColor = if (activeSubTab == 0) Color.White else MaterialTheme.colorScheme.onSurface,
-                    height = 46.dp,
-                    modifier = Modifier.weight(1f),
-                    tag = "travel_tab_sentences",
-                    onClick = { activeSubTab = 0 }
-                )
-                Tactile3DButton(
-                    text = "돌발 변수 대응 (3종)",
-                    icon = Icons.Outlined.Bolt,
-                    containerColor = if (activeSubTab == 1) CoralOrange else MaterialTheme.colorScheme.surface,
-                    shadowColor = if (activeSubTab == 1) CoralOrangeShadow else MaterialTheme.colorScheme.outline,
-                    contentColor = if (activeSubTab == 1) Color.White else MaterialTheme.colorScheme.onSurface,
-                    height = 46.dp,
-                    modifier = Modifier.weight(1f),
-                    tag = "travel_tab_twists",
-                    onClick = { activeSubTab = 1 }
-                )
+                Row(
+                    modifier = Modifier.padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    StitchIconPillTab(
+                        icon = Icons.Outlined.RecordVoiceOver,
+                        label = "30문장",
+                        selected = activeSubTab == 0,
+                        accent = SkyQuestBlue,
+                        tag = "travel_tab_sentences",
+                        modifier = Modifier.weight(1f),
+                        onClick = { activeSubTab = 0 }
+                    )
+                    StitchIconPillTab(
+                        icon = Icons.Outlined.Bolt,
+                        label = "돌발 3종",
+                        selected = activeSubTab == 1,
+                        accent = CoralOrange,
+                        tag = "travel_tab_twists",
+                        modifier = Modifier.weight(1f),
+                        onClick = { activeSubTab = 1 }
+                    )
+                }
             }
         }
 

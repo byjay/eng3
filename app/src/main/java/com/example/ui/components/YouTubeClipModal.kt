@@ -178,7 +178,7 @@ fun YouTubeWordContextDialog(
 
     var searchInput by remember(wordOrPhrase) { mutableStateOf(initialQuery) }
     var activeQuery by remember(wordOrPhrase) { mutableStateOf(initialQuery) }
-    var playerMode by remember { mutableIntStateOf(0) } // 0 = YT A-B, 1 = Filmot, 2 = YouGlish, 3 = Movie MP4
+    var playerMode by remember { mutableIntStateOf(2) } // 0 = Official YT Link, 1 = Filmot, 2 = YouGlish (Official Embed)
 
     // Tab 0: YouTube IFrame A-B Loop state
     var isLoadingYouTube by remember { mutableStateOf(true) }
@@ -436,10 +436,9 @@ fun YouTubeWordContextDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     listOf(
-                        0 to "유튜브 구간",
-                        1 to "Filmot",
                         2 to "YouGlish",
-                        3 to "영화 클립"
+                        1 to "Filmot",
+                        0 to "공식 YouTube"
                     ).forEach { (mode, label) ->
                         val active = playerMode == mode
                         Surface(
@@ -586,7 +585,7 @@ fun YouTubeWordContextDialog(
                                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 Text(
-                                                    text = "\"$activeQuery\" 자막 구간을 찾지 못했습니다",
+                                                    text = "저작권·이용약관 준수를 위해 공식 YouTube 앱/웹에서 \"$activeQuery\" 영어 회화 영상을 바로 검색합니다.",
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     color = Color.White,
                                                     textAlign = TextAlign.Center
@@ -594,13 +593,16 @@ fun YouTubeWordContextDialog(
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                     Surface(
                                                         shape = RoundedCornerShape(10.dp),
-                                                        color = StudioCobalt,
+                                                        color = RoseCrimson,
                                                         modifier = Modifier
                                                             .clip(RoundedCornerShape(10.dp))
-                                                            .clickable { playerMode = 1 }
+                                                            .clickable {
+                                                                YouTubeContextClipLauncher.openYouTubeConversationSearch(context, activeQuery)
+                                                            }
+                                                            .testTag("open_official_youtube_search_btn")
                                                     ) {
                                                         Text(
-                                                            text = "Filmot 검색",
+                                                            text = "YouTube 공식 검색",
                                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                                             color = Color.White,
                                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
@@ -608,13 +610,13 @@ fun YouTubeWordContextDialog(
                                                     }
                                                     Surface(
                                                         shape = RoundedCornerShape(10.dp),
-                                                        color = StudioCoral,
+                                                        color = StudioCobalt,
                                                         modifier = Modifier
                                                             .clip(RoundedCornerShape(10.dp))
                                                             .clickable { playerMode = 2 }
                                                     ) {
                                                         Text(
-                                                            text = "YouGlish 열기",
+                                                            text = "YouGlish 듣기",
                                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                                             color = Color.White,
                                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)

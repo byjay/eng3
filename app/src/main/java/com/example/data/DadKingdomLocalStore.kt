@@ -4,8 +4,28 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.engine.DailyMissionEngine
+import com.example.engine.LearningMission
+import com.example.engine.LedgerGrantResult
+import com.example.engine.MediaReviewStatus
+import com.example.engine.MemoryPalaceEntry
+import com.example.engine.MemoryPalaceRoom
+import com.example.engine.MissionCadence
+import com.example.engine.MissionKind
+import com.example.engine.MissionStatus
+import com.example.engine.ParentPinCrypto
+import com.example.engine.PinVerificationResult
+import com.example.engine.RecallGrade
+import com.example.engine.RewardEventType
+import com.example.engine.RewardLedgerEngine
+import com.example.engine.RewardTransaction
+import com.example.engine.Sm2ReviewScheduler
+import com.example.engine.VocabAnalyticsTracker
+import com.example.engine.WordLearningProgress
+import com.example.engine.WordLearningStatus
 import com.example.model.DadAllowanceMission
 import com.example.model.GiftRequestItem
 import com.example.model.GuestInviteSession
@@ -18,6 +38,7 @@ import com.example.model.ScorecardEntry
 import com.example.model.StudyScheduleItem
 import com.example.model.StudyTimeLogEntry
 import com.example.model.UserProgress
+import com.example.model.WrongNoteRecord
 import com.example.ui.components.DailyStudyMetric
 import com.example.ui.components.TodayWordResultEntry
 import com.example.ui.components.WeeklyStudyReportData
@@ -42,10 +63,19 @@ data class LearningAchievementResult(
 
 class DadKingdomLocalStore(private val context: Context) {
 
+    companion object {
+        const val CURRENT_SCHEMA_VERSION = 2
+    }
+
+    private val schemaVersionKey = intPreferencesKey("datastore_schema_version")
     private val daughterNameKey = stringPreferencesKey("daughter_name")
     private val dadNameKey = stringPreferencesKey("dad_name")
     private val momNameKey = stringPreferencesKey("mom_name")
-    private val parentPinKey = stringPreferencesKey("parent_pin")
+    private val parentPinFailCountKey = intPreferencesKey("parent_pin_fail_count")
+    private val parentPinLockUntilMsKey = longPreferencesKey("parent_pin_lock_until_ms")
+    private val parentPinKey = stringPreferencesKey("parent_pin") // Legacy plaintext key (auto-cleared on save)
+    private val parentPinSaltKey = stringPreferencesKey("parent_pin_salt")
+    private val parentPinHashKey = stringPreferencesKey("parent_pin_hash")
     private val selectedGradeKey = intPreferencesKey("selected_grade")
     private val selectedTeacherKey = stringPreferencesKey("selected_teacher")
     private val dailyGoalKey = intPreferencesKey("daily_goal")
@@ -58,6 +88,7 @@ class DadKingdomLocalStore(private val context: Context) {
     private val unlockedItemsKey = stringPreferencesKey("unlocked_items_json")
     private val masteredWordsKey = stringPreferencesKey("mastered_words_json")
     private val weakWordsKey = stringPreferencesKey("weak_words_json")
+    private val wrongNoteRecordsKey = stringPreferencesKey("wrong_note_records_json")
     private val clearedScenariosKey = stringPreferencesKey("cleared_scenarios_json")
     private val dadMissionsKey = stringPreferencesKey("dad_missions_json")
     private val giftRequestsKey = stringPreferencesKey("gift_requests_json")
@@ -78,10 +109,12 @@ class DadKingdomLocalStore(private val context: Context) {
     private val giftTicketsKey = intPreferencesKey("gift_tickets")
 
     // Kakao Session
+    private val kakaoUserIdKey = stringPreferencesKey("kakao_user_id")
     private val kakaoNicknameKey = stringPreferencesKey("kakao_nickname")
     private val kakaoProfileUrlKey = stringPreferencesKey("kakao_profile_url")
     private val kakaoTokenKey = stringPreferencesKey("kakao_access_token")
     private val kakaoFriendsKey = stringPreferencesKey("kakao_friends_json")
+    private val shareStreakWithFriendsKey = booleanPreferencesKey("share_streak_with_friends")
 
     // Daily Free Word API Accumulated DB (50+ fresh words/day) & 1~5 Tier + Cloudflare
     private val harvestedWordsKey = stringPreferencesKey("harvested_api_words_json")
@@ -105,6 +138,15 @@ class DadKingdomLocalStore(private val context: Context) {
     private val dailyWordMetricsKey = stringPreferencesKey("daily_word_metrics_json")
     private val todayWordResultsKey = stringPreferencesKey("today_word_results_json")
 
+    // v2 Master Spec Additive Keys (Zero destructive migration; unified with totalXpKey & coinsKey)
+    private val wordSm2ProgressKey = stringPreferencesKey("word_sm2_progress_json")
+    private val rewardLedgerKey = stringPreferencesKey("reward_ledger_json")
+    private val rewardEventIdsKey = stringPreferencesKey("reward_event_ids_json")
+    private val vocabMissionsKey = stringPreferencesKey("vocab_missions_json")
+    private val vocabMissionsDateKey = stringPreferencesKey("vocab_missions_date")
+    private val memoryPalaceKey = stringPreferencesKey("memory_palace_json")
+    private val mediaReviewOverridesKey = stringPreferencesKey("media_review_overrides_json")
+
     private fun todayIso(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
     val weeklyStudyReportFlow: Flow<WeeklyStudyReportData> = context.dadKingdomDataStore.data.map { prefs ->
@@ -112,7 +154,7 @@ class DadKingdomLocalStore(private val context: Context) {
         val storedDate = prefs[lastStudyDateKey] ?: today
         val todayWordsCompleted = if (storedDate == today) (prefs[todayWordsKey] ?: 0) else 0
         val streakCount = prefs[streakKey] ?: 0
-        val dailyGoal = (prefs[dailyGoalKey] ?: 10).coerceAtLeast(10)
+        val dailyGoal = (prefs[dailyGoalKey] ?: 10).coerceIn(5, 30)
 
         val metricsMap = parseDailyWordMetrics(prefs[dailyWordMetricsKey])
         val dayFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -215,11 +257,13 @@ class DadKingdomLocalStore(private val context: Context) {
     }
 
     val parentProfilesFlow: Flow<ParentProfiles> = context.dadKingdomDataStore.data.map { prefs ->
+        val hasHashedPin = !prefs[parentPinSaltKey].isNullOrBlank() && !prefs[parentPinHashKey].isNullOrBlank()
         ParentProfiles(
             dadName = prefs[dadNameKey] ?: "아빠 국왕",
             momName = prefs[momNameKey] ?: "엄마 왕비",
             daughterName = sanitizePlayerName(prefs[daughterNameKey]),
-            parentPin = prefs[parentPinKey] ?: "1234"
+            parentPin = "",
+            isPinConfigured = hasHashedPin
         )
     }
 
@@ -272,6 +316,74 @@ class DadKingdomLocalStore(private val context: Context) {
         parseStringList(prefs[weakWordsKey]).toSet()
     }
 
+    val wrongNoteRecordsFlow: Flow<Map<String, WrongNoteRecord>> = context.dadKingdomDataStore.data.map { prefs ->
+        val stored = parseWrongNoteRecords(prefs[wrongNoteRecordsKey]).toMutableMap()
+        val weak = parseStringList(prefs[weakWordsKey]).toSet()
+        val mastered = parseStringList(prefs[masteredWordsKey]).toSet()
+        val sm2Map = parseWordSm2Progress(prefs[wordSm2ProgressKey])
+        val fallbackDate = prefs[lastStudyDateKey]?.takeIf { it.isNotBlank() } ?: todayIso()
+
+        // Ensure all active weak words have a WrongNoteRecord with study date
+        weak.forEach { wordId ->
+            val sm2 = sm2Map[wordId]
+            val sm2Ms = sm2?.lastReviewedAtMs ?: 0L
+            val dateIso = if (sm2Ms > 0L) formatDateIso(sm2Ms) else fallbackDate
+            val existing = stored[wordId]
+            if (existing == null) {
+                stored[wordId] = WrongNoteRecord(
+                    wordId = wordId,
+                    savedDateIso = dateIso,
+                    lastStudiedDateIso = dateIso,
+                    lastStudiedAtMs = sm2Ms,
+                    isMastered = false
+                )
+            } else if (existing.isMastered) {
+                stored[wordId] = existing.copy(isMastered = false)
+            }
+        }
+
+        // Backfill any historical SM-2 words that were ever missed
+        sm2Map.forEach { (wordId, sm2) ->
+            if (sm2.wrongCount > 0 || sm2.lapseCount > 0) {
+                val dateIso = if (sm2.lastReviewedAtMs > 0L) formatDateIso(sm2.lastReviewedAtMs) else fallbackDate
+                val derivedMastered = wordId !in weak &&
+                    (wordId in mastered || sm2.learningStatus == WordLearningStatus.MASTERED)
+                val existing = stored[wordId]
+                if (existing == null) {
+                    stored[wordId] = WrongNoteRecord(
+                        wordId = wordId,
+                        savedDateIso = dateIso,
+                        lastStudiedDateIso = dateIso,
+                        lastStudiedAtMs = sm2.lastReviewedAtMs,
+                        isMastered = derivedMastered
+                    )
+                } else {
+                    val bestMs = maxOf(existing.lastStudiedAtMs, sm2.lastReviewedAtMs)
+                    val bestDate = if (sm2.lastReviewedAtMs > existing.lastStudiedAtMs) dateIso else existing.lastStudiedDateIso
+                    stored[wordId] = existing.copy(
+                        lastStudiedDateIso = bestDate.ifBlank { fallbackDate },
+                        lastStudiedAtMs = bestMs,
+                        isMastered = if (wordId in weak) false else (existing.isMastered || derivedMastered)
+                    )
+                }
+            }
+        }
+
+        // Keep mastered flag synchronized with current mastered/weak sets
+        stored.entries.forEach { (wordId, record) ->
+            val syncedMastered = when {
+                wordId in weak -> false
+                wordId in mastered -> true
+                else -> record.isMastered
+            }
+            if (syncedMastered != record.isMastered) {
+                stored[wordId] = record.copy(isMastered = syncedMastered)
+            }
+        }
+
+        stored
+    }
+
     val clearedScenarioIdsFlow: Flow<Set<String>> = context.dadKingdomDataStore.data.map { prefs ->
         parseStringList(prefs[clearedScenariosKey]).toSet()
     }
@@ -298,6 +410,7 @@ class DadKingdomLocalStore(private val context: Context) {
 
     val kakaoSessionFlow: Flow<KakaoSessionState> = context.dadKingdomDataStore.data.map { prefs ->
         val token = prefs[kakaoTokenKey] ?: ""
+        val kakaoUserId = prefs[kakaoUserIdKey] ?: ""
         val nick = prefs[kakaoNicknameKey] ?: ""
         val profileUrl = prefs[kakaoProfileUrlKey] ?: ""
         val friends = parseKakaoFriends(prefs[kakaoFriendsKey])
@@ -305,6 +418,7 @@ class DadKingdomLocalStore(private val context: Context) {
         KakaoSessionState(
             isLoggedIn = token.isNotBlank() && nick.isNotBlank(),
             isConfigured = configured,
+            kakaoUserId = kakaoUserId,
             nickname = nick,
             profileImageUrl = profileUrl,
             accessToken = token,
@@ -317,13 +431,67 @@ class DadKingdomLocalStore(private val context: Context) {
         )
     }
 
+    val shareStreakWithFriendsFlow: Flow<Boolean> = context.dadKingdomDataStore.data.map { prefs ->
+        // Minor privacy-by-default: require explicit opt-in before sharing streak with friends
+        prefs[shareStreakWithFriendsKey] ?: false
+    }
+
+    suspend fun setShareStreakWithFriends(enabled: Boolean) {
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[schemaVersionKey] = CURRENT_SCHEMA_VERSION
+            prefs[shareStreakWithFriendsKey] = enabled
+        }
+    }
+
     suspend fun saveParentProfiles(profiles: ParentProfiles) {
         context.dadKingdomDataStore.edit { prefs ->
+            prefs[schemaVersionKey] = CURRENT_SCHEMA_VERSION
             prefs[dadNameKey] = profiles.dadName.trim().ifBlank { "아빠 국왕" }.take(24)
             prefs[momNameKey] = profiles.momName.trim().ifBlank { "엄마 왕비" }.take(24)
             prefs[daughterNameKey] = sanitizePlayerName(profiles.daughterName).take(24)
-            val cleanPin = profiles.parentPin.filter { it.isDigit() }.take(4).ifBlank { "1234" }
-            prefs[parentPinKey] = cleanPin
+            val candidatePin = profiles.parentPin.filter { it.isDigit() }.take(6)
+            if (ParentPinCrypto.isValidPinFormat(candidatePin)) {
+                val (salt, hash) = ParentPinCrypto.createSaltedHash(candidatePin)
+                prefs[parentPinSaltKey] = salt
+                prefs[parentPinHashKey] = hash
+                prefs[parentPinFailCountKey] = 0
+                prefs[parentPinLockUntilMsKey] = 0L
+                prefs.remove(parentPinKey)
+            }
+        }
+    }
+
+    suspend fun verifyParentPinWithLockout(enteredPin: String): PinVerificationResult {
+        val prefs = context.dadKingdomDataStore.data.first()
+        val salt = prefs[parentPinSaltKey].orEmpty()
+        val hash = prefs[parentPinHashKey].orEmpty()
+        val failCount = prefs[parentPinFailCountKey] ?: 0
+        val lockUntilMs = prefs[parentPinLockUntilMsKey] ?: 0L
+
+        val update = ParentPinCrypto.evaluatePinAttempt(
+            candidatePin = enteredPin,
+            storedSaltHex = salt,
+            storedHashHex = hash,
+            currentFailCount = failCount,
+            lockUntilMs = lockUntilMs
+        )
+        if (update.result != PinVerificationResult.NotConfigured) {
+            context.dadKingdomDataStore.edit { editable ->
+                editable[schemaVersionKey] = CURRENT_SCHEMA_VERSION
+                editable[parentPinFailCountKey] = update.nextFailCount
+                editable[parentPinLockUntilMsKey] = update.nextLockUntilMs
+            }
+        }
+        return update.result
+    }
+
+    suspend fun verifyParentPin(enteredPin: String): Boolean {
+        return verifyParentPinWithLockout(enteredPin) == PinVerificationResult.Verified
+    }
+
+    suspend fun clearAllLocalData() {
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs.clear()
         }
     }
 
@@ -455,22 +623,55 @@ class DadKingdomLocalStore(private val context: Context) {
     }
 
     suspend fun markWordMastered(wordId: String) {
+        val nowMs = System.currentTimeMillis()
+        val today = todayIso()
         context.dadKingdomDataStore.edit { prefs ->
             val mastered = parseStringList(prefs[masteredWordsKey]).toMutableSet()
             mastered.add(wordId)
             prefs[masteredWordsKey] = serializeStringList(mastered.toList())
 
             val weak = parseStringList(prefs[weakWordsKey]).toMutableSet()
-            weak.remove(wordId)
+            val wasWeak = weak.remove(wordId)
             prefs[weakWordsKey] = serializeStringList(weak.toList())
+
+            val records = parseWrongNoteRecords(prefs[wrongNoteRecordsKey]).toMutableMap()
+            val existing = records[wordId]
+            if (existing != null || wasWeak) {
+                records[wordId] = WrongNoteRecord(
+                    wordId = wordId,
+                    savedDateIso = existing?.savedDateIso?.ifBlank { today } ?: today,
+                    lastStudiedDateIso = today,
+                    lastStudiedAtMs = nowMs,
+                    isMastered = true
+                )
+                prefs[wrongNoteRecordsKey] = serializeWrongNoteRecords(records)
+            }
         }
     }
 
     suspend fun markWordWeak(wordId: String) {
+        val nowMs = System.currentTimeMillis()
+        val today = todayIso()
         context.dadKingdomDataStore.edit { prefs ->
             val weak = parseStringList(prefs[weakWordsKey]).toMutableSet()
             weak.add(wordId)
             prefs[weakWordsKey] = serializeStringList(weak.toList())
+
+            val mastered = parseStringList(prefs[masteredWordsKey]).toMutableSet()
+            if (mastered.remove(wordId)) {
+                prefs[masteredWordsKey] = serializeStringList(mastered.toList())
+            }
+
+            val records = parseWrongNoteRecords(prefs[wrongNoteRecordsKey]).toMutableMap()
+            val existing = records[wordId]
+            records[wordId] = WrongNoteRecord(
+                wordId = wordId,
+                savedDateIso = existing?.savedDateIso?.ifBlank { today } ?: today,
+                lastStudiedDateIso = today,
+                lastStudiedAtMs = nowMs,
+                isMastered = false
+            )
+            prefs[wrongNoteRecordsKey] = serializeWrongNoteRecords(records)
         }
     }
 
@@ -643,11 +844,15 @@ class DadKingdomLocalStore(private val context: Context) {
         nickname: String,
         profileImageUrl: String,
         accessToken: String,
-        friends: List<KakaoFriend>
+        friends: List<KakaoFriend>,
+        kakaoUserId: String = ""
     ) {
         context.dadKingdomDataStore.edit { prefs ->
+            if (kakaoUserId.isNotBlank()) {
+                prefs[kakaoUserIdKey] = KakaoAuthAndFriendsService.normalizeKakaoId(kakaoUserId)
+            }
             prefs[kakaoNicknameKey] = nickname
-            prefs[kakaoProfileUrlKey] = profileImageUrl
+            prefs[kakaoProfileUrlKey] = KakaoAuthAndFriendsService.sanitizeHttpsUrl(profileImageUrl)
             prefs[kakaoTokenKey] = accessToken
             prefs[kakaoFriendsKey] = serializeKakaoFriends(friends)
         }
@@ -655,6 +860,7 @@ class DadKingdomLocalStore(private val context: Context) {
 
     suspend fun clearKakaoSession() {
         context.dadKingdomDataStore.edit { prefs ->
+            prefs[kakaoUserIdKey] = ""
             prefs[kakaoNicknameKey] = ""
             prefs[kakaoProfileUrlKey] = ""
             prefs[kakaoTokenKey] = ""
@@ -682,7 +888,7 @@ class DadKingdomLocalStore(private val context: Context) {
         DadAllowanceMission(
             id = "mission_exam_dragon",
             titleKo = "시험 마왕 격파: 영어 시험 90점 돌파!",
-            descriptionKo = "점수표에 90점 이상 기록하고 국왕님(아빠)께 PIN 승인 받으면 특별 용돈 지급!",
+            descriptionKo = "점수표에 90점 이상 기록하고 국왕님(아빠)께 PIN 승인 받으면 특별 용돈 약속 기록!",
             rewardWon = 10000,
             castleHpBonus = 25,
             categoryKo = "보스전 용돈"
@@ -877,6 +1083,7 @@ class DadKingdomLocalStore(private val context: Context) {
             arr.put(
                 JSONObject().apply {
                     put("uuid", f.uuid)
+                    put("kakaoId", f.kakaoId)
                     put("nickname", f.nickname)
                     put("thumbnailUrl", f.thumbnailUrl)
                     put("favorite", f.favorite)
@@ -1066,7 +1273,7 @@ class DadKingdomLocalStore(private val context: Context) {
                     endTimeLabel = o.optString("endTimeLabel"),
                     playerName = sanitizePlayerName(o.optString("playerName")),
                     activityTypeKo = o.optString("activityTypeKo", "단어 학습"),
-                    methodKo = o.optString("methodKo", "해마학습법"),
+                    methodKo = o.optString("methodKo", "장면연상법"),
                     durationSec = o.optInt("durationSec", 0).coerceAtLeast(0),
                     wordsStudied = o.optInt("wordsStudied", 0).coerceAtLeast(0),
                     knownCount = o.optInt("knownCount", 0).coerceAtLeast(0),
@@ -1168,19 +1375,517 @@ class DadKingdomLocalStore(private val context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    // ==================== v2 MASTER SPEC: SM-2, IDEMPOTENT REWARD LEDGER, MISSIONS & MEMORY PALACE ====================
+
+    val wordSm2ProgressFlow: Flow<Map<String, WordLearningProgress>> = context.dadKingdomDataStore.data.map { prefs ->
+        parseWordSm2Progress(prefs[wordSm2ProgressKey])
+    }
+
+    val rewardLedgerFlow: Flow<List<RewardTransaction>> = context.dadKingdomDataStore.data.map { prefs ->
+        parseRewardLedger(prefs[rewardLedgerKey])
+    }
+
+    val dailyMissionsFlow: Flow<List<LearningMission>> = context.dadKingdomDataStore.data.map { prefs ->
+        val today = todayIso()
+        val goal = (prefs[dailyGoalKey] ?: 10).coerceIn(5, 30)
+        val existing = parseLearningMissions(prefs[vocabMissionsKey])
+        DailyMissionEngine.rolloverMissions(existing, today, goal)
+    }
+
+    val memoryPalaceFlow: Flow<Map<String, MemoryPalaceEntry>> = context.dadKingdomDataStore.data.map { prefs ->
+        parseMemoryPalace(prefs[memoryPalaceKey])
+    }
+
+    val mediaReviewOverridesFlow: Flow<Map<String, MediaReviewStatus>> = context.dadKingdomDataStore.data.map { prefs ->
+        parseMediaReviewOverrides(prefs[mediaReviewOverridesKey])
+    }
+
+    suspend fun setDailyWordGoal(goal: Int) {
+        val safeGoal = goal.coerceIn(5, 30)
+        val today = todayIso()
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[dailyGoalKey] = safeGoal
+            val existing = parseLearningMissions(prefs[vocabMissionsKey])
+            val rolled = DailyMissionEngine.rolloverMissions(existing, today, safeGoal)
+            prefs[vocabMissionsDateKey] = today
+            prefs[vocabMissionsKey] = serializeLearningMissions(rolled)
+        }
+    }
+
+    suspend fun toggleSuspendWord(wordId: String): WordLearningProgress {
+        var result = WordLearningProgress(wordId = wordId)
+        context.dadKingdomDataStore.edit { prefs ->
+            val map = parseWordSm2Progress(prefs[wordSm2ProgressKey]).toMutableMap()
+            val updated = Sm2ReviewScheduler.toggleSuspended(map[wordId], wordId)
+            map[wordId] = updated
+            result = updated
+            prefs[wordSm2ProgressKey] = serializeWordSm2Progress(map)
+        }
+        return result
+    }
+
+    suspend fun setMediaReviewStatus(wordId: String, status: MediaReviewStatus) {
+        context.dadKingdomDataStore.edit { prefs ->
+            val map = parseMediaReviewOverrides(prefs[mediaReviewOverridesKey]).toMutableMap()
+            map[wordId] = status
+            prefs[mediaReviewOverridesKey] = serializeMediaReviewOverrides(map)
+        }
+    }
+
+    suspend fun recordWordSm2Recall(
+        wordId: String,
+        grade: RecallGrade,
+        nowMs: Long = System.currentTimeMillis()
+    ): WordLearningProgress {
+        var resultProgress = WordLearningProgress(wordId = wordId)
+        context.dadKingdomDataStore.edit { prefs ->
+            val map = parseWordSm2Progress(prefs[wordSm2ProgressKey]).toMutableMap()
+            val updated = Sm2ReviewScheduler.review(map[wordId], wordId, grade, nowMs)
+            map[wordId] = updated
+            resultProgress = updated
+            prefs[wordSm2ProgressKey] = serializeWordSm2Progress(map)
+
+            // Keep mastered/weak sets and wrong-note history synchronized with SM-2 status
+            val mastered = parseStringList(prefs[masteredWordsKey]).toMutableSet()
+            val weak = parseStringList(prefs[weakWordsKey]).toMutableSet()
+            val records = parseWrongNoteRecords(prefs[wrongNoteRecordsKey]).toMutableMap()
+            val dateIso = formatDateIso(nowMs)
+            val existingRecord = records[wordId]
+            when (grade) {
+                RecallGrade.AGAIN -> {
+                    weak.add(wordId)
+                    mastered.remove(wordId)
+                    records[wordId] = WrongNoteRecord(
+                        wordId = wordId,
+                        savedDateIso = existingRecord?.savedDateIso?.ifBlank { dateIso } ?: dateIso,
+                        lastStudiedDateIso = dateIso,
+                        lastStudiedAtMs = nowMs,
+                        isMastered = false
+                    )
+                }
+                RecallGrade.HARD -> {
+                    weak.add(wordId)
+                    records[wordId] = WrongNoteRecord(
+                        wordId = wordId,
+                        savedDateIso = existingRecord?.savedDateIso?.ifBlank { dateIso } ?: dateIso,
+                        lastStudiedDateIso = dateIso,
+                        lastStudiedAtMs = nowMs,
+                        isMastered = false
+                    )
+                }
+                RecallGrade.GOOD, RecallGrade.EASY -> {
+                    val wasWeak = weak.remove(wordId)
+                    if (updated.learningStatus == WordLearningStatus.MASTERED || grade == RecallGrade.EASY) {
+                        mastered.add(wordId)
+                    }
+                    if (existingRecord != null || wasWeak) {
+                        records[wordId] = WrongNoteRecord(
+                            wordId = wordId,
+                            savedDateIso = existingRecord?.savedDateIso?.ifBlank { dateIso } ?: dateIso,
+                            lastStudiedDateIso = dateIso,
+                            lastStudiedAtMs = nowMs,
+                            isMastered = true
+                        )
+                    }
+                }
+            }
+            prefs[masteredWordsKey] = serializeStringList(mastered.toList())
+            prefs[weakWordsKey] = serializeStringList(weak.toList())
+            prefs[wrongNoteRecordsKey] = serializeWrongNoteRecords(records)
+        }
+        return resultProgress
+    }
+
+    /**
+     * Grants XP & Coins into the SINGLE unified wallet (`totalXpKey`, `coinsKey`) with strict
+     * `eventId` idempotency so duplicate taps, retries, or crash-recoveries never double-pay.
+     */
+    suspend fun grantIdempotentReward(
+        eventId: String,
+        eventType: RewardEventType,
+        xpDelta: Int,
+        coinDelta: Int,
+        reason: String,
+        wordId: String = "",
+        missionId: String = "",
+        sessionId: String = ""
+    ): LedgerGrantResult {
+        var grantResult = LedgerGrantResult(
+            granted = false,
+            duplicateBlocked = true,
+            newTotalXp = 0,
+            newCoinBalance = 0
+        )
+        context.dadKingdomDataStore.edit { prefs ->
+            val seenIds = parseStringList(prefs[rewardEventIdsKey]).toMutableSet()
+            val curXp = prefs[totalXpKey] ?: 150
+            val curCoins = prefs[coinsKey] ?: 250
+            val tx = RewardTransaction(
+                transactionId = "tx_${System.currentTimeMillis()}_${eventId.hashCode().toUInt()}",
+                eventId = eventId,
+                eventType = eventType,
+                xpDelta = xpDelta,
+                coinDelta = coinDelta,
+                reason = reason,
+                wordId = wordId,
+                missionId = missionId,
+                sessionId = sessionId
+            )
+            val applied = RewardLedgerEngine.applyTransaction(seenIds, curXp, curCoins, tx)
+            grantResult = applied
+            if (applied.granted) {
+                prefs[totalXpKey] = applied.newTotalXp
+                prefs[coinsKey] = applied.newCoinBalance
+                seenIds.add(eventId)
+                // Keep latest 600 event IDs to bound storage while blocking same-day/session duplicates
+                val trimmedIds = seenIds.toList().takeLast(600)
+                prefs[rewardEventIdsKey] = serializeStringList(trimmedIds)
+                val ledger = (listOf(tx) + parseRewardLedger(prefs[rewardLedgerKey])).take(120)
+                prefs[rewardLedgerKey] = serializeRewardLedger(ledger)
+                VocabAnalyticsTracker.log("reward_granted", wordId = wordId, meta = "${eventType.name}:+${xpDelta}xp/+${coinDelta}c")
+            } else {
+                VocabAnalyticsTracker.log("duplicate_reward_blocked", wordId = wordId, meta = eventId)
+            }
+        }
+        return grantResult
+    }
+
+    suspend fun advanceVocabMission(kind: MissionKind, delta: Int = 1) {
+        if (delta <= 0) return
+        val today = todayIso()
+        context.dadKingdomDataStore.edit { prefs ->
+            val goal = (prefs[dailyGoalKey] ?: 10).coerceIn(5, 30)
+            val base = DailyMissionEngine.rolloverMissions(
+                existing = parseLearningMissions(prefs[vocabMissionsKey]),
+                todayDateKey = today,
+                dailyWordTarget = goal
+            )
+            val updated = DailyMissionEngine.recordProgress(base, kind, delta)
+            prefs[vocabMissionsDateKey] = today
+            prefs[vocabMissionsKey] = serializeLearningMissions(updated)
+        }
+    }
+
+    suspend fun claimVocabMission(missionId: String): Pair<LearningMission?, LedgerGrantResult?> {
+        val today = todayIso()
+        var claimedMission: LearningMission? = null
+        context.dadKingdomDataStore.edit { prefs ->
+            val goal = (prefs[dailyGoalKey] ?: 10).coerceIn(5, 30)
+            val base = DailyMissionEngine.rolloverMissions(
+                existing = parseLearningMissions(prefs[vocabMissionsKey]),
+                todayDateKey = today,
+                dailyWordTarget = goal
+            )
+            val (updated, claimed) = DailyMissionEngine.claimMission(base, missionId)
+            claimedMission = claimed
+            if (claimed != null) {
+                prefs[vocabMissionsDateKey] = today
+                prefs[vocabMissionsKey] = serializeLearningMissions(updated)
+            }
+        }
+        val mission = claimedMission ?: return null to null
+        val rewardType = when (mission.cadence) {
+            MissionCadence.WEEKLY -> RewardEventType.WEEKLY_MISSION_CLAIMED
+            else -> RewardEventType.DAILY_MISSION_CLAIMED
+        }
+        val reward = grantIdempotentReward(
+            eventId = "mission_claim_${mission.missionId}",
+            eventType = rewardType,
+            xpDelta = mission.rewardXp,
+            coinDelta = mission.rewardCoins,
+            reason = "미션 완료 보상: ${mission.titleKo}",
+            missionId = mission.missionId
+        )
+        VocabAnalyticsTracker.log("mission_claimed", meta = mission.missionId)
+        return mission to reward
+    }
+
+    suspend fun saveMemoryPalaceEntry(wordId: String, room: MemoryPalaceRoom, personalMemoKo: String) {
+        context.dadKingdomDataStore.edit { prefs ->
+            val map = parseMemoryPalace(prefs[memoryPalaceKey]).toMutableMap()
+            map[wordId] = MemoryPalaceEntry(
+                wordId = wordId,
+                room = room,
+                personalMemoKo = personalMemoKo.trim().take(120),
+                updatedAtMs = System.currentTimeMillis()
+            )
+            prefs[memoryPalaceKey] = serializeMemoryPalace(map)
+        }
+    }
+
+    private fun serializeWordSm2Progress(map: Map<String, WordLearningProgress>): String {
+        val arr = JSONArray()
+        map.values.forEach { p ->
+            arr.put(
+                JSONObject().apply {
+                    put("wordId", p.wordId)
+                    put("status", p.learningStatus.name)
+                    put("lastGrade", p.lastRecallGrade?.name ?: "")
+                    put("rep", p.repetition)
+                    put("interval", p.intervalDays)
+                    put("ease", p.easeFactor)
+                    put("dueAt", p.dueAtMs)
+                    put("lastRev", p.lastReviewedAtMs)
+                    put("lapse", p.lapseCount)
+                    put("consec", p.consecutiveCorrect)
+                    put("correct", p.correctCount)
+                    put("wrong", p.wrongCount)
+                    put("mastery", p.masteryScore)
+                }
+            )
+        }
+        return arr.toString()
+    }
+
+    private fun parseWordSm2Progress(json: String?): Map<String, WordLearningProgress> {
+        if (json.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val arr = JSONArray(json)
+            val result = LinkedHashMap<String, WordLearningProgress>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val id = o.optString("wordId")
+                if (id.isBlank()) continue
+                val status = runCatching { WordLearningStatus.valueOf(o.optString("status", "NEW")) }
+                    .getOrDefault(WordLearningStatus.NEW)
+                val gradeRaw = o.optString("lastGrade", "")
+                val grade = gradeRaw.takeIf { it.isNotBlank() }?.let {
+                    runCatching { RecallGrade.valueOf(it) }.getOrNull()
+                }
+                result[id] = WordLearningProgress(
+                    wordId = id,
+                    learningStatus = status,
+                    lastRecallGrade = grade,
+                    repetition = o.optInt("rep", 0),
+                    intervalDays = o.optInt("interval", 0),
+                    easeFactor = o.optDouble("ease", 2.5),
+                    dueAtMs = o.optLong("dueAt", 0L),
+                    lastReviewedAtMs = o.optLong("lastRev", 0L),
+                    lapseCount = o.optInt("lapse", 0),
+                    consecutiveCorrect = o.optInt("consec", 0),
+                    correctCount = o.optInt("correct", 0),
+                    wrongCount = o.optInt("wrong", 0),
+                    masteryScore = o.optInt("mastery", 0)
+                )
+            }
+            result
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun serializeRewardLedger(list: List<RewardTransaction>): String {
+        val arr = JSONArray()
+        list.forEach { t ->
+            arr.put(
+                JSONObject().apply {
+                    put("txId", t.transactionId)
+                    put("eventId", t.eventId)
+                    put("type", t.eventType.name)
+                    put("xp", t.xpDelta)
+                    put("coins", t.coinDelta)
+                    put("reason", t.reason)
+                    put("wordId", t.wordId)
+                    put("missionId", t.missionId)
+                    put("sessionId", t.sessionId)
+                    put("createdAt", t.createdAtMs)
+                }
+            )
+        }
+        return arr.toString()
+    }
+
+    private fun parseRewardLedger(json: String?): List<RewardTransaction> {
+        if (json.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val arr = JSONArray(json)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                RewardTransaction(
+                    transactionId = o.optString("txId"),
+                    eventId = o.optString("eventId"),
+                    eventType = runCatching { RewardEventType.valueOf(o.optString("type")) }
+                        .getOrDefault(RewardEventType.NEW_WORD_LEARNED),
+                    xpDelta = o.optInt("xp", 0),
+                    coinDelta = o.optInt("coins", 0),
+                    reason = o.optString("reason", ""),
+                    wordId = o.optString("wordId", ""),
+                    missionId = o.optString("missionId", ""),
+                    sessionId = o.optString("sessionId", ""),
+                    createdAtMs = o.optLong("createdAt", 0L)
+                )
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun serializeLearningMissions(list: List<LearningMission>): String {
+        val arr = JSONArray()
+        list.forEach { m ->
+            arr.put(
+                JSONObject().apply {
+                    put("id", m.missionId)
+                    put("kind", m.kind.name)
+                    put("title", m.titleKo)
+                    put("desc", m.descriptionKo)
+                    put("target", m.targetCount)
+                    put("current", m.currentCount)
+                    put("xp", m.rewardXp)
+                    put("coins", m.rewardCoins)
+                    put("status", m.status.name)
+                    put("dateKey", m.dateKey)
+                    put("claimedAt", m.claimedAtMs)
+                    put("cadence", m.cadence.name)
+                }
+            )
+        }
+        return arr.toString()
+    }
+
+    private fun parseLearningMissions(json: String?): List<LearningMission> {
+        if (json.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val arr = JSONArray(json)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                val kind = runCatching { MissionKind.valueOf(o.optString("kind")) }
+                    .getOrDefault(MissionKind.DAILY_NEW_WORDS)
+                val defaultCadence = if (kind.name.startsWith("WEEKLY_")) MissionCadence.WEEKLY else MissionCadence.DAILY
+                LearningMission(
+                    missionId = o.optString("id"),
+                    kind = kind,
+                    titleKo = o.optString("title"),
+                    descriptionKo = o.optString("desc"),
+                    targetCount = o.optInt("target", 5),
+                    currentCount = o.optInt("current", 0),
+                    rewardXp = o.optInt("xp", 15),
+                    rewardCoins = o.optInt("coins", 5),
+                    status = runCatching { MissionStatus.valueOf(o.optString("status")) }
+                        .getOrDefault(MissionStatus.AVAILABLE),
+                    dateKey = o.optString("dateKey", ""),
+                    claimedAtMs = o.optLong("claimedAt", 0L),
+                    cadence = runCatching { MissionCadence.valueOf(o.optString("cadence")) }
+                        .getOrDefault(defaultCadence)
+                )
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun serializeMemoryPalace(map: Map<String, MemoryPalaceEntry>): String {
+        val arr = JSONArray()
+        map.values.forEach { e ->
+            arr.put(
+                JSONObject().apply {
+                    put("wordId", e.wordId)
+                    put("room", e.room.name)
+                    put("memo", e.personalMemoKo)
+                    put("updatedAt", e.updatedAtMs)
+                }
+            )
+        }
+        return arr.toString()
+    }
+
+    private fun parseMemoryPalace(json: String?): Map<String, MemoryPalaceEntry> {
+        if (json.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val arr = JSONArray(json)
+            val result = LinkedHashMap<String, MemoryPalaceEntry>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val id = o.optString("wordId")
+                if (id.isBlank()) continue
+                val room = runCatching { MemoryPalaceRoom.valueOf(o.optString("room")) }
+                    .getOrDefault(MemoryPalaceRoom.HOME_ROOM)
+                result[id] = MemoryPalaceEntry(
+                    wordId = id,
+                    room = room,
+                    personalMemoKo = o.optString("memo", ""),
+                    updatedAtMs = o.optLong("updatedAt", 0L)
+                )
+            }
+            result
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun serializeMediaReviewOverrides(map: Map<String, MediaReviewStatus>): String {
+        val obj = JSONObject()
+        map.forEach { (k, v) -> obj.put(k, v.name) }
+        return obj.toString()
+    }
+
+    private fun parseMediaReviewOverrides(json: String?): Map<String, MediaReviewStatus> {
+        if (json.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val obj = JSONObject(json)
+            val result = LinkedHashMap<String, MediaReviewStatus>()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val status = runCatching { MediaReviewStatus.valueOf(obj.optString(key)) }.getOrNull()
+                if (status != null) result[key] = status
+            }
+            result
+        }.getOrDefault(emptyMap())
+    }
+
     private fun parseKakaoFriends(json: String?): List<KakaoFriend> {
         if (json.isNullOrBlank()) return emptyList()
         return runCatching {
             val arr = JSONArray(json)
             (0 until arr.length()).map { idx ->
                 val o = arr.getJSONObject(idx)
+                val uuid = o.optString("uuid")
+                val rawKakaoId = o.optString("kakaoId").ifBlank { uuid }
                 KakaoFriend(
-                    uuid = o.optString("uuid"),
+                    uuid = uuid,
                     nickname = o.optString("nickname"),
-                    thumbnailUrl = o.optString("thumbnailUrl"),
-                    favorite = o.optBoolean("favorite", false)
+                    thumbnailUrl = KakaoAuthAndFriendsService.sanitizeHttpsUrl(o.optString("thumbnailUrl")),
+                    favorite = o.optBoolean("favorite", false),
+                    kakaoId = KakaoAuthAndFriendsService.normalizeKakaoId(rawKakaoId)
                 )
             }
         }.getOrDefault(emptyList())
+    }
+
+    private fun formatDateIso(epochMs: Long): String {
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(epochMs))
+    }
+
+    private fun serializeWrongNoteRecords(map: Map<String, WrongNoteRecord>): String {
+        val arr = JSONArray()
+        map.values.forEach { rec ->
+            arr.put(
+                JSONObject().apply {
+                    put("wordId", rec.wordId)
+                    put("savedDateIso", rec.savedDateIso)
+                    put("lastStudiedDateIso", rec.lastStudiedDateIso)
+                    put("lastStudiedAtMs", rec.lastStudiedAtMs)
+                    put("isMastered", rec.isMastered)
+                }
+            )
+        }
+        return arr.toString()
+    }
+
+    private fun parseWrongNoteRecords(json: String?): Map<String, WrongNoteRecord> {
+        if (json.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val arr = JSONArray(json)
+            val result = LinkedHashMap<String, WrongNoteRecord>()
+            for (idx in 0 until arr.length()) {
+                val o = arr.getJSONObject(idx)
+                val wordId = o.optString("wordId").trim()
+                if (wordId.isNotBlank()) {
+                    val savedDate = o.optString("savedDateIso").ifBlank { todayIso() }
+                    val lastDate = o.optString("lastStudiedDateIso").ifBlank { savedDate }
+                    result[wordId] = WrongNoteRecord(
+                        wordId = wordId,
+                        savedDateIso = savedDate,
+                        lastStudiedDateIso = lastDate,
+                        lastStudiedAtMs = o.optLong("lastStudiedAtMs", 0L),
+                        isMastered = o.optBoolean("isMastered", false)
+                    )
+                }
+            }
+            result
+        }.getOrDefault(emptyMap())
     }
 }

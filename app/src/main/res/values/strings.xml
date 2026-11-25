@@ -1,3 +1,22 @@
 <resources>
     <string name="app_name">아빠가딸들을 위한 학습도구</string>
+    <string name="family_leaderboard_title">가족 리더보드</string>
+    <string name="family_leaderboard_subtitle">카카오톡 친구 일일 연속 학습 스트릭 TOP</string>
+    <string name="family_leaderboard_google_signin_cta">Google 로그인으로 가족 리더보드 연결</string>
+    <string name="family_leaderboard_google_signin_desc">Firebase Google 계정으로 로그인하면 카카오톡으로 연결된 가족·친구들의 실시간 일일 스트릭 순위를 안전하게 확인할 수 있어요.</string>
+    <string name="family_leaderboard_kakao_connect_cta">카카오톡 친구 연동하기</string>
+    <string name="family_leaderboard_refresh_desc">가족 리더보드 새로고침</string>
+    <string name="family_leaderboard_share_label">내 일일 스트릭을 카톡 친구에게 공개</string>
+    <string name="family_leaderboard_invite_cta">카톡으로 가족 초대하기</string>
+    <string name="family_leaderboard_retry_cta">다시 불러오기</string>
+    <string name="family_leaderboard_view_all">전체 가족 리더보드 보기</string>
+    <string name="wrong_note_title">오답 노트</string>
+    <string name="wrong_note_subtitle">보관된 오답의 암기 상태와 학습 날짜를 확인하세요</string>
+    <string name="wrong_note_tab_all">전체</string>
+    <string name="wrong_note_tab_needs_study">아직 학습 필요</string>
+    <string name="wrong_note_tab_mastered">완벽 암기</string>
+    <string name="wrong_note_badge_needs_study">학습 필요</string>
+    <string name="wrong_note_badge_mastered">완벽 암기</string>
+    <string name="wrong_note_action_mark_mastered">완벽 암기</string>
+    <string name="wrong_note_action_relearn">다시 학습</string>
 </resources>

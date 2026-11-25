@@ -33,6 +33,32 @@ service cloud.firestore {
       return ts is timestamp && ts <= request.time;
     }
 
+    function callerHasUserDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function callerUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isOwnKakaoEntry(entryId) {
+      return isSignedIn() &&
+             entryId.matches('^kakao_[a-zA-Z0-9_\\-]+$') &&
+             callerHasUserDoc() &&
+             'kakaoUserId' in callerUserData() &&
+             callerUserData().kakaoUserId is string &&
+             callerUserData().kakaoUserId == entryId;
+    }
+
+    function isConnectedKakaoFriendEntry(entryId) {
+      return isSignedIn() &&
+             entryId.matches('^kakao_[a-zA-Z0-9_\\-]+$') &&
+             callerHasUserDoc() &&
+             'connectedKakaoIds' in callerUserData() &&
+             callerUserData().connectedKakaoIds is list &&
+             entryId in callerUserData().connectedKakaoIds;
+    }
+
     function isValidUserProgress(data, userId) {
       return data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
              data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
@@ -47,6 +73,24 @@ service cloud.firestore {
              data.lastStudyDate is string && data.lastStudyDate.size() <= 20 &&
              data.unlockedItems is list && data.unlockedItems.size() <= 30 &&
              (data.unlockedItems.size() == 0 || data.unlockedItems[0] is string) &&
+             (!('kakaoUserId' in data) || (data.kakaoUserId is string && data.kakaoUserId.size() <= 80 && data.kakaoUserId.matches('^(|kakao_[a-zA-Z0-9_\\-]+)$'))) &&
+             (!('connectedKakaoIds' in data) || (data.connectedKakaoIds is list && data.connectedKakaoIds.size() <= 30 && (data.connectedKakaoIds.size() == 0 || (data.connectedKakaoIds[0] is string && data.connectedKakaoIds[0].matches('^kakao_[a-zA-Z0-9_\\-]+$'))))) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidFamilyStreakEntry(data, entryId) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.kakaoUserId is string && data.kakaoUserId.size() <= 80 &&
+             data.kakaoUserId.matches('^(|kakao_[a-zA-Z0-9_\\-]+)$') &&
+             (!entryId.matches('^kakao_.*') || data.kakaoUserId == entryId) &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 40 &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 500 && (data.avatarUrl == '' || data.avatarUrl.matches('^https://.*')))) &&
+             data.streakCount is int && data.streakCount >= 0 && data.streakCount <= 10000 &&
+             data.todayWordsCompleted is int && data.todayWordsCompleted >= 0 && data.todayWordsCompleted <= 500 &&
+             data.totalXp is int && data.totalXp >= 0 && data.totalXp <= 10000000 &&
+             data.lastStudyDate is string && data.lastStudyDate.size() <= 20 &&
+             data.shareWithFriends is bool &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
     }
@@ -99,6 +143,7 @@ service cloud.firestore {
                          'userId', 'displayName', 'selectedGrade', 'selectedTeacherId',
                          'dailyGoal', 'streakCount', 'totalXp', 'coins', 'hearts',
                          'todayWordsCompleted', 'lastStudyDate', 'unlockedItems',
+                         'kakaoUserId', 'connectedKakaoIds',
                          'createdAt', 'updatedAt'
                        ]) &&
                        isValidUserProgress(incoming(), userId);
@@ -112,6 +157,7 @@ service cloud.firestore {
                          'displayName', 'selectedGrade', 'selectedTeacherId',
                          'dailyGoal', 'streakCount', 'totalXp', 'coins', 'hearts',
                          'todayWordsCompleted', 'lastStudyDate', 'unlockedItems',
+                         'kakaoUserId', 'connectedKakaoIds',
                          'updatedAt'
                        ]);
 
@@ -197,6 +243,50 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if isOwner(userId) && isValidId(sessionId);
       }
+    }
+
+    // 5. Family Leaderboard (Kakao Friends Daily Streak Counts)
+    match /familyStreaks/{entryId} {
+      // Strict friend-only point reads; no existence oracle for strangers; no blanket list.
+      allow get: if isSignedIn() && isValidId(entryId) && (
+        entryId == ('uid_' + request.auth.uid) ||
+        isOwnKakaoEntry(entryId) ||
+        (resource != null && existing().userId == request.auth.uid) ||
+        (isConnectedKakaoFriendEntry(entryId) && (resource == null || existing().shareWithFriends == true))
+      );
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(entryId) &&
+                       (entryId == ('uid_' + request.auth.uid) || isOwnKakaoEntry(entryId)) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'kakaoUserId', 'displayName', 'streakCount',
+                         'todayWordsCompleted', 'totalXp', 'lastStudyDate',
+                         'shareWithFriends', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'kakaoUserId', 'displayName', 'avatarUrl',
+                         'streakCount', 'todayWordsCompleted', 'totalXp',
+                         'lastStudyDate', 'shareWithFriends', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidFamilyStreakEntry(incoming(), entryId);
+
+      allow update: if isSignedIn() &&
+                       isValidId(entryId) &&
+                       isValidFamilyStreakEntry(incoming(), entryId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'kakaoUserId', 'displayName', 'avatarUrl',
+                         'streakCount', 'todayWordsCompleted', 'totalXp',
+                         'lastStudyDate', 'shareWithFriends', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() &&
+                       isValidId(entryId) &&
+                       existing().userId == request.auth.uid;
     }
   }
 }

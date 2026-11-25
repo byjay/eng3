@@ -134,7 +134,7 @@ object SquirrelRpgRepository {
             nameKo = "노아",
             jobTitleKo = "시간술사 크로노",
             badgeKo = "별빛 모래시계",
-            passiveKo = "단어 해마 힌트 항상 무료 공개",
+            passiveKo = "단어 연상 힌트 항상 무료 공개",
             skillNameKo = "시간 정지",
             skillDescKo = "적 1턴 기절 + 정확한 어휘 일격",
             skillKind = SquirrelSkillKind.TIME_REVEAL,
@@ -276,7 +276,7 @@ object SquirrelRpgRepository {
             choices = listOf(
                 RpgStoryChoice(
                     id = "c3_a",
-                    labelKo = "해마 기억의 수정구 들여다보기",
+                    labelKo = "연상 기억의 수정구 들여다보기",
                     tagKo = "MP+40 · 방어막",
                     outcomeKo = "단어 연상 이미지가 머릿속에 선명해졌어! MP와 수호막이 가득 찼어!",
                     mpBonus = 40,

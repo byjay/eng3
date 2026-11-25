@@ -140,30 +140,13 @@ class HybridAiCoachEngine(
     @Volatile
     private var geminiCooldownUntilMs: Long = 0L
 
-    @Volatile
-    private var pollinationsCooldownUntilMs: Long = 0L
-
     /**
-     * Collects all valid Groq API keys injected from AI Studio Secrets Panel (.env -> BuildConfig).
-     * Filters out empty strings or placeholder values automatically.
+     * Client APKs must NEVER bundle server-side LLM API keys in BuildConfig.
+     * Production AI runs via Firebase AI Logic (App Check attested, zero client API key).
+     * Optional custom keys provider is retained solely for local JVM unit tests.
      */
     fun configuredGroqEnvKeys(): List<Pair<Int, String>> {
-        customGroqKeysProvider?.let { return it() }
-        val raw = listOf(
-            1 to BuildConfig.GROQ_API_KEY_1,
-            2 to BuildConfig.GROQ_API_KEY_2,
-            3 to BuildConfig.GROQ_API_KEY_3,
-            4 to BuildConfig.GROQ_API_KEY_4,
-            5 to BuildConfig.GROQ_API_KEY_5
-        )
-        return raw.mapNotNull { (idx, value) ->
-            val trimmed = value.trim()
-            if (trimmed.isBlank() || trimmed.startsWith("YOUR_GROQ_API_KEY", ignoreCase = true)) {
-                null
-            } else {
-                idx to trimmed
-            }
-        }
+        return customGroqKeysProvider?.invoke() ?: emptyList()
     }
 
     /**
@@ -303,19 +286,15 @@ class HybridAiCoachEngine(
             }
 
             AiEngineMode.FREE_OPEN_SOURCE_AUTO -> {
-                tryGroq5KeyRotation(prompt, onStreamChunk)
+                tryGeminiBuiltIn(prompt, onStreamChunk)
                     ?: tryExternalSlotRotation(prompt, slots, keyedOnly = true)
-                    ?: tryGeminiBuiltIn(prompt, onStreamChunk)
-                    ?: tryFreeKeylessOpenSourceLlm(prompt)
                     ?: LocalConversationSkillEngine.generateReply(
                         tutor, userSpokenText, history, activeTopicTag, activeTwist, learnerName, resolvedGoal
                     )
             }
 
             AiEngineMode.EXTERNAL_10_SLOT_ROTATOR -> {
-                tryGroq5KeyRotation(prompt, onStreamChunk)
-                    ?: tryExternalSlotRotation(prompt, slots, keyedOnly = false)
-                    ?: tryFreeKeylessOpenSourceLlm(prompt)
+                tryExternalSlotRotation(prompt, slots, keyedOnly = true)
                     ?: tryGeminiBuiltIn(prompt, onStreamChunk)
                     ?: LocalConversationSkillEngine.generateReply(
                         tutor, userSpokenText, history, activeTopicTag, activeTwist, learnerName, resolvedGoal
@@ -324,9 +303,6 @@ class HybridAiCoachEngine(
 
             AiEngineMode.BUILT_IN_GEMINI -> {
                 tryGeminiBuiltIn(prompt, onStreamChunk)
-                    ?: tryGroq5KeyRotation(prompt, onStreamChunk)
-                    ?: tryExternalSlotRotation(prompt, slots, keyedOnly = false)
-                    ?: tryFreeKeylessOpenSourceLlm(prompt)
                     ?: LocalConversationSkillEngine.generateReply(
                         tutor, userSpokenText, history, activeTopicTag, activeTwist, learnerName, resolvedGoal
                     )
@@ -374,19 +350,15 @@ class HybridAiCoachEngine(
             }
 
             AiEngineMode.FREE_OPEN_SOURCE_AUTO -> {
-                tryGroq5KeyRotation(prompt, onStreamChunk)
+                tryGeminiBuiltIn(prompt, onStreamChunk)
                     ?: tryExternalSlotRotation(prompt, slots, keyedOnly = true)
-                    ?: tryGeminiBuiltIn(prompt, onStreamChunk)
-                    ?: tryFreeKeylessOpenSourceLlm(prompt)
                     ?: LocalConversationSkillEngine.generateProactiveOpener(
                         tutor, learnerName, activeTopicTag, resolvedGoal, history.size, isOpening
                     )
             }
 
             AiEngineMode.EXTERNAL_10_SLOT_ROTATOR -> {
-                tryGroq5KeyRotation(prompt, onStreamChunk)
-                    ?: tryExternalSlotRotation(prompt, slots, keyedOnly = false)
-                    ?: tryFreeKeylessOpenSourceLlm(prompt)
+                tryExternalSlotRotation(prompt, slots, keyedOnly = true)
                     ?: tryGeminiBuiltIn(prompt, onStreamChunk)
                     ?: LocalConversationSkillEngine.generateProactiveOpener(
                         tutor, learnerName, activeTopicTag, resolvedGoal, history.size, isOpening
@@ -395,9 +367,6 @@ class HybridAiCoachEngine(
 
             AiEngineMode.BUILT_IN_GEMINI -> {
                 tryGeminiBuiltIn(prompt, onStreamChunk)
-                    ?: tryGroq5KeyRotation(prompt, onStreamChunk)
-                    ?: tryExternalSlotRotation(prompt, slots, keyedOnly = false)
-                    ?: tryFreeKeylessOpenSourceLlm(prompt)
                     ?: LocalConversationSkillEngine.generateProactiveOpener(
                         tutor, learnerName, activeTopicTag, resolvedGoal, history.size, isOpening
                     )
@@ -548,6 +517,10 @@ class HybridAiCoachEngine(
 
         return """
             ${tutor.friendPersonaPrompt}
+            MINOR & EDUCATIONAL SAFETY GUARDRAILS (STRICT):
+            - You are an AI English conversation tutor designed for Korean teenagers and families.
+            - Never claim to be a real human being in person, and never request personal contact details, school names, home addresses, financial info, or private photos.
+            - Keep all conversation strictly educational, respectful, positive, and age-appropriate; gently redirect any unsafe or inappropriate topic back to English practice.
             $twistBlock
             $koreanQuestionBlock
 
@@ -594,6 +567,9 @@ class HybridAiCoachEngine(
 
         return """
             ${tutor.friendPersonaPrompt}
+            MINOR & EDUCATIONAL SAFETY GUARDRAILS (STRICT):
+            - You are an AI English conversation tutor for Korean high school learners and families.
+            - Never ask for private personal information and keep every prompt strictly safe, kind, and educational.
             ACTIVE SITUATION / TOPIC: $activeTopicTag
             CONVERSATION GOAL (목표): $conversationGoalKo
             LEARNER NAME: "$enName" (Korean: "$koName")
@@ -627,10 +603,10 @@ class HybridAiCoachEngine(
         if (now < geminiCooldownUntilMs) {
             return null
         }
-        val primary = streamFromModel(primaryGeminiModel, prompt, "Gemini 3.8", timeoutMs = 14_000L, onStreamChunk = onStreamChunk)
+        val primary = streamFromModel(primaryGeminiModel, prompt, "Firebase AI · Gemini 3.8", timeoutMs = 45_000L, onStreamChunk = onStreamChunk)
         if (primary != null) return primary
         Log.w(TAG, "Primary Gemini model unavailable, switching seamlessly to gemini-3.5-flash-lite")
-        val fallback = streamFromModel(fastFallbackGeminiModel, prompt, "Gemini Lite", timeoutMs = 10_000L, onStreamChunk = onStreamChunk)
+        val fallback = streamFromModel(fastFallbackGeminiModel, prompt, "Firebase AI · Gemini Lite", timeoutMs = 30_000L, onStreamChunk = onStreamChunk)
         if (fallback == null) {
             geminiCooldownUntilMs = System.currentTimeMillis() + 90_000L
         }
@@ -671,56 +647,44 @@ class HybridAiCoachEngine(
         }
     }
 
-    private fun isKeylessEndpoint(url: String): Boolean {
-        val u = url.lowercase()
-        return u.contains("pollinations.ai") ||
-            u.contains("localhost") ||
-            u.contains("127.0.0.1") ||
-            u.contains("10.0.2.2") ||
-            u.contains("192.168.")
+    /**
+     * Uncontracted anonymous endpoints (such as Pollinations) are strictly blocked so minor
+     * learner conversations are never sent to unverified public relays.
+     */
+    fun isAllowedCustomEndpoint(url: String): Boolean {
+        val clean = url.trim().lowercase()
+        if (clean.isBlank()) return false
+        if (clean.contains("pollinations.ai")) return false
+        return if (BuildConfig.DEBUG) {
+            clean.startsWith("https://") ||
+                clean.startsWith("http://10.0.2.2:") ||
+                clean.startsWith("http://localhost:") ||
+                clean.startsWith("http://127.0.0.1:")
+        } else {
+            false
+        }
     }
 
-    private suspend fun tryFreeKeylessOpenSourceLlm(prompt: String): AiCoachReply? = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
-        if (now < pollinationsCooldownUntilMs) {
-            return@withContext null
-        }
-        val result = try {
-            withTimeout(9_000L) {
-                val freeSlot = LlmSlotConfig(
-                    slotIndex = 0,
-                    label = "Pollinations Free",
-                    providerName = "오픈소스 LLM",
-                    baseUrl = "https://text.pollinations.ai/openai",
-                    modelId = "openai",
-                    apiKey = "",
-                    enabled = true
-                )
-                callOpenAiCompatibleSlot(freeSlot, prompt)
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "Keyless open-source LLM timed out or failed: ${e.message}")
-            null
-        }
-        if (result == null) {
-            pollinationsCooldownUntilMs = System.currentTimeMillis() + 60_000L
-            null
-        } else {
-            parseStructuredReply(result, "오픈소스 LLM")
-        }
+    private fun isLocalDebugEndpoint(url: String): Boolean {
+        if (!BuildConfig.DEBUG) return false
+        val u = url.lowercase()
+        return u.startsWith("http://localhost:") ||
+            u.startsWith("http://127.0.0.1:") ||
+            u.startsWith("http://10.0.2.2:")
     }
 
     private suspend fun tryExternalSlotRotation(
         prompt: String,
         slots: List<LlmSlotConfig>,
-        keyedOnly: Boolean = false
+        keyedOnly: Boolean = true
     ): AiCoachReply? = withContext(Dispatchers.IO) {
+        // Custom external LLM slots are strictly disabled in release builds.
+        if (!BuildConfig.DEBUG) return@withContext null
+
         val activeSlots = slots.filter { slot ->
-            slot.enabled && slot.baseUrl.isNotBlank() &&
+            slot.enabled && isAllowedCustomEndpoint(slot.baseUrl) &&
                 if (keyedOnly) slot.apiKey.isNotBlank()
-                else (slot.apiKey.isNotBlank() || isKeylessEndpoint(slot.baseUrl))
+                else (slot.apiKey.isNotBlank() || isLocalDebugEndpoint(slot.baseUrl))
         }
         if (activeSlots.isEmpty()) return@withContext null
 
@@ -747,8 +711,13 @@ class HybridAiCoachEngine(
     }
 
     suspend fun testExternalSlot(slot: LlmSlotConfig): Result<String> = withContext(Dispatchers.IO) {
-        if (slot.baseUrl.isBlank() || (slot.apiKey.isBlank() && !isKeylessEndpoint(slot.baseUrl))) {
-            return@withContext Result.failure(IllegalArgumentException("API 키와 Base URL을 먼저 입력해 주세요."))
+        if (!BuildConfig.DEBUG) {
+            return@withContext Result.failure(
+                IllegalStateException("출시 버전에서는 보안상 기본 제공 Firebase AI Logic(Gemini)만 사용합니다.")
+            )
+        }
+        if (!isAllowedCustomEndpoint(slot.baseUrl) || (slot.apiKey.isBlank() && !isLocalDebugEndpoint(slot.baseUrl))) {
+            return@withContext Result.failure(IllegalArgumentException("허용된 HTTPS Base URL과 API 키를 입력해 주세요."))
         }
         val response = callOpenAiCompatibleSlot(
             slot = slot,
@@ -763,11 +732,11 @@ class HybridAiCoachEngine(
     }
 
     private fun callOpenAiCompatibleSlot(slot: LlmSlotConfig, prompt: String): String? {
+        if (!isAllowedCustomEndpoint(slot.baseUrl)) return null
         return try {
             val cleanBase = slot.baseUrl.trim().trimEnd('/')
             val endpoint = when {
                 cleanBase.endsWith("/chat/completions") -> cleanBase
-                cleanBase.contains("text.pollinations.ai/openai", ignoreCase = true) -> cleanBase
                 else -> "$cleanBase/chat/completions"
             }
 

@@ -76,7 +76,7 @@ enum class RpgBattleAction(val labelKo: String, val subKo: String) {
     WORD_STRIKE("단어 공격", "1~5등급 어휘"),
     PHRASE_CAST("회화 공격", "문장 · 말하기"),
     CLASS_SKILL("직업 스킬", "MP 50 필살기"),
-    GUARD_HINT("방어·힌트", "피해↓ 해마힌트")
+    GUARD_HINT("방어·힌트", "피해↓ 연상힌트")
 }
 
 enum class RpgGamePhase {

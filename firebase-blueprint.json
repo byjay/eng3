@@ -53,6 +53,14 @@
           "type": "array",
           "description": "Bounded list (max 30) of unlocked 3D collectible badge/item IDs."
         },
+        "kakaoUserId": {
+          "type": "string",
+          "description": "Optional normalized KakaoTalk account identifier (kakao_<id>) linked by this Firebase user."
+        },
+        "connectedKakaoIds": {
+          "type": "array",
+          "description": "Optional bounded list (max 30) of normalized KakaoTalk friend identifiers (kakao_<id>) synced via Kakao Friends API."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -77,6 +85,71 @@
         "todayWordsCompleted",
         "lastStudyDate",
         "unlockedItems",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FamilyStreakEntry": {
+      "title": "FamilyStreakEntry",
+      "description": "Non-PII daily streak leaderboard record keyed by normalized KakaoTalk ID (kakao_<id>) or uid_<firebaseUid>, readable only by the owner and connected Kakao Friends when shareWithFriends is true.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "kakaoUserId": {
+          "type": "string",
+          "description": "Normalized KakaoTalk user ID (kakao_<id>) or empty string if not linked."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Public family leaderboard display nickname (1..40 chars)."
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Optional sanitized https:// profile thumbnail URL."
+        },
+        "streakCount": {
+          "type": "integer",
+          "description": "Current consecutive daily study streak count (0..10000)."
+        },
+        "todayWordsCompleted": {
+          "type": "integer",
+          "description": "Words mastered today for tie-breaking (0..500)."
+        },
+        "totalXp": {
+          "type": "integer",
+          "description": "Total XP earned for tie-breaking (0..10000000)."
+        },
+        "lastStudyDate": {
+          "type": "string",
+          "description": "ISO date YYYY-MM-DD of the most recent study activity."
+        },
+        "shareWithFriends": {
+          "type": "boolean",
+          "description": "Opt-in privacy flag controlling whether connected Kakao Friends can read this streak entry."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "kakaoUserId",
+        "displayName",
+        "streakCount",
+        "todayWordsCompleted",
+        "totalXp",
+        "lastStudyDate",
+        "shareWithFriends",
         "createdAt",
         "updatedAt"
       ]
@@ -230,7 +303,13 @@
       "schema": {
         "$ref": "#/entities/UserProgress"
       },
-      "description": "User profile, game currency, streak, and unlocked collectible items."
+      "description": "User profile, game currency, streak, Kakao linkage metadata, and unlocked collectible items."
+    },
+    "/familyStreaks/{entryId}": {
+      "schema": {
+        "$ref": "#/entities/FamilyStreakEntry"
+      },
+      "description": "Daily streak leaderboard entries shared between connected KakaoTalk friends via Firebase Authentication."
     },
     "/users/{userId}/wordMastery/{wordId}": {
       "schema": {

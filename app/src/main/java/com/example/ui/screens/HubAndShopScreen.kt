@@ -18,10 +18,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
@@ -60,6 +64,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -93,6 +98,9 @@ import com.example.model.StudyScheduleItem
 import com.example.model.StudyTimeLogEntry
 import com.example.model.UserProgress
 import com.example.ui.components.Elevated3DCard
+import com.example.ui.components.FamilyLeaderboardCard
+import com.example.ui.components.FamilyLeaderboardUiState
+import com.example.ui.components.StitchIconPillTab
 import com.example.ui.components.StudyStatsOverviewCards
 import com.example.ui.components.Tactile3DButton
 import com.example.ui.theme.AdventureEmerald
@@ -141,11 +149,11 @@ fun HubAndShopScreen(
     onOpenMysteryChest: () -> Unit,
     onSaveParentProfiles: (ParentProfiles) -> Unit,
     onCreateGiftRequest: (targetParent: String, titleKo: String, reasonKo: String) -> Unit,
-    onApproveGiftWithPin: (giftId: String, pin: String) -> Boolean,
+    onApproveGiftWithPin: (giftId: String, pin: String, onResult: (Boolean) -> Unit) -> Unit,
     onShareGiftToKakao: (GiftRequestItem) -> Unit,
     onAddDadMission: (titleKo: String, descKo: String, rewardWon: Int) -> Unit,
     onMarkMissionDone: (missionId: String) -> Unit,
-    onApproveMissionWithPin: (missionId: String, pin: String) -> Boolean,
+    onApproveMissionWithPin: (missionId: String, pin: String, onResult: (Boolean) -> Unit) -> Unit,
     onAddScorecard: (examTitle: String, subject: String, score: Int, target: Int) -> Unit,
     onAddSchedule: (dayKo: String, timeLabel: String, titleKo: String, detailKo: String) -> Unit,
     onToggleScheduleDone: (id: String) -> Unit,
@@ -162,15 +170,104 @@ fun HubAndShopScreen(
     onRefillHearts: () -> Unit,
     onSelectEngineMode: (AiEngineMode) -> Unit,
     onSaveLlmSlot: (LlmSlotConfig) -> Unit,
-    onTestLlmSlot: (LlmSlotConfig) -> Unit
+    onTestLlmSlot: (LlmSlotConfig) -> Unit,
+    initialSubTab: Int = 1,
+    familyLeaderboardState: FamilyLeaderboardUiState = FamilyLeaderboardUiState.SignedOut,
+    firebaseDisplayName: String? = null,
+    shareStreakWithFriends: Boolean = false,
+    onGoogleSignIn: () -> Unit = {},
+    onSignOutFirebase: () -> Unit = {},
+    onRefreshFamilyLeaderboard: () -> Unit = {},
+    onToggleShareStreakWithFriends: (Boolean) -> Unit = {},
+    onDeleteAccountAndData: () -> Unit = {}
 ) {
-    // 0 = 가족·보물, 1 = 통계·검증, 2 = 용돈·점수, 3 = 카카오·CF·AI
-    var activeSubTab by remember { mutableIntStateOf(1) }
+    // 0 = 가족·리더보드·보물, 1 = 통계·검증, 2 = 용돈·점수, 3 = 카카오·CF·AI
+    var activeSubTab by remember { mutableIntStateOf(initialSubTab) }
+    LaunchedEffect(initialSubTab) {
+        activeSubTab = initialSubTab
+    }
 
     // Parent PIN Dialog State (shared for Gift approval & Allowance Mission approval)
     var pinDialogTitle by remember { mutableStateOf<String?>(null) }
     var pinInput by remember { mutableStateOf("") }
-    var pinAction by remember { mutableStateOf<((String) -> Boolean)?>(null) }
+    var pinAction by remember { mutableStateOf<((String, (Boolean) -> Unit) -> Unit)?>(null) }
+    var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
+    var showDeleteAccountConfirmDialog by remember { mutableStateOf(false) }
+
+    if (showPrivacyPolicyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyPolicyDialog = false },
+            title = { Text("개인정보처리방침 · 청소년 안전 안내", fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "1. 수집·처리하는 데이터",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Text(
+                        text = "• Google 로그인 계정 식별자(UID)·표시 이름: 학습 기록·연속 학습일(스트릭)을 Firebase Firestore에 동기화하기 위해 사용합니다.\n• 음성(마이크 권한): 영어 발음 평가와 AI 영어 회화 연습을 위해 사용자가 마이크 버튼을 눌렀을 때만 인식되며, 음성 파일 원본을 별도 서버에 영구 저장하지 않습니다.\n• 카카오 친구목록(선택): 카카오 비즈앱 권한 및 친구의 개별 동의가 완료된 경우에 한해 가족 리더보드 스트릭 비교에 사용됩니다.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "2. 인공지능(AI) 튜터 고지 및 청소년 보호",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Text(
+                        text = "• 회화 화면의 모든 튜터는 실제 사람이 아닌 인공지능(Firebase AI Logic · Gemini) 시뮬레이션입니다.\n• 청소년 학습자를 위해 개인 연락처·학교·주소 등을 묻지 않도록 안전 가이드라인이 적용되어 있습니다.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "3. 기기 보안 및 데이터 삭제 권리",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Text(
+                        text = "• 부모님 PIN은 솔트(Salt)가 적용된 SHA-256 해시로만 저장되며 클라우드 자동 백업에서 제외됩니다.\n• 사용자는 언제든지 '연동·설정' 탭의 [계정 및 모든 데이터 삭제] 버튼으로 클라우드(Firestore) 및 기기 내 모든 학습 기록을 즉시 영구 삭제할 수 있습니다.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showPrivacyPolicyDialog = false },
+                    modifier = Modifier.testTag("close_privacy_policy_button")
+                ) {
+                    Text("확인", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showDeleteAccountConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAccountConfirmDialog = false },
+            title = { Text("계정 및 모든 데이터 영구 삭제", fontWeight = FontWeight.ExtraBold, color = SpartaRed) },
+            text = {
+                Text(
+                    text = "클라우드(Firestore)의 학습 진도·가족 리더보드 기록과 기기 내 오답노트·설정·부모님 PIN이 모두 즉시 삭제되며 복구할 수 없습니다. 정말 삭제하시겠습니까?",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAccountConfirmDialog = false
+                        onDeleteAccountAndData()
+                    },
+                    modifier = Modifier.testTag("confirm_delete_account_button")
+                ) {
+                    Text("영구 삭제", fontWeight = FontWeight.ExtraBold, color = SpartaRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAccountConfirmDialog = false }) {
+                    Text("취소")
+                }
+            }
+        )
+    }
 
     if (pinDialogTitle != null && pinAction != null) {
         AlertDialog(
@@ -182,33 +279,50 @@ fun HubAndShopScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "등록된 아빠·엄마 4자리 PIN 번호를 입력하세요.",
+                        text = if (parents.isPinConfigured) {
+                            "등록된 부모님 PIN 번호(4~6자리)를 입력하세요."
+                        } else {
+                            "아직 부모님 PIN이 설정되지 않았습니다. 먼저 '가족' 탭에서 안전한 4~6자리 PIN을 등록해 주세요."
+                        },
                         style = MaterialTheme.typography.bodySmall
                     )
-                    OutlinedTextField(
-                        value = pinInput,
-                        onValueChange = { if (it.length <= 6) pinInput = it },
-                        label = { Text("부모님 PIN (기본 1234)") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("parent_pin_dialog_input")
-                    )
+                    if (parents.isPinConfigured) {
+                        OutlinedTextField(
+                            value = pinInput,
+                            onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) pinInput = it },
+                            label = { Text("부모님 PIN 입력") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("parent_pin_dialog_input")
+                        )
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val ok = pinAction?.invoke(pinInput) == true
-                        if (ok) {
+                        if (!parents.isPinConfigured) {
                             pinDialogTitle = null
                             pinInput = ""
+                            activeSubTab = 0
+                        } else {
+                            pinAction?.invoke(pinInput) { ok ->
+                                if (ok) {
+                                    pinDialogTitle = null
+                                    pinInput = ""
+                                }
+                            }
                         }
                     },
                     modifier = Modifier.testTag("parent_pin_confirm_button")
                 ) {
-                    Text("승인하기", fontWeight = FontWeight.Bold, color = AdventureEmeraldShadow)
+                    Text(
+                        text = if (parents.isPinConfigured) "승인하기" else "PIN 설정하러 가기",
+                        fontWeight = FontWeight.Bold,
+                        color = AdventureEmeraldShadow
+                    )
                 }
             },
             dismissButton = {
@@ -229,34 +343,35 @@ fun HubAndShopScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Top 4 Sub-Tabs
+        // Top 4 Google Stitch Icon Sub-Tabs
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                val tabs = listOf(
-                    Triple(1, "달력·검증", SkyQuestBlue to SkyQuestBlueShadow),
-                    Triple(0, "가족·보물", TrophyGold to TrophyGoldShadow),
-                    Triple(2, "용돈·점수", AdventureEmerald to AdventureEmeraldShadow),
-                    Triple(3, "카카오·AI", RoyalPurple to RoyalPurpleShadow)
-                )
-                tabs.forEach { (idx, label, colors) ->
-                    val selected = activeSubTab == idx
-                    Tactile3DButton(
-                        text = label,
-                        containerColor = if (selected) colors.first else MaterialTheme.colorScheme.surfaceVariant,
-                        shadowColor = if (selected) colors.second else Color(0xFFC5CFD9),
-                        contentColor = when {
-                            selected && idx == 0 -> Color(0xFF3E2C00)
-                            selected -> Color.White
-                            else -> MaterialTheme.colorScheme.onSurface
-                        },
-                        height = 44.dp,
-                        modifier = Modifier.weight(1f),
-                        tag = "hub_subtab_$idx",
-                        onClick = { activeSubTab = idx }
+                Row(
+                    modifier = Modifier.padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val tabs = listOf(
+                        Triple(1, Icons.Filled.CalendarMonth to "통계", SkyQuestBlue),
+                        Triple(0, Icons.Filled.CardGiftcard to "가족", TrophyGoldShadow),
+                        Triple(2, Icons.Filled.EmojiEvents to "점수", AdventureEmerald),
+                        Triple(3, Icons.Filled.Hub to "연동", RoyalPurple)
                     )
+                    tabs.forEach { (idx, iconAndLabel, accent) ->
+                        StitchIconPillTab(
+                            icon = iconAndLabel.first,
+                            label = iconAndLabel.second,
+                            selected = activeSubTab == idx,
+                            accent = accent,
+                            tag = "hub_subtab_$idx",
+                            modifier = Modifier.weight(1f),
+                            onClick = { activeSubTab = idx }
+                        )
+                    }
                 }
             }
         }
@@ -280,8 +395,24 @@ fun HubAndShopScreen(
             }
         }
 
-        // ==================== TAB 0: PARENTS (DAD & MOM) + GUEST INVITE + SPOILER-FREE MYSTERY TREASURE VAULT ====================
+        // ==================== TAB 0: FAMILY LEADERBOARD + PARENTS + GUEST INVITE + MYSTERY VAULT ====================
         if (activeSubTab == 0) {
+            item {
+                FamilyLeaderboardCard(
+                    state = familyLeaderboardState,
+                    kakaoSession = kakaoSession,
+                    firebaseUserDisplayName = firebaseDisplayName,
+                    shareWithFriends = shareStreakWithFriends,
+                    compact = false,
+                    onGoogleSignIn = onGoogleSignIn,
+                    onSignOutFirebase = onSignOutFirebase,
+                    onConnectKakao = onLaunchKakaoLogin,
+                    onRefreshLeaderboard = onRefreshFamilyLeaderboard,
+                    onToggleShareWithFriends = onToggleShareStreakWithFriends,
+                    onInviteKakaoFriends = onGenerateAndShareGuestInvite
+                )
+            }
+
             item {
                 ParentRegistrationCard(
                     parents = parents,
@@ -544,7 +675,7 @@ fun HubAndShopScreen(
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(
-                                            text = "아빠 승인 & 용돈 지급 완료! (성채 HP +${mission.castleHpBonus}%)",
+                                            text = "아빠 승인 & 용돈 지급 약속 기록 완료! (앱 내 송금 없음 · 성채 HP +${mission.castleHpBonus}%)",
                                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                             color = AdventureEmeraldShadow,
                                             modifier = Modifier.padding(10.dp)
@@ -565,7 +696,7 @@ fun HubAndShopScreen(
                                 }
                                 else -> {
                                     Tactile3DButton(
-                                        text = "부모님 PIN 승인 (+${mission.rewardWon}원 지급)",
+                                        text = "부모님 PIN 승인 (+${mission.rewardWon}원 약속 기록)",
                                         icon = Icons.Default.LockOpen,
                                         containerColor = AdventureEmerald,
                                         shadowColor = AdventureEmeraldShadow,
@@ -573,9 +704,11 @@ fun HubAndShopScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         tag = "mission_parent_approve_${mission.id}",
                                         onClick = {
-                                            pinDialogTitle = "용돈 미션 승인 (+${mission.rewardWon}원)"
+                                            pinDialogTitle = "가족 용돈 약속 승인 (+${mission.rewardWon}원 기록)"
                                             pinInput = ""
-                                            pinAction = { entered -> onApproveMissionWithPin(mission.id, entered) }
+                                            pinAction = { entered, onResult ->
+                                                onApproveMissionWithPin(mission.id, entered, onResult)
+                                            }
                                         }
                                     )
                                 }
@@ -862,7 +995,12 @@ fun HubAndShopScreen(
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                         }
-                        AiEngineMode.entries.forEach { mode ->
+                        val visibleModes = if (com.example.BuildConfig.DEBUG) {
+                            AiEngineMode.entries
+                        } else {
+                            listOf(AiEngineMode.BUILT_IN_GEMINI, AiEngineMode.OFFLINE_ONLY)
+                        }
+                        visibleModes.forEach { mode ->
                             val selected = mode == engineMode
                             Surface(
                                 shape = RoundedCornerShape(14.dp),
@@ -904,13 +1042,66 @@ fun HubAndShopScreen(
                 }
             }
 
-            items(llmSlots, key = { it.slotIndex }) { slot ->
-                LlmSlotEditorCard(
-                    slot = slot,
-                    testResult = slotTestResults[slot.slotIndex],
-                    onSave = onSaveLlmSlot,
-                    onTest = onTestLlmSlot
-                )
+            if (com.example.BuildConfig.DEBUG) {
+                items(llmSlots, key = { it.slotIndex }) { slot ->
+                    LlmSlotEditorCard(
+                        slot = slot,
+                        testResult = slotTestResults[slot.slotIndex],
+                        onSave = onSaveLlmSlot,
+                        onTest = onTestLlmSlot
+                    )
+                }
+            }
+
+            // 5. Privacy Policy, AI Safety Disclosure & Account/Data Deletion (Google Play Compliance)
+            item {
+                Elevated3DCard(accentShadow = SpartaRed.copy(alpha = 0.25f)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Policy,
+                                contentDescription = null,
+                                tint = SkyQuestBlueShadow,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "개인정보 보호 · 계정 및 데이터 관리",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                            )
+                        }
+                        Text(
+                            text = "개인정보처리방침, AI 튜터 청소년 안전 안내를 확인하거나 계정과 모든 클라우드·기기 데이터를 즉시 삭제할 수 있습니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Tactile3DButton(
+                                text = "개인정보처리방침",
+                                icon = Icons.Default.Policy,
+                                containerColor = SkyQuestBlue,
+                                shadowColor = SkyQuestBlueShadow,
+                                height = 44.dp,
+                                modifier = Modifier.weight(1f),
+                                tag = "open_privacy_policy_button",
+                                onClick = { showPrivacyPolicyDialog = true }
+                            )
+                            Tactile3DButton(
+                                text = "계정·데이터 삭제",
+                                icon = Icons.Default.DeleteForever,
+                                containerColor = SpartaRed,
+                                shadowColor = SpartaRedShadow,
+                                height = 44.dp,
+                                modifier = Modifier.weight(1f),
+                                tag = "delete_account_data_button",
+                                onClick = { showDeleteAccountConfirmDialog = true }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -932,12 +1123,12 @@ private fun ParentRegistrationCard(
             }
         )
     }
-    var pin by remember(parents.parentPin) { mutableStateOf(parents.parentPin) }
+    var pin by remember { mutableStateOf("") }
 
     Elevated3DCard(accentShadow = SkyQuestBlueShadow.copy(alpha = 0.35f)) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "애칭 선택 (원삐 · 투삐) & 부모님 PIN",
+                text = "애칭 선택 (원삐 · 투삐) & 부모님 PIN 보안",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
             )
             // Nickname-only toggle chips (no real name input)
@@ -983,13 +1174,26 @@ private fun ParentRegistrationCard(
                     modifier = Modifier.weight(1f)
                 )
             }
+            Text(
+                text = if (parents.isPinConfigured) {
+                    "PIN 상태: 암호화 설정 완료 (변경할 때만 새 4~6자리 숫자를 입력하세요)"
+                } else {
+                    "PIN 상태: 미설정 — 용돈·선물 승인을 위해 안전한 4~6자리 숫자를 등록하세요 (1234·0000 불가)"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = if (parents.isPinConfigured) AdventureEmeraldShadow else SpartaRed
+            )
             OutlinedTextField(
                 value = pin,
-                onValueChange = { if (it.length <= 6) pin = it },
-                label = { Text("부모님 PIN (4자리)") },
+                onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) pin = it },
+                label = {
+                    Text(if (parents.isPinConfigured) "새 부모님 PIN (변경 시 4~6자리)" else "부모님 PIN 최초 설정 (4~6자리)")
+                },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("parent_pin_setup_input")
             )
             Tactile3DButton(
                 text = "저장",
@@ -1005,9 +1209,11 @@ private fun ParentRegistrationCard(
                             dadName = dadName.ifBlank { "아빠 국왕" },
                             momName = momName.ifBlank { "엄마 왕비" },
                             daughterName = selectedNickname.ifBlank { "원삐" },
-                            parentPin = pin.ifBlank { "1234" }
+                            parentPin = pin.trim(),
+                            isPinConfigured = parents.isPinConfigured
                         )
                     )
+                    pin = ""
                 }
             )
         }
@@ -1605,7 +1811,7 @@ private fun LlmSlotEditorCard(
                     Icon(
                         imageVector = Icons.Default.Key,
                         contentDescription = null,
-                        tint = if (enabled && (apiKey.isNotBlank() || baseUrl.contains("pollinations") || baseUrl.contains("10.0.2.2") || baseUrl.contains("localhost"))) AdventureEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (enabled && (apiKey.isNotBlank() || baseUrl.contains("10.0.2.2") || baseUrl.contains("localhost"))) AdventureEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(8.dp))
@@ -1615,7 +1821,7 @@ private fun LlmSlotEditorCard(
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
-                            text = if (apiKey.isBlank()) "${slot.lastStatus} (${modelId})" else "무료 키 설정됨 · ${modelId}",
+                            text = if (apiKey.isBlank()) "${slot.lastStatus} (${modelId})" else "디버그 키 설정됨 · ${modelId}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1629,17 +1835,16 @@ private fun LlmSlotEditorCard(
 
             if (expanded) {
                 Text(
-                    text = "원터치 무료 오픈소스 LLM 프리셋 채우기:",
+                    text = "디버그 전용 LLM 프리셋 채우기:",
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = SkyQuestBlueShadow
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     val presets = listOf(
-                        Triple("Pollinations(키불필요)", "https://text.pollinations.ai/openai", "openai"),
-                        Triple("Groq 무료(300t/s)", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
-                        Triple("OpenRouter 무료", "https://openrouter.ai/api/v1", "openrouter/free"),
-                        Triple("Cerebras 무료", "https://api.cerebras.ai/v1", "llama-3.3-70b"),
-                        Triple("HuggingFace 무료", "https://router.huggingface.co/v1", "Qwen/Qwen2.5-72B-Instruct"),
+                        Triple("Groq (Debug)", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+                        Triple("OpenRouter (Debug)", "https://openrouter.ai/api/v1", "openrouter/free"),
+                        Triple("Cerebras (Debug)", "https://api.cerebras.ai/v1", "llama-3.3-70b"),
+                        Triple("HuggingFace (Debug)", "https://router.huggingface.co/v1", "Qwen/Qwen2.5-72B-Instruct"),
                         Triple("Ollama 로컬", "http://10.0.2.2:11434/v1", "llama3.2")
                     )
                     items(presets) { (name, url, model) ->

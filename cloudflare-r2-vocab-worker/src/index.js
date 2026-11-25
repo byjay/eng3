@@ -506,17 +506,81 @@ async function runScheduledBatch(env, maxWordsOverride) {
   return { meta: nextMeta, addedCount: newlyCollected.length };
 }
 
-function jsonResponse(body, status = 200, env = {}) {
+function resolveCorsOrigin(request, env) {
+  const configured = (env.ALLOWED_ORIGIN || "").trim();
+  const reqOrigin = (request.headers.get("Origin") || "").trim();
+  if (!configured || configured === "*") {
+    return null;
+  }
+  const allowList = configured.split(",").map((s) => s.trim()).filter(Boolean);
+  if (reqOrigin && allowList.includes(reqOrigin)) {
+    return reqOrigin;
+  }
+  return allowList[0] || null;
+}
+
+function buildSecurityHeaders(request, env, isPrivate = false) {
+  const headers = {
+    "Content-Type": "application/json; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": isPrivate ? "no-store" : "public, max-age=120",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Vary": "Origin"
+  };
+  const allowedOrigin = resolveCorsOrigin(request, env);
+  if (allowedOrigin) {
+    headers["Access-Control-Allow-Origin"] = allowedOrigin;
+  }
+  return headers;
+}
+
+function jsonResponse(body, status = 200, env = {}, request = new Request("https://local"), isPrivate = false) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": env.ALLOWED_ORIGIN || "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Cache-Control": "public, max-age=120"
-    }
+    headers: buildSecurityHeaders(request, env, isPrivate)
   });
+}
+
+async function constantTimeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const enc = new TextEncoder();
+  const hashA = new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(a)));
+  const hashB = new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(b)));
+  if (hashA.length !== hashB.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hashA.length; i++) {
+    diff |= hashA[i] ^ hashB[i];
+  }
+  return diff === 0 && a.length === b.length;
+}
+
+async function requireBearerSecret(request, env, secretValue, label) {
+  if (!secretValue || typeof secretValue !== "string" || secretValue.trim().length < 16) {
+    return jsonResponse(
+      { error: `${label} is not configured on the server` },
+      503,
+      env,
+      request,
+      true
+    );
+  }
+  const auth = request.headers.get("Authorization") || "";
+  if (!auth.startsWith("Bearer ")) {
+    return jsonResponse({ error: "Unauthorized" }, 401, env, request, true);
+  }
+  const provided = auth.slice("Bearer ".length).trim();
+  const valid = await constantTimeEqual(provided, secretValue.trim());
+  if (!valid) {
+    return jsonResponse({ error: "Unauthorized" }, 401, env, request, true);
+  }
+  return null;
+}
+
+function clampInt(val, min, max, fallback) {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
 }
 
 export default {
@@ -526,14 +590,9 @@ export default {
 
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": env.ALLOWED_ORIGIN || "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization"
-        }
-      });
+      const headers = buildSecurityHeaders(request, env, true);
+      delete headers["Content-Type"];
+      return new Response(null, { status: 204, headers });
     }
 
     const url = new URL(request.url);
@@ -542,21 +601,21 @@ export default {
 
     if (request.method === "GET" && path === "/api/vocab/meta") {
       const meta = await readR2Json(r2, "meta.json", { totalWords: 0, currentShard: 1, totalShards: 1, totalGroups: 0 });
-      return jsonResponse(meta, 200, env);
+      return jsonResponse(meta, 200, env, request);
     }
 
     if (request.method === "GET" && path === "/api/vocab/groups") {
       const groups = await readR2Json(r2, "groups/synonym-groups.json", { totalGroups: 0, groups: {} });
-      return jsonResponse(groups, 200, env);
+      return jsonResponse(groups, 200, env, request);
     }
 
     if (request.method === "GET" && path.startsWith("/api/vocab/shard/")) {
       const num = parseInt(path.split("/").pop() || "1", 10);
-      if (Number.isNaN(num) || num < 1) {
-        return jsonResponse({ error: "Invalid shard number" }, 400, env);
+      if (Number.isNaN(num) || num < 1 || num > 10000) {
+        return jsonResponse({ error: "Invalid shard number" }, 400, env, request);
       }
       const items = await readR2Json(r2, shardKeyForNumber(num), []);
-      return jsonResponse({ shard: num, count: items.length, words: items }, 200, env);
+      return jsonResponse({ shard: num, count: items.length, words: items }, 200, env, request);
     }
 
     if (request.method === "GET" && path === "/api/vocab/latest") {
@@ -569,33 +628,70 @@ export default {
           latest.push(items[i]);
         }
       }
-      return jsonResponse({ meta, count: latest.length, words: latest }, 200, env);
+      return jsonResponse({ meta, count: latest.length, words: latest }, 200, env, request);
     }
 
+    // Fail-closed admin bootstrap endpoint
     if (request.method === "POST" && path === "/api/vocab/bootstrap") {
-      if (env.ADMIN_TOKEN) {
-        const auth = request.headers.get("Authorization") || "";
-        if (auth !== `Bearer ${env.ADMIN_TOKEN}`) {
-          return jsonResponse({ error: "Unauthorized" }, 401, env);
-        }
-      }
+      const authError = await requireBearerSecret(request, env, env.ADMIN_TOKEN, "ADMIN_TOKEN");
+      if (authError) return authError;
+
       const body = await request.json().catch(() => ({}));
-      const count = Math.min(25, Math.max(1, parseInt(body.batchSize || "10", 10)));
+      const count = clampInt(body?.batchSize, 1, 25, 10);
       const result = await runScheduledBatch(env, count);
-      return jsonResponse({ ok: true, ...result }, 200, env);
+      return jsonResponse({ ok: true, ...result }, 200, env, request, true);
     }
 
-    // Backward-compatible app level registration endpoint
+    // Fail-closed authenticated level sync endpoint (validated schema + non-overwriting key)
     if (request.method === "POST" && (path === "/api/levels" || path === "/levels")) {
-      const payload = await request.json().catch(() => null);
-      if (!payload || !payload.daughterName) {
-        return jsonResponse({ error: "Invalid level payload" }, 400, env);
+      const syncSecret = env.LEVEL_SYNC_TOKEN || env.ADMIN_TOKEN;
+      const authError = await requireBearerSecret(request, env, syncSecret, "LEVEL_SYNC_TOKEN");
+      if (authError) return authError;
+
+      const rawText = await request.text();
+      if (!rawText || rawText.length > 4096) {
+        return jsonResponse({ error: "Payload too large or empty" }, 413, env, request, true);
       }
-      const safeName = String(payload.daughterName).replace(/[^a-zA-Z0-9가-힣_-]/g, "_").slice(0, 32);
-      await writeR2Json(r2, `levels/${safeName}.json`, payload);
-      return jsonResponse({ ok: true, saved: safeName }, 200, env);
+
+      let payload = null;
+      try {
+        payload = JSON.parse(rawText);
+      } catch {
+        return jsonResponse({ error: "Malformed JSON" }, 400, env, request, true);
+      }
+
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return jsonResponse({ error: "Invalid level payload" }, 400, env, request, true);
+      }
+
+      const rawNickname = typeof payload.daughterName === "string" ? payload.daughterName.trim() : "";
+      if (rawNickname.length < 1 || rawNickname.length > 32) {
+        return jsonResponse({ error: "Invalid nickname" }, 400, env, request, true);
+      }
+
+      // Use validated opaque account ID or generated UUID so callers cannot overwrite arbitrary records
+      const rawAccountId = typeof payload.accountId === "string" ? payload.accountId.trim() : "";
+      const recordId = /^[a-zA-Z0-9_-]{8,64}$/.test(rawAccountId)
+        ? rawAccountId
+        : crypto.randomUUID();
+
+      const sanitizedRecord = {
+        recordId,
+        nickname: rawNickname.replace(/[\r\n\t<>]/g, ""),
+        vocabGradeTier: clampInt(payload.vocabGradeTier, 1, 5, 3),
+        princessLevel: clampInt(payload.princessLevel, 1, 999, 1),
+        castleHpPercent: clampInt(payload.castleHpPercent, 0, 100, 40),
+        masteredWordCount: clampInt(payload.masteredWordCount, 0, 100000, 0),
+        accumulatedApiWordCount: clampInt(payload.accumulatedApiWordCount, 0, 100000, 0),
+        bossVictories: clampInt(payload.bossVictories, 0, 10000, 0),
+        totalXp: clampInt(payload.totalXp, 0, 10000000, 0),
+        registeredAt: new Date().toISOString()
+      };
+
+      await writeR2Json(r2, `levels/${recordId}.json`, sanitizedRecord);
+      return jsonResponse({ ok: true, recordId }, 200, env, request, true);
     }
 
-    return jsonResponse({ error: "Not found" }, 404, env);
+    return jsonResponse({ error: "Not found" }, 404, env, request);
   }
 };

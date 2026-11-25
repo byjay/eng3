@@ -22,4 +22,8 @@ crons = [
 SHARD_SIZE = "500"
 WORDS_PER_CRON = "10"
 MIN_QUEUE_THRESHOLD = "50"
-ALLOWED_ORIGIN = "*"
+# Set ALLOWED_ORIGIN to your exact web app origin (never "*" for authenticated endpoints)
+ALLOWED_ORIGIN = "https://dadquest.app"
+# Required Worker Secrets (configure via `wrangler secret put`):
+# - ADMIN_TOKEN (required for POST /api/vocab/bootstrap)
+# - LEVEL_SYNC_TOKEN (required for POST /api/levels)

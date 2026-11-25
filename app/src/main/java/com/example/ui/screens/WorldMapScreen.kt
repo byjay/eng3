@@ -74,6 +74,7 @@ import com.example.data.SquirrelRpgRepository
 import com.example.data.TravelCurriculumRepository
 import com.example.data.VocabRepository
 import com.example.model.AiHumanTutor
+import com.example.model.KakaoSessionState
 import com.example.model.KingdomProgressStats
 import com.example.model.ParentProfiles
 import com.example.model.ScenarioProgress
@@ -84,6 +85,8 @@ import com.example.model.VocabStudyTrack
 import com.example.model.VocabWord
 import com.example.ui.components.DailyGoalStreakCardSection
 import com.example.ui.components.Elevated3DCard
+import com.example.ui.components.FamilyLeaderboardCard
+import com.example.ui.components.FamilyLeaderboardUiState
 import com.example.ui.components.GameHudBar
 import com.example.ui.components.SquirrelHeroAvatar
 import com.example.ui.components.SquirrelMoodState
@@ -109,7 +112,19 @@ import com.example.ui.theme.StudioIris
 import com.example.ui.theme.StudioIrisSoft
 import com.example.ui.theme.TrophyGold
 import com.example.ui.theme.TrophyGoldShadow
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Replay
+import androidx.compose.material.icons.outlined.Shuffle
+import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Stars
+import com.example.ui.components.MaterialButtonStyle
+import com.example.ui.components.MaterialLearningButton
+import com.example.ui.components.StitchIconBadge
+import com.example.ui.components.StitchIconButton
+import com.example.ui.components.travelZoneStitchIcon
 
 @Composable
 fun WorldMapScreen(
@@ -133,6 +148,7 @@ fun WorldMapScreen(
     onSwitchPlayer: (String) -> Unit,
     onOpenHeroPicker: () -> Unit,
     onStartRpgChapter: (Int) -> Unit,
+    onOpenEnGameHub: () -> Unit,
     onOpenMysteryChest: () -> Unit,
     onStartVocabTrack: (VocabStudyTrack) -> Unit,
     onStartLevelTest: () -> Unit,
@@ -144,7 +160,18 @@ fun WorldMapScreen(
     onRefillHearts: () -> Unit,
     onSpeakFocusEnglish: (String) -> Unit,
     onRecordFocusWordResult: (wordId: String, known: Boolean) -> Unit,
-    onOpenWeeklyReport: () -> Unit
+    onOpenWeeklyReport: () -> Unit,
+    familyLeaderboardState: FamilyLeaderboardUiState = FamilyLeaderboardUiState.SignedOut,
+    kakaoSession: KakaoSessionState = KakaoSessionState(),
+    firebaseDisplayName: String? = null,
+    shareStreakWithFriends: Boolean = false,
+    onGoogleSignIn: () -> Unit = {},
+    onSignOutFirebase: () -> Unit = {},
+    onConnectKakao: () -> Unit = {},
+    onRefreshFamilyLeaderboard: () -> Unit = {},
+    onToggleShareStreakWithFriends: (Boolean) -> Unit = {},
+    onInviteKakaoFriends: () -> Unit = {},
+    onOpenFullFamilyLeaderboard: () -> Unit = onOpenFamilyGiftHub
 ) {
     var focusMood by remember { mutableStateOf(SquirrelMoodState.IDLE) }
     var isWrongReviewMode by remember { mutableStateOf(false) }
@@ -336,6 +363,22 @@ fun WorldMapScreen(
                     }
                 }
 
+                // 2-B. Family Leaderboard (Kakao Friends Daily Streak Counts via Firebase Auth)
+                FamilyLeaderboardCard(
+                    state = familyLeaderboardState,
+                    kakaoSession = kakaoSession,
+                    firebaseUserDisplayName = firebaseDisplayName,
+                    shareWithFriends = shareStreakWithFriends,
+                    compact = true,
+                    onGoogleSignIn = onGoogleSignIn,
+                    onSignOutFirebase = onSignOutFirebase,
+                    onConnectKakao = onConnectKakao,
+                    onRefreshLeaderboard = onRefreshFamilyLeaderboard,
+                    onToggleShareWithFriends = onToggleShareStreakWithFriends,
+                    onInviteKakaoFriends = onInviteKakaoFriends,
+                    onOpenFullLeaderboard = onOpenFullFamilyLeaderboard
+                )
+
                 // 2x2 Modern Learning-App Action Grid (Zero nested box clutter!)
                 Row(
                     modifier = Modifier
@@ -466,28 +509,37 @@ fun WorldMapScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Tactile3DButton(
+                        MaterialLearningButton(
                             text = "다람쥐 10종",
-                            icon = Icons.Outlined.StarOutline,
-                            containerColor = TrophyGold,
-                            shadowColor = TrophyGoldShadow,
-                            contentColor = Color.White,
-                            height = 46.dp,
+                            icon = Icons.Rounded.Stars,
+                            accent = TrophyGold,
+                            style = MaterialButtonStyle.TONAL,
                             modifier = Modifier.weight(0.95f),
                             tag = "home_open_squirrel_picker",
                             onClick = onOpenHeroPicker
                         )
-                        Tactile3DButton(
-                            text = "Ch.$nextChapterNum 스토리 출격",
-                            icon = Icons.Outlined.PlayArrow,
-                            containerColor = AdventureEmerald,
-                            shadowColor = AdventureEmeraldShadow,
-                            height = 46.dp,
-                            modifier = Modifier.weight(1.3f),
+                        MaterialLearningButton(
+                            text = "Ch.$nextChapterNum 스토리",
+                            icon = Icons.Rounded.PlayArrow,
+                            accent = AdventureEmerald,
+                            style = MaterialButtonStyle.FILLED,
+                            modifier = Modifier.weight(1.25f),
                             tag = "home_start_rpg_story",
                             onClick = { onStartRpgChapter(nextChapterNum) }
                         )
                     }
+
+                    // EnGame 2.0 4-Mode Arcade Launch Button
+                    MaterialLearningButton(
+                        text = "EnGame 2.0 아케이드 (블리츠·문장조립·동의어·보스)",
+                        icon = Icons.Rounded.SportsEsports,
+                        accent = StudioCobalt,
+                        style = MaterialButtonStyle.FILLED,
+                        badgeText = "4종",
+                        modifier = Modifier.fillMaxWidth(),
+                        tag = "home_open_engame_hub",
+                        onClick = onOpenEnGameHub
+                    )
 
                     // Sealed Mystery Chest — ONLY appears when earned! Zero item spoilers!
                     if (unopenedChests > 0) {
@@ -669,10 +721,10 @@ fun WorldMapScreen(
             }
         }
 
-        // 5. Anti-ABC 5-Track Vocab + Daily Free Word API 50+ Accumulator Card
+        // 5. Google Stitch Iconified Anti-ABC 5-Track Vocab + Daily +50 R2/API Accumulator
         item {
-            Elevated3DCard(accentShadow = AdventureEmerald.copy(alpha = 0.3f)) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Elevated3DCard(accentShadow = StudioCobalt.copy(alpha = 0.22f)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -680,60 +732,62 @@ fun WorldMapScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "ABC 순서 배제! 수능 영단어 성벽 훈련",
-                                style = MaterialTheme.typography.titleMedium
+                                text = "수능 영단어 5트랙",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
                             )
                             Text(
-                                text = "마스터 ${masteredWordsCount}개 · 무료API 누적 ${harvestedApiCount}단어 ($harvestStatusKo)",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = "마스터 ${masteredWordsCount} · R2/API +${harvestedApiCount}",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = SkyQuestBlue.copy(alpha = 0.14f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable(onClick = onHarvestDailyWords)
-                                .testTag("home_harvest_api_words")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.CloudDownload,
-                                    contentDescription = "오늘의 50단어 수집",
-                                    tint = SkyQuestBlue,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = "+50수집",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = SkyQuestBlue
-                                )
-                            }
-                        }
+                        StitchIconButton(
+                            icon = Icons.Outlined.CloudDownload,
+                            contentDescription = "오늘의 50단어 수집",
+                            accent = SkyQuestBlue,
+                            filled = true,
+                            size = 46.dp,
+                            iconSize = 21.dp,
+                            badgeCount = 50,
+                            tag = "home_harvest_api_words",
+                            onClick = onHarvestDailyWords
+                        )
                     }
 
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(VocabStudyTrack.entries) { track ->
-                            val (bg, shadow) = when (track) {
-                                VocabStudyTrack.CSAT_FREQUENCY -> SpartaRed to SpartaRedShadow
-                                VocabStudyTrack.CSAT_DIFFICULTY -> RoyalPurple to RoyalPurpleShadow
-                                VocabStudyTrack.RANDOM_MIX -> AdventureEmerald to AdventureEmeraldShadow
-                                VocabStudyTrack.SMART_REVIEW -> CoralOrange to CoralOrangeShadow
-                                VocabStudyTrack.TOPIC_SITUATION -> SkyQuestBlue to SkyQuestBlueShadow
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        VocabStudyTrack.entries.forEach { track ->
+                            val (icon, shortLabel, accent) = when (track) {
+                                VocabStudyTrack.CSAT_FREQUENCY -> Triple(Icons.Outlined.LocalFireDepartment, "빈출", SpartaRed)
+                                VocabStudyTrack.CSAT_DIFFICULTY -> Triple(Icons.Outlined.TrendingUp, "난도", StudioIris)
+                                VocabStudyTrack.RANDOM_MIX -> Triple(Icons.Outlined.Shuffle, "랜덤", StudioCobalt)
+                                VocabStudyTrack.SMART_REVIEW -> Triple(Icons.Outlined.Replay, "오답", StudioCoral)
+                                VocabStudyTrack.TOPIC_SITUATION -> Triple(Icons.Outlined.Category, "주제", GlacierCyan)
                             }
-                            Tactile3DButton(
-                                text = track.labelKo,
-                                containerColor = bg,
-                                shadowColor = shadow,
-                                height = 44.dp,
-                                tag = "home_track_${track.name}",
-                                onClick = { onStartVocabTrack(track) }
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable { onStartVocabTrack(track) }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    .testTag("home_track_${track.name}")
+                            ) {
+                                StitchIconBadge(
+                                    icon = icon,
+                                    contentDescription = track.labelKo,
+                                    accent = accent,
+                                    size = 48.dp,
+                                    iconSize = 22.dp
+                                )
+                                Text(
+                                    text = shortLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
@@ -846,38 +900,32 @@ private fun HomeQuickActionTile(
     onClick: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.2.dp, accent.copy(alpha = 0.28f)),
-        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.24f)),
+        shadowElevation = 3.dp,
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(22.dp))
             .clickable(onClick = onClick)
             .testTag(tag)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = softBg,
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = title,
-                            tint = accent,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+                StitchIconBadge(
+                    icon = icon,
+                    contentDescription = title,
+                    accent = accent,
+                    size = 48.dp,
+                    iconSize = 23.dp,
+                    filled = true
+                )
                 Surface(
                     shape = RoundedCornerShape(999.dp),
                     color = softBg
@@ -889,7 +937,7 @@ private fun HomeQuickActionTile(
                             fontWeight = FontWeight.ExtraBold
                         ),
                         color = accent,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
             }
@@ -921,61 +969,48 @@ private fun FairytaleExpeditionTile(
     val accent = Color(zone.accentHex)
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.5.dp, accent.copy(alpha = 0.45f)),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.30f)),
+        shadowElevation = 2.dp,
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .testTag("world_node_${zone.id}")
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = accent.copy(alpha = 0.16f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (zone.id <= 2) Icons.Outlined.Flight else Icons.Outlined.StarOutline,
-                            contentDescription = zone.titleKo,
-                            tint = accent,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(Modifier.width(3.dp))
-                        Text(
-                            text = "W${zone.id}",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
-                            color = accent
-                        )
-                    }
-                }
-                Icon(
-                    imageVector = Icons.Outlined.PlayArrow,
-                    contentDescription = "시작",
-                    tint = accent,
-                    modifier = Modifier.size(18.dp)
+                StitchIconBadge(
+                    icon = travelZoneStitchIcon(zone.id),
+                    contentDescription = zone.titleKo,
+                    accent = accent,
+                    size = 42.dp,
+                    iconSize = 20.dp,
+                    cornerBadgeText = "${zone.id}"
                 )
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = accent.copy(alpha = 0.14f)
+                ) {
+                    Text(
+                        text = "$clearedCount/10",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                        color = accent,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
             }
             Text(
                 text = zone.titleKo,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
                 maxLines = 1
-            )
-            Text(
-                text = "$clearedCount / 10 완료",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = accent
             )
         }
     }

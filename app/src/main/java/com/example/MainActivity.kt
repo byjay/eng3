@@ -20,6 +20,17 @@ import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.MicNone
+import androidx.compose.material.icons.rounded.BarChart
+import androidx.compose.material.icons.rounded.Flight
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
+import com.example.ui.components.StitchIconBadge
+import com.example.ui.theme.GlacierCyan
+import com.example.ui.theme.StudioCoral
+import com.example.ui.theme.StudioIris
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -32,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -47,16 +59,26 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.credentials.CredentialManager
 import com.example.data.DadKingdomLocalStore
+import com.example.data.FamilyLeaderboardRepository
 import com.example.data.LlmSlotStore
 import com.example.data.SquirrelRpgRepository
 import com.example.engine.HybridAiCoachEngine
 import com.example.engine.VoiceSpeechEngine
+import com.example.engine.EnGamePhase
+import com.example.firebase.attemptAutoSignIn
+import com.example.firebase.authStateFlow
 import com.example.firebase.configureAppCheck
+import com.example.firebase.onGoogleSignInClicked
+import com.example.firebase.signOutUser
 import com.example.model.RpgGamePhase
+import com.example.ui.components.QuestCompleteCelebrationDialog
 import com.example.ui.components.StreakMilestoneConfettiOverlay
 import com.example.ui.components.WeeklyStudyReportModal
 import com.example.ui.screens.AiTutorCallScreen
+import com.example.ui.screens.EnGameArenaOverlay
 import com.example.ui.screens.HubAndShopScreen
 import com.example.ui.screens.SpartaVocabScreen
 import com.example.ui.screens.SquirrelHeroPickerOverlay
@@ -66,6 +88,8 @@ import com.example.ui.screens.WorldMapScreen
 import com.example.ui.theme.StudioCobalt
 import com.example.ui.theme.SpeakQuestTheme
 import com.example.viewmodel.SpeakQuestViewModel
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -78,13 +102,15 @@ private enum class FamilyKingdomTab(
     val labelKo: String,
     val activityLogName: String,
     val icon: ImageVector,
+    val activeIcon: ImageVector,
+    val accentColor: androidx.compose.ui.graphics.Color,
     val tag: String
 ) {
-    KINGDOM("kingdom_home", "홈", "홈", Icons.Outlined.Home, "nav_kingdom_home"),
-    VOCAB("vocab_memorization", "단어암기", "단어암기", Icons.Outlined.MenuBook, "nav_vocab_pattern"),
-    TRAVEL("travel_100", "여행", "여행 회화 100", Icons.Outlined.Flight, "nav_travel"),
-    VIDEO_CALL("video_tutor", "회화", "원어민 회화학습", Icons.Outlined.MicNone, "nav_video_call"),
-    FAMILY_HUB("family_hub", "통계", "통계·리포트", Icons.Outlined.BarChart, "nav_family_hub")
+    KINGDOM("kingdom_home", "홈", "홈", Icons.Outlined.Home, Icons.Rounded.Home, StudioCobalt, "nav_kingdom_home"),
+    VOCAB("vocab_memorization", "암기", "단어암기", Icons.Outlined.MenuBook, Icons.Rounded.MenuBook, StudioCoral, "nav_vocab_pattern"),
+    TRAVEL("travel_100", "여행", "여행 회화 100", Icons.Outlined.Flight, Icons.Rounded.Flight, GlacierCyan, "nav_travel"),
+    VIDEO_CALL("video_tutor", "회화", "원어민 회화학습", Icons.Outlined.MicNone, Icons.Rounded.Mic, StudioIris, "nav_video_call"),
+    FAMILY_HUB("family_hub", "통계", "통계·리포트", Icons.Outlined.BarChart, Icons.Rounded.BarChart, StudioCobalt, "nav_family_hub")
 }
 
 class MainActivity : ComponentActivity() {
@@ -170,19 +196,26 @@ private fun FamilyKingdomApp(
                 val slotStore = LlmSlotStore(app)
                 val voiceEngine = VoiceSpeechEngine(app)
                 val aiCoachEngine = HybridAiCoachEngine(slotStore)
+                val familyLeaderboardRepository = FamilyLeaderboardRepository(app)
                 SpeakQuestViewModel(
                     localStore = localStore,
                     llmSlotStore = slotStore,
                     voiceEngine = voiceEngine,
-                    aiCoachEngine = aiCoachEngine
+                    aiCoachEngine = aiCoachEngine,
+                    familyLeaderboardRepository = familyLeaderboardRepository
                 )
             }
         }
     )
 
     var currentTab by rememberSaveable { mutableStateOf(FamilyKingdomTab.KINGDOM) }
+    var hubSelectedSubTab by rememberSaveable { mutableIntStateOf(1) }
     var showWeeklyReportModal by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val authScope = rememberCoroutineScope()
+    val credentialManager = remember(context) { CredentialManager.create(context) }
+    val firebaseUser by remember { Firebase.auth.authStateFlow() }
+        .collectAsStateWithLifecycle(initialValue = Firebase.auth.currentUser)
 
     val progress by viewModel.userProgress.collectAsStateWithLifecycle()
     val weeklyStudyReport by viewModel.weeklyStudyReport.collectAsStateWithLifecycle()
@@ -190,6 +223,7 @@ private fun FamilyKingdomApp(
     val parents by viewModel.parentProfiles.collectAsStateWithLifecycle()
     val masteredWordIds by viewModel.masteredWordIds.collectAsStateWithLifecycle()
     val weakWordIds by viewModel.weakWordIds.collectAsStateWithLifecycle()
+    val wrongNoteRecords by viewModel.wrongNoteRecords.collectAsStateWithLifecycle()
     val harvestedApiWords by viewModel.harvestedApiWords.collectAsStateWithLifecycle()
     val vocabGradeTier by viewModel.vocabGradeTier.collectAsStateWithLifecycle()
     val scenarioProgress by viewModel.scenarioProgressState.collectAsStateWithLifecycle()
@@ -227,7 +261,15 @@ private fun FamilyKingdomApp(
     val unopenedChests by viewModel.unopenedChests.collectAsStateWithLifecycle()
     val openedTreasures by viewModel.openedTreasures.collectAsStateWithLifecycle()
     val rpgState by viewModel.rpgState.collectAsStateWithLifecycle()
+    val enGameState by viewModel.enGameState.collectAsStateWithLifecycle()
+    val wordSm2Progress by viewModel.wordSm2Progress.collectAsStateWithLifecycle()
+    val dailyVocabMissions by viewModel.dailyVocabMissions.collectAsStateWithLifecycle()
+    val memoryPalaceEntries by viewModel.memoryPalaceEntries.collectAsStateWithLifecycle()
+    val rewardLedger by viewModel.rewardLedger.collectAsStateWithLifecycle()
+    val mediaReviewOverrides by viewModel.mediaReviewOverrides.collectAsStateWithLifecycle()
     val streakMilestoneEvent by viewModel.streakMilestoneEvent.collectAsStateWithLifecycle()
+    val questCelebrationEvent by viewModel.questCelebrationEvent.collectAsStateWithLifecycle()
+    var dueReviewLaunchNonce by remember { mutableIntStateOf(0) }
     val activeSquirrelHero = remember(selectedSquirrelHeroId) {
         SquirrelRpgRepository.findHeroById(selectedSquirrelHeroId)
     }
@@ -238,6 +280,55 @@ private fun FamilyKingdomApp(
     }
     val todayStudySec = remember(studyLogs, activeStudySec) {
         studyLogs.filter { it.dateIso == todayIso }.sumOf { it.durationSec } + activeStudySec
+    }
+
+    val familyLeaderboardState by viewModel.familyLeaderboardState.collectAsStateWithLifecycle()
+    val shareStreakWithFriends by viewModel.shareStreakWithFriends.collectAsStateWithLifecycle()
+    val firebaseDisplayName by viewModel.firebaseDisplayName.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        attemptAutoSignIn(
+            context = context,
+            credentialManager = credentialManager,
+            onAuthSuccess = {},
+            onUnauthenticated = {},
+            scope = authScope
+        )
+    }
+
+    LaunchedEffect(firebaseUser?.uid, firebaseUser?.displayName) {
+        viewModel.onFirebaseAuthStateChanged(
+            uid = firebaseUser?.uid,
+            displayName = firebaseUser?.displayName
+        )
+    }
+
+    val triggerGoogleSignIn: () -> Unit = {
+        onGoogleSignInClicked(
+            context = context,
+            credentialManager = credentialManager,
+            onAuthSuccess = {
+                viewModel.refreshFamilyLeaderboard(manual = true)
+            },
+            onAuthError = { errMsg ->
+                viewModel.showToast("Google 로그인 오류: $errMsg")
+            },
+            scope = authScope,
+            onAuthCancelled = {
+                viewModel.showToast("Google 로그인이 취소되었습니다.")
+            }
+        )
+    }
+
+    val triggerFirebaseSignOut: () -> Unit = {
+        signOutUser(
+            credentialManager = credentialManager,
+            scope = authScope,
+            onSignOutComplete = {
+                viewModel.onFirebaseAuthStateChanged(uid = null, displayName = null)
+                viewModel.showToast("Firebase 계정이 로그아웃되었습니다.")
+            }
+        )
     }
 
     LaunchedEffect(currentTab) {
@@ -289,6 +380,7 @@ private fun FamilyKingdomApp(
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp,
                 windowInsets = WindowInsets.navigationBars
             ) {
                 FamilyKingdomTab.entries.forEach { tab ->
@@ -302,27 +394,38 @@ private fun FamilyKingdomApp(
                             }
                         },
                         icon = {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.labelKo
-                            )
+                            if (selected) {
+                                StitchIconBadge(
+                                    icon = tab.activeIcon,
+                                    contentDescription = tab.labelKo,
+                                    accent = tab.accentColor,
+                                    size = 38.dp,
+                                    iconSize = 20.dp,
+                                    filled = true
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.labelKo
+                                )
+                            }
                         },
                         label = {
                             Text(
                                 text = tab.labelKo,
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontSize = 11.sp,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.5.sp,
+                                    fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
                                 ),
                                 maxLines = 1
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = StudioCobalt,
-                            selectedTextColor = StudioCobalt,
+                            selectedIconColor = tab.accentColor,
+                            selectedTextColor = tab.accentColor,
                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            indicatorColor = StudioCobalt.copy(alpha = 0.14f)
+                            indicatorColor = androidx.compose.ui.graphics.Color.Transparent
                         ),
                         modifier = Modifier.testTag(tab.tag)
                     )
@@ -358,6 +461,7 @@ private fun FamilyKingdomApp(
                         onSwitchPlayer = { name -> viewModel.selectActivePlayer(name) },
                         onOpenHeroPicker = { viewModel.openSquirrelHeroPicker() },
                         onStartRpgChapter = { chapterNum -> viewModel.startRpgChapter(chapterNum) },
+                        onOpenEnGameHub = { viewModel.openEnGameHub() },
                         onOpenMysteryChest = { viewModel.openMysteryTreasureChest() },
                         onStartVocabTrack = { track ->
                             viewModel.startSmartVocabSession(track = track, tier1To5 = vocabGradeTier)
@@ -395,6 +499,20 @@ private fun FamilyKingdomApp(
                         },
                         onOpenWeeklyReport = {
                             showWeeklyReportModal = true
+                        },
+                        familyLeaderboardState = familyLeaderboardState,
+                        kakaoSession = kakaoSession,
+                        firebaseDisplayName = firebaseDisplayName ?: firebaseUser?.displayName,
+                        shareStreakWithFriends = shareStreakWithFriends,
+                        onGoogleSignIn = triggerGoogleSignIn,
+                        onSignOutFirebase = triggerFirebaseSignOut,
+                        onConnectKakao = { viewModel.launchKakaoLogin(context) },
+                        onRefreshFamilyLeaderboard = { viewModel.refreshFamilyLeaderboard(manual = true) },
+                        onToggleShareStreakWithFriends = { enabled -> viewModel.toggleShareStreakWithFriends(enabled) },
+                        onInviteKakaoFriends = { viewModel.generateAndShareGuestInvite(context) },
+                        onOpenFullFamilyLeaderboard = {
+                            hubSelectedSubTab = 0
+                            currentTab = FamilyKingdomTab.FAMILY_HUB
                         }
                     )
                 }
@@ -464,7 +582,38 @@ private fun FamilyKingdomApp(
                         onTogglePatternKorean = { viewModel.togglePatternKorean() },
                         onSpeakPattern = { viewModel.speakPatternCurrent() },
                         onStartPatternSpeech = { viewModel.startPatternSpeechPractice() },
-                        onEvaluateTypedPattern = { spoken -> viewModel.evaluatePatternSpeech(spoken) }
+                        onEvaluateTypedPattern = { spoken -> viewModel.evaluatePatternSpeech(spoken) },
+                        userProgress = progress,
+                        wordSm2Progress = wordSm2Progress,
+                        dailyVocabMissions = dailyVocabMissions,
+                        memoryPalaceEntries = memoryPalaceEntries,
+                        onRecordSm2Recall = { word, grade, fromMnemonic ->
+                            viewModel.recordVocabCardSm2Recall(
+                                wordId = word.id,
+                                wordText = word.word,
+                                meaningKo = word.meaningKo,
+                                grade = grade,
+                                fromMnemonic = fromMnemonic
+                            )
+                        },
+                        onClaimMission = { missionId -> viewModel.claimVocabMissionReward(missionId) },
+                        onSaveMemoryPalace = { wordId, room, memo ->
+                            viewModel.saveWordToMemoryPalace(wordId, room, memo)
+                        },
+                        onOpenEnGameHub = { viewModel.openEnGameHub() },
+                        onLogAudioListen = { viewModel.logVocabAudioListen() },
+                        activeSquirrelHero = activeSquirrelHero,
+                        playerNickname = parents.daughterName,
+                        weakWordIds = weakWordIds,
+                        dailyGoalTarget = weeklyStudyReport.dailyGoalTarget,
+                        rewardLedger = rewardLedger,
+                        mediaReviewOverrides = mediaReviewOverrides,
+                        onSetDailyWordGoal = { goal -> viewModel.setDailyWordGoal(goal) },
+                        onToggleSuspendWord = { wordId, wordLabel -> viewModel.toggleSuspendWord(wordId, wordLabel) },
+                        onSubmitTypedRecall = { word, raw -> viewModel.submitTypedVocabRecall(word, raw) },
+                        onSetMediaReviewStatus = { wordId, status -> viewModel.setMediaReviewStatus(wordId, status) },
+                        dueReviewLaunchNonce = dueReviewLaunchNonce,
+                        wrongNoteRecords = wrongNoteRecords
                     )
                 }
 
@@ -557,8 +706,8 @@ private fun FamilyKingdomApp(
                         onCreateGiftRequest = { target, title, reason ->
                             viewModel.createGiftRequest(target, title, reason)
                         },
-                        onApproveGiftWithPin = { giftId, pin ->
-                            viewModel.approveGiftRequestWithPin(giftId, pin)
+                        onApproveGiftWithPin = { giftId, pin, onResult ->
+                            viewModel.approveGiftRequestWithPin(giftId, pin, onResult)
                         },
                         onShareGiftToKakao = { gift ->
                             viewModel.shareGiftRequestToKakao(context, gift)
@@ -567,7 +716,9 @@ private fun FamilyKingdomApp(
                             viewModel.addDadAllowanceMission(title, desc, won)
                         },
                         onMarkMissionDone = { id -> viewModel.markMissionDoneByDaughter(id) },
-                        onApproveMissionWithPin = { id, pin -> viewModel.approveMissionWithPin(id, pin) },
+                        onApproveMissionWithPin = { id, pin, onResult ->
+                            viewModel.approveMissionWithPin(id, pin, onResult)
+                        },
                         onAddScorecard = { exam, subject, score, target ->
                             viewModel.addScorecardEntry(exam, subject, score, target)
                         },
@@ -588,7 +739,16 @@ private fun FamilyKingdomApp(
                         onRefillHearts = { viewModel.refillHearts() },
                         onSelectEngineMode = { mode -> viewModel.setAiEngineMode(mode) },
                         onSaveLlmSlot = { slot -> viewModel.saveLlmSlot(slot) },
-                        onTestLlmSlot = { slot -> viewModel.testLlmSlot(slot) }
+                        onTestLlmSlot = { slot -> viewModel.testLlmSlot(slot) },
+                        initialSubTab = hubSelectedSubTab,
+                        familyLeaderboardState = familyLeaderboardState,
+                        firebaseDisplayName = firebaseDisplayName ?: firebaseUser?.displayName,
+                        shareStreakWithFriends = shareStreakWithFriends,
+                        onGoogleSignIn = triggerGoogleSignIn,
+                        onSignOutFirebase = triggerFirebaseSignOut,
+                        onRefreshFamilyLeaderboard = { viewModel.refreshFamilyLeaderboard(manual = true) },
+                        onToggleShareStreakWithFriends = { enabled -> viewModel.toggleShareStreakWithFriends(enabled) },
+                        onDeleteAccountAndData = { viewModel.deleteAccountAndAllData(context) }
                     )
                 }
             }
@@ -624,6 +784,43 @@ private fun FamilyKingdomApp(
                 onOpenMysteryChest = { viewModel.openMysteryTreasureChest() },
                 onNextChapter = { viewModel.advanceOrReplayRpgChapter() },
                 onRetryChapter = { viewModel.retryCurrentRpgChapter() }
+            )
+        }
+
+        // Full-Screen EnGame 2.0 4-Mode Arcade Arena Overlay
+        if (enGameState.phase != EnGamePhase.CLOSED) {
+            EnGameArenaOverlay(
+                state = enGameState,
+                hero = activeSquirrelHero,
+                playerNickname = parents.daughterName,
+                voiceState = voiceState,
+                onClose = { viewModel.closeEnGameOverlay() },
+                onBackToHub = { viewModel.backToEnGameHub() },
+                onStartMode = { mode -> viewModel.startEnGameMode(mode) },
+                onSubmitChoice = { choice -> viewModel.submitEnGameChoice(choice) },
+                onTapScrambledToken = { idx -> viewModel.tapEnGameScrambledToken(idx) },
+                onRemoveSelectedToken = { pos -> viewModel.removeEnGameSelectedToken(pos) },
+                onClearSentenceTokens = { viewModel.clearEnGameSentenceTokens() },
+                onSubmitSentenceBuilder = { viewModel.submitEnGameSentenceBuilder() },
+                onListenAudio = { text -> viewModel.listenRpgEnglish(text) },
+                onStartVoiceBossAttack = { viewModel.startEnGameVoiceBossAttack() },
+                onStopVoice = { viewModel.stopVoiceIo() },
+                onTapMemoryFlipCard = { idx -> viewModel.tapEnGameMemoryFlipCard(idx) },
+                onReviewMissedWords = {
+                    viewModel.closeEnGameOverlay()
+                    currentTab = FamilyKingdomTab.VOCAB
+                    dueReviewLaunchNonce += 1
+                }
+            )
+        }
+
+        // Quest Complete & Level-Up Cosmic Celebration Dialog (Reference Image 1 Center)
+        val activeQuestCelebration = questCelebrationEvent
+        if (activeQuestCelebration != null) {
+            QuestCompleteCelebrationDialog(
+                event = activeQuestCelebration,
+                hero = activeSquirrelHero,
+                onDismiss = { viewModel.dismissQuestCelebrationEvent() }
             )
         }
 

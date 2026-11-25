@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.engine.VocabMediaResolver
 import com.example.engine.VocabMnemonicEngine
 import com.example.model.VocabTopic
 import com.example.model.VocabWord
@@ -68,9 +69,9 @@ data class ChunkBuildStep(
 )
 
 /**
- * Bright, sunlit Visual Memory & Chunk-Building Learning Module combining:
- * 1) 경선식 해마 그림 연상 (Visual Hippocampus illustration + phonetic sound-hook + root story)
- * 2) 시원스쿨 3단 덩어리 블록 결합 (3-step progressive Lego blocks with tap-to-speak)
+ * Bright, sunlit Visual Association & Chunk-Building Learning Module combining:
+ * 1) 장면·발음·검증 어근 연상 (Meaning-matched visual scene + sound aid + verified morphemes)
+ * 2) 3단 덩어리 블록 결합 (3-step progressive Lego blocks with tap-to-speak)
  */
 @Composable
 fun VisualMnemonicAndChunkCard(
@@ -79,9 +80,8 @@ fun VisualMnemonicAndChunkCard(
     onStartChunkSpeakingDrill: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var activeTab by remember(word.id) { mutableIntStateOf(0) } // 0 = 해마 그림 연상, 1 = 시원 3단 블록
-    val mnemonic = remember(word.id) { VocabMnemonicEngine.buildGuide(word) }
-    val artworkRes = remember(word.topic, word.id) { mnemonicArtworkForTopic(word.topic) }
+    var activeTab by remember(word.id) { mutableIntStateOf(0) } // 0 = 장면·어근 연상, 1 = 3단 블록 결합
+    val structured = remember(word.id) { VocabMnemonicEngine.buildStructuredGuide(word) }
     val chunkSteps = remember(word.id) { buildSiwonschoolChunks(word) }
 
     Surface(
@@ -96,7 +96,7 @@ fun VisualMnemonicAndChunkCard(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 2-Tab Switch: 경선식 해마 그림 연상 | 시원스쿨 3단 블록
+            // 2-Tab Switch: 장면·어근 연상 | 3단 블록 결합
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -106,7 +106,7 @@ fun VisualMnemonicAndChunkCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 MethodPillTab(
-                    title = "해마 그림 연상",
+                    title = "장면·어근 연상",
                     icon = Icons.Outlined.Lightbulb,
                     selected = activeTab == 0,
                     accent = StudioIris,
@@ -115,7 +115,7 @@ fun VisualMnemonicAndChunkCard(
                     onClick = { activeTab = 0 }
                 )
                 MethodPillTab(
-                    title = "시원 3단 블록",
+                    title = "3단 블록 결합",
                     icon = Icons.Outlined.Extension,
                     selected = activeTab == 1,
                     accent = StudioCobalt,
@@ -126,79 +126,82 @@ fun VisualMnemonicAndChunkCard(
             }
 
             if (activeTab == 0) {
-                // === TAB 1: 경선식 해마 그림 연상 (Visual Scene + Sound Hook + Root Story) ===
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(126.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                // === TAB 1: 장면·발음·검증 어근 연상 (Crisp Visual Equation Header — no duplicate generic photo!) ===
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF161D38),
+                    border = BorderStroke(1.dp, StudioIris.copy(alpha = 0.40f)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Image(
-                        painter = painterResource(artworkRes),
-                        contentDescription = "해마 연상 일러스트",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color(0xFF0F172A).copy(alpha = 0.08f),
-                                        Color(0xFF0F172A).copy(alpha = 0.72f)
-                                    )
-                                )
-                            )
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = StudioIris,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(8.dp)
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        WordSceneIllustration(
+                            word = word,
+                            styleIndex = 1,
+                            modifier = Modifier
+                                .size(68.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(13.dp)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = StudioIris
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Text(
+                                            text = structured.visualMotif.labelKo,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = word.topic.labelKo,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF94A3B8)
+                                )
+                            }
+                            Text(
+                                text = "${word.word} = ${word.meaningKo}",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "해마 장면 각인 · ${word.topic.labelKo}",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
+                                text = structured.sceneTitleKo,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFDE68A),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            text = "${word.word}  =  ${word.meaningKo}",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "그림과 소리를 연결해 3초만 머릿속에 그려보세요",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.90f)
-                        )
-                    }
                 }
 
-                // Phonetic Sound Hook Pill (발음 연상 고리)
+                // Visual Scene + Recall Question Card
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = StudioCoralSoft,
@@ -210,19 +213,24 @@ fun VisualMnemonicAndChunkCard(
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Text(
-                            text = "발음 연상 고리",
+                            text = "장면 & 발음 연상",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
                             color = StudioCoral
                         )
                         Text(
-                            text = mnemonic.phoneticHookKo,
+                            text = structured.sceneDescriptionKo,
                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                             color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = structured.soundAssociationKo,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                // Root Analysis + Hippocampus Story
+                // Verified-Only Morpheme Breakdown + Active Recall Prompt
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surface,
@@ -233,15 +241,31 @@ fun VisualMnemonicAndChunkCard(
                         modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (structured.hasVerifiedMorpheme) StudioIrisSoft else MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = if (structured.hasVerifiedMorpheme) "검증 어근" else "어근 미등록",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (structured.hasVerifiedMorpheme) StudioIris else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                            Text(
+                                text = structured.morphemeBreakdown,
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (structured.hasVerifiedMorpheme) StudioIris else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(
-                            text = mnemonic.rootBreakdownKo,
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = StudioIris
-                        )
-                        Text(
-                            text = mnemonic.hippocampusStoryKo,
+                            text = "회상 질문: ${structured.memoryQuestion}",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }

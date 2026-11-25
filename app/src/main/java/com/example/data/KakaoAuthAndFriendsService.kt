@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit
 
 data class KakaoAuthResult(
     val accessToken: String,
+    val kakaoUserId: String,
     val nickname: String,
     val profileImageUrl: String,
     val friends: List<KakaoFriend>
@@ -28,6 +29,24 @@ object KakaoAuthAndFriendsService {
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .build()
+    }
+
+    fun normalizeKakaoId(raw: String?): String {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isBlank()) return ""
+        val withoutPrefix = trimmed.removePrefix("kakao_")
+        val sanitized = withoutPrefix
+            .filter { it.isLetterOrDigit() || it == '_' || it == '-' }
+            .take(64)
+        return if (sanitized.isBlank()) "" else "kakao_$sanitized"
+    }
+
+    fun sanitizeHttpsUrl(raw: String?): String {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isBlank()) return ""
+        if (!trimmed.startsWith("https://")) return ""
+        if (trimmed.any { it.isWhitespace() }) return ""
+        return trimmed.take(500)
     }
 
     fun isKakaoKeyConfigured(): Boolean {
@@ -96,15 +115,17 @@ object KakaoAuthAndFriendsService {
                     .get()
                     .build()
 
+                var kakaoUserId = ""
                 var nickname = "카카오 수호기사"
                 var profileUrl = ""
                 httpClient.newCall(meReq).execute().use { resp ->
                     val raw = resp.body?.string().orEmpty()
                     if (resp.isSuccessful && raw.isNotBlank()) {
                         val root = JSONObject(raw)
+                        kakaoUserId = normalizeKakaoId(root.opt("id")?.toString())
                         val profile = root.optJSONObject("kakao_account")?.optJSONObject("profile")
                         nickname = profile?.optString("nickname").orEmpty().ifBlank { nickname }
-                        profileUrl = profile?.optString("thumbnail_image_url").orEmpty()
+                        profileUrl = sanitizeHttpsUrl(profile?.optString("thumbnail_image_url"))
                     }
                 }
 
@@ -113,6 +134,7 @@ object KakaoAuthAndFriendsService {
 
                 KakaoAuthResult(
                     accessToken = accessToken,
+                    kakaoUserId = kakaoUserId,
                     nickname = nickname,
                     profileImageUrl = profileUrl,
                     friends = friends
@@ -143,11 +165,14 @@ object KakaoAuthAndFriendsService {
             val arr = JSONObject(raw).optJSONArray("elements") ?: return@use emptyList()
             (0 until arr.length()).map { i ->
                 val item = arr.getJSONObject(i)
+                val uuid = item.optString("uuid")
+                val rawId = item.opt("id")?.toString().orEmpty().ifBlank { uuid }
                 KakaoFriend(
-                    uuid = item.optString("uuid"),
+                    uuid = uuid,
                     nickname = item.optString("profile_nickname", "카톡 친구"),
-                    thumbnailUrl = item.optString("profile_thumbnail_image"),
-                    favorite = item.optBoolean("favorite", false)
+                    thumbnailUrl = sanitizeHttpsUrl(item.optString("profile_thumbnail_image")),
+                    favorite = item.optBoolean("favorite", false),
+                    kakaoId = normalizeKakaoId(rawId)
                 )
             }
         }

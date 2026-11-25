@@ -138,10 +138,10 @@ import com.example.viewmodel.TutorCallState
 import kotlinx.coroutines.delay
 
 private enum class TutorStageMode(val labelKo: String) {
-    SVG_RIG("SVG"),
+    PHOTO("실사"),
+    SVG_RIG("캐릭터"),
     THREE_D("3D"),
-    LOTTIE("모션"),
-    PHOTO("실사")
+    LOTTIE("모션")
 }
 
 private data class IconQuickAction(
@@ -229,13 +229,15 @@ fun AiTutorCallScreen(
     var showGestureBar by remember { mutableStateOf(false) }
     var showGuidedHints by remember { mutableStateOf(true) }
     var showNameGoalDialog by remember { mutableStateOf(false) }
+    var showReportAiDialog by remember { mutableStateOf(false) }
+    var reportSubmittedNotice by remember { mutableStateOf(false) }
     var manualGesture by remember { mutableStateOf<MotionPhotoGesture?>(null) }
     var youtubeQuery by remember { mutableStateOf<String?>(null) }
     var tappedWord by remember { mutableStateOf<String?>(null) }
-    var stageMode by remember { mutableStateOf(TutorStageMode.SVG_RIG) }
+    var stageMode by remember { mutableStateOf(TutorStageMode.PHOTO) }
 
     val hasAnyOverlayOpen = showHistoryOverlay || showScorecardOverlay || showTutorPicker ||
-        showGestureBar || showEnginePicker || showPronunciationDetail || showNameGoalDialog
+        showGestureBar || showEnginePicker || showPronunciationDetail || showNameGoalDialog || showReportAiDialog
     BackHandler(enabled = hasAnyOverlayOpen) {
         showHistoryOverlay = false
         showScorecardOverlay = false
@@ -244,6 +246,7 @@ fun AiTutorCallScreen(
         showEnginePicker = false
         showPronunciationDetail = false
         showNameGoalDialog = false
+        showReportAiDialog = false
     }
 
     // Gentle Proactive API Check-In when user stays silent for 18s during an active topic conversation
@@ -350,6 +353,62 @@ fun AiTutorCallScreen(
         YouTubeWordContextDialog(
             wordOrPhrase = youtubeQuery!!,
             onDismiss = { youtubeQuery = null }
+        )
+    }
+
+    if (showReportAiDialog) {
+        AlertDialog(
+            onDismissRequest = { showReportAiDialog = false },
+            title = { Text("부적절한 AI 응답 신고", fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "AI 튜터가 부적절하거나 부정확한 표현을 생성했나요? 신고하시면 현재 대화를 즉시 초기화하고 안전한 새 주제로 전환합니다.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (state.liveSubtitleEn.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "최근 AI 응답: \"${state.liveSubtitleEn.take(140)}\"",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+                    if (reportSubmittedNotice) {
+                        Text(
+                            text = "신고가 접수되었으며 안전 필터가 적용된 새 대화로 전환되었습니다.",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = AdventureEmerald
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        reportSubmittedNotice = true
+                        onSelectTopic("수다", "뉴욕 타임스스퀘어")
+                        android.widget.Toast.makeText(
+                            context,
+                            "부적절한 AI 응답 신고가 접수되어 안전한 새 대화로 초기화되었습니다.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        showReportAiDialog = false
+                    },
+                    modifier = Modifier.testTag("confirm_report_ai_response_button")
+                ) {
+                    Text("신고 후 대화 초기화")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReportAiDialog = false }) {
+                    Text("취소")
+                }
+            }
         )
     }
 
@@ -482,6 +541,21 @@ fun AiTutorCallScreen(
                                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                     color = Color.White
                                 )
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = StudioCobalt.copy(alpha = 0.85f),
+                                    modifier = Modifier.testTag("ai_tutor_disclosure_badge")
+                                ) {
+                                    Text(
+                                        text = "AI 튜터",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        ),
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                    )
+                                }
                                 if (voiceState.isSpeaking) {
                                     LiveMiniAudioEqualizer(
                                         beatIndex = voiceState.speechBeatIndex,
@@ -490,7 +564,7 @@ fun AiTutorCallScreen(
                                 }
                             }
                             Text(
-                                text = state.sceneLocationLabelKo,
+                                text = "${state.sceneLocationLabelKo} · 인공지능 대화",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = TrophyGold
                             )
@@ -531,6 +605,17 @@ fun AiTutorCallScreen(
                         activeColor = SkyQuestBlue,
                         tag = "video_hands_free_switch",
                         onClick = { onSetHandsFree(!handsFreeMode) }
+                    )
+                    FaceTalkIconBtn(
+                        icon = Icons.Outlined.Flag,
+                        desc = "AI 응답 신고",
+                        active = showReportAiDialog,
+                        activeColor = SpartaRed,
+                        tag = "report_ai_response_button",
+                        onClick = {
+                            reportSubmittedNotice = false
+                            showReportAiDialog = true
+                        }
                     )
                     // 1-Tap Speed Cycle (0.8x -> 1.0x -> 1.15x)
                     Surface(

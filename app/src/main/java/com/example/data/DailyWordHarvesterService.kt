@@ -1,7 +1,6 @@
 package com.example.data
 
 import android.util.Log
-import com.example.BuildConfig
 import com.example.model.VocabExample
 import com.example.model.VocabTopic
 import com.example.model.VocabWord
@@ -193,11 +192,6 @@ object DailyWordHarvesterService {
             .url(url)
             .header("Accept", "application/json")
             .get()
-
-        val token = BuildConfig.CLOUDFLARE_API_TOKEN.trim()
-        if (token.isNotBlank() && token != "YOUR_CLOUDFLARE_API_TOKEN") {
-            reqBuilder.header("Authorization", "Bearer $token")
-        }
 
         val rawBody = executeGetWithRetry(reqBuilder.build(), maxRetries = 2)
             ?: throw IOException("Cloudflare R2 Worker 응답 없음")

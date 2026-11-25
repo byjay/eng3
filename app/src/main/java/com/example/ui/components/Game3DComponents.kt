@@ -208,45 +208,46 @@ fun GameHudBar(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         shape = RoundedCornerShape(20.dp),
+        shadowElevation = 2.dp,
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            HudBadgeItem(
+            StitchIconMetricChip(
                 icon = Icons.Outlined.LocalFireDepartment,
-                tint = CoralOrange,
-                value = "${progress.streakCount}회",
-                label = "목표 스트릭",
+                valueText = "${progress.streakCount}",
+                accent = CoralOrange,
+                contentDescription = "목표 스트릭",
                 onClick = onStreakClick,
                 tag = "hud_streak_badge"
             )
-            HudBadgeItem(
+            StitchIconMetricChip(
                 icon = Icons.Outlined.MonetizationOn,
-                tint = TrophyGold,
-                value = "${progress.coins}",
-                label = "코인",
+                valueText = "${progress.coins}",
+                accent = TrophyGoldShadow,
+                contentDescription = "코인",
                 onClick = onCoinsClick,
                 tag = "hud_coins_button"
             )
-            HudBadgeItem(
+            StitchIconMetricChip(
                 icon = Icons.Outlined.Bolt,
-                tint = SkyQuestBlue,
-                value = "${progress.totalXp}",
-                label = "XP",
-                onClick = {}
+                valueText = "${progress.totalXp}",
+                accent = SkyQuestBlue,
+                contentDescription = "XP",
+                tag = "hud_xp_badge"
             )
-            HudBadgeItem(
+            StitchIconMetricChip(
                 icon = Icons.Outlined.FavoriteBorder,
-                tint = SpartaRed,
-                value = "${progress.hearts}/5",
-                label = "하트",
+                valueText = "${progress.hearts}/5",
+                accent = SpartaRed,
+                contentDescription = "하트",
                 onClick = onHeartsClick,
                 tag = "hud_hearts_button"
             )

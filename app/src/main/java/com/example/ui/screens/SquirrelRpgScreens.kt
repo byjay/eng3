@@ -88,6 +88,8 @@ import com.example.model.RpgGameUiState
 import com.example.model.RpgStoryChoice
 import com.example.model.SquirrelJobHero
 import com.example.ui.components.Elevated3DCard
+import com.example.ui.components.MaterialButtonStyle
+import com.example.ui.components.MaterialLearningButton
 import com.example.ui.components.SquirrelHeroAvatar
 import com.example.ui.components.SquirrelHeroCardPortrait
 import com.example.ui.components.SquirrelMoodState
@@ -649,49 +651,44 @@ fun SquirrelStoryAndBattleOverlay(
                             )
                         }
 
-                        // 2x2 Tactile Turn Action Grid
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                            Tactile3DButton(
+                        // 2x2 Material 3 Battle Action Grid
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            MaterialLearningButton(
                                 text = "단어·문장 공격",
                                 icon = Icons.Default.AutoAwesome,
-                                containerColor = AdventureEmerald,
-                                shadowColor = AdventureEmeraldShadow,
-                                height = 56.dp,
+                                accent = AdventureEmerald,
+                                style = MaterialButtonStyle.FILLED,
                                 modifier = Modifier.weight(1f),
                                 tag = "rpg_action_word",
                                 onClick = { onChooseBattleAction(RpgBattleAction.WORD_STRIKE) }
                             )
-                            Tactile3DButton(
+                            MaterialLearningButton(
                                 text = "실전 회화 공격",
                                 icon = Icons.Default.RecordVoiceOver,
-                                containerColor = SkyQuestBlue,
-                                shadowColor = SkyQuestBlueShadow,
-                                height = 56.dp,
+                                accent = SkyQuestBlue,
+                                style = MaterialButtonStyle.FILLED,
                                 modifier = Modifier.weight(1f),
                                 tag = "rpg_action_phrase",
                                 onClick = { onChooseBattleAction(RpgBattleAction.PHRASE_CAST) }
                             )
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             val canSkill = state.heroMp >= hero.skillMpCost
-                            Tactile3DButton(
+                            MaterialLearningButton(
                                 text = hero.skillNameKo,
                                 icon = Icons.Default.Bolt,
-                                containerColor = RoyalPurple,
-                                shadowColor = RoyalPurpleShadow,
-                                height = 54.dp,
+                                accent = RoyalPurple,
+                                style = if (canSkill) MaterialButtonStyle.FILLED else MaterialButtonStyle.TONAL,
                                 enabled = canSkill,
                                 modifier = Modifier.weight(1f),
                                 tag = "rpg_action_skill",
                                 onClick = { onChooseBattleAction(RpgBattleAction.CLASS_SKILL) }
                             )
-                            Tactile3DButton(
-                                text = "방어 · MP충전",
+                            MaterialLearningButton(
+                                text = "방어 · MP+30",
                                 icon = Icons.Default.Shield,
-                                containerColor = TrophyGold,
-                                shadowColor = TrophyGoldShadow,
-                                contentColor = Color(0xFF3E2C00),
-                                height = 54.dp,
+                                accent = TrophyGoldShadow,
+                                style = MaterialButtonStyle.OUTLINED,
                                 modifier = Modifier.weight(1f),
                                 tag = "rpg_action_guard",
                                 onClick = { onChooseBattleAction(RpgBattleAction.GUARD_HINT) }
@@ -746,7 +743,7 @@ fun SquirrelStoryAndBattleOverlay(
                                     AnimatedVisibility(visible = challenge.showHint) {
                                         val pack = VocabMnemonicEngine.buildGuide(challenge.word)
                                         Text(
-                                            text = "해마 힌트: ${pack.phoneticHookKo}",
+                                            text = "연상 힌트: ${pack.phoneticHookKo}",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = RoyalPurple
                                         )
@@ -799,12 +796,11 @@ fun SquirrelStoryAndBattleOverlay(
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
                                     )
                                     // Direct Voice Speaking Attack Button
-                                    Tactile3DButton(
+                                    MaterialLearningButton(
                                         text = if (voiceState.isListening) "듣는 중... 멈추기" else "영어로 직접 말해서 크리티컬 공격!",
                                         icon = if (voiceState.isListening) Icons.Default.Stop else Icons.Default.Mic,
-                                        containerColor = if (voiceState.isListening) SpartaRed else RoyalPurple,
-                                        shadowColor = if (voiceState.isListening) SpartaRedShadow else RoyalPurpleShadow,
-                                        height = 46.dp,
+                                        accent = if (voiceState.isListening) SpartaRed else RoyalPurple,
+                                        style = MaterialButtonStyle.FILLED,
                                         modifier = Modifier.fillMaxWidth(),
                                         tag = "rpg_phrase_mic_attack",
                                         onClick = {

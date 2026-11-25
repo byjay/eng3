@@ -143,7 +143,7 @@ fun AuthScreen(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "게임처럼 즐기는 고1~3 수능 30단어 스파르타 &\n100대 여행 회화 · 10인 원어민 AI 선생님 실시간 대화",
+                text = "가족과 함께 즐기는 고1~3 핵심 영단어 암기 &\n여행 회화 · AI 영어 튜터 실시간 음성 연습",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -156,22 +156,22 @@ fun AuthScreen(
                     FeatureBullet(
                         icon = Icons.Default.LocalFireDepartment,
                         tint = SpartaRed,
-                        text = "고1~3 수능 영단어 매일 30단어+ 오답 무한 스파르타 & 발음 분석"
+                        text = "고1~3 교과·핵심 영단어 ${com.example.data.VocabRepository.allWords.size}개 + 확장 어휘 · 오답노트 & 발음 분석"
                     )
                     FeatureBullet(
                         icon = Icons.Default.FlightTakeoff,
                         tint = SkyQuestBlue,
-                        text = "여행자 100가지 상황 × 30문장(3,000문장) & 돌발 변수 실전 대응"
+                        text = "실전 여행 상황별 회화 훈련 & 돌발 변수 대응 연습"
                     )
                     FeatureBullet(
                         icon = Icons.Default.RecordVoiceOver,
                         tint = AdventureEmerald,
-                        text = "실제 사람 캐릭터 AI 선생님 10명과 친구처럼 실시간 음성 대화"
+                        text = "인공지능(AI) 영어 회화 튜터 10종과 실시간 음성 대화 시뮬레이션"
                     )
                     FeatureBullet(
                         icon = Icons.Default.AutoAwesome,
                         tint = TrophyGoldShadow,
-                        text = "내장 Gemini AI + Groq 등 10슬롯 API 순환 + 100% 오프라인 지원"
+                        text = "Firebase AI Logic(Gemini) 보안 연동 + 오프라인 학습 모드 지원"
                     )
                 }
             }

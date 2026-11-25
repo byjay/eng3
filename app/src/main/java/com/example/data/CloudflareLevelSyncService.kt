@@ -1,7 +1,10 @@
 package com.example.data
 
 import com.example.BuildConfig
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -39,6 +42,10 @@ object CloudflareLevelSyncService {
         }
     }
 
+    /**
+     * Registers progress to an optional user-configured Cloudflare Worker using
+     * the signed-in Firebase user's short-lived ID token instead of any static APK admin secret.
+     */
     suspend fun registerLevelToCloudflare(
         customWorkerUrl: String,
         payload: CloudflareLevelPayload
@@ -46,34 +53,45 @@ object CloudflareLevelSyncService {
         val baseUrl = resolveWorkerUrl(customWorkerUrl)
         if (baseUrl.isBlank()) {
             return@withContext Result.failure(
-                IllegalStateException("Cloudflare Worker URL을 입력하거나 AI Studio Secrets에 CLOUDFLARE_WORKER_URL을 등록해 주세요.")
+                IllegalStateException("Cloudflare Worker URL을 입력해 주세요. (기본 클라우드 동기화는 Firebase Firestore를 사용합니다)")
             )
         }
+        if (!baseUrl.startsWith("https://", ignoreCase = true)) {
+            return@withContext Result.failure(
+                IllegalArgumentException("보안을 위해 HTTPS Cloudflare Worker URL만 허용됩니다.")
+            )
+        }
+        val currentUser = Firebase.auth.currentUser
+            ?: return@withContext Result.failure(
+                IllegalStateException("Google 로그인 후 서버 동기화를 진행해 주세요.")
+            )
+
         runCatching {
+            val idToken = currentUser.getIdToken(false).await().token
+                ?: throw IllegalStateException("인증 토큰을 가져올 수 없습니다. 다시 로그인해 주세요.")
+
             val endpoint = if (baseUrl.endsWith("/levels")) baseUrl else "$baseUrl/api/levels"
             val bodyJson = JSONObject().apply {
-                put("daughterName", payload.daughterName)
-                put("vocabGradeTier", payload.vocabGradeTier)
-                put("princessLevel", payload.princessLevel)
-                put("castleHpPercent", payload.castleHpPercent)
-                put("masteredWordCount", payload.masteredWordCount)
-                put("accumulatedApiWordCount", payload.accumulatedApiWordCount)
-                put("bossVictories", payload.bossVictories)
-                put("totalXp", payload.totalXp)
+                put("accountId", currentUser.uid)
+                put("daughterName", payload.daughterName.take(32))
+                put("vocabGradeTier", payload.vocabGradeTier.coerceIn(1, 5))
+                put("princessLevel", payload.princessLevel.coerceIn(1, 999))
+                put("castleHpPercent", payload.castleHpPercent.coerceIn(0, 100))
+                put("masteredWordCount", payload.masteredWordCount.coerceAtLeast(0))
+                put("accumulatedApiWordCount", payload.accumulatedApiWordCount.coerceAtLeast(0))
+                put("bossVictories", payload.bossVictories.coerceAtLeast(0))
+                put("totalXp", payload.totalXp.coerceAtLeast(0))
                 put("registeredAt", System.currentTimeMillis())
             }
 
-            val reqBuilder = Request.Builder()
+            val req = Request.Builder()
                 .url(endpoint)
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer $idToken")
                 .post(bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .build()
 
-            val token = BuildConfig.CLOUDFLARE_API_TOKEN.trim()
-            if (token.isNotBlank() && token != "YOUR_CLOUDFLARE_API_TOKEN") {
-                reqBuilder.header("Authorization", "Bearer $token")
-            }
-
-            httpClient.newCall(reqBuilder.build()).execute().use { resp ->
+            httpClient.newCall(req).execute().use { resp ->
                 val raw = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
                     throw IllegalStateException("Cloudflare 서버 오류 (HTTP ${resp.code}): ${raw.take(80)}")

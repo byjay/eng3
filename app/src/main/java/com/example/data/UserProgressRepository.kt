@@ -442,4 +442,28 @@ class UserProgressRepository(
             Result.failure(e)
         }
     }
+
+    suspend fun deleteAllUserCloudData(): Result<Unit> {
+        var path = "users/unauthenticated"
+        return try {
+            val uid = auth.currentUser?.uid ?: return Result.success(Unit)
+            val userDocRef = db.collection("users").document(uid)
+            path = userDocRef.path
+
+            val subCollections = listOf("wordMastery", "scenarioProgress", "sessions")
+            for (subName in subCollections) {
+                val snap = userDocRef.collection(subName).get().await()
+                for (doc in snap.documents) {
+                    doc.reference.delete().await()
+                }
+            }
+            userDocRef.delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
+            Result.failure(e)
+        }
+    }
 }

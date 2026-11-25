@@ -608,7 +608,7 @@ private fun SkillVerificationTableCard(
 
     val rows = listOf(
         VerificationRow(
-            areaKo = "수능 빈출 ${vocabGradeTier}등급",
+            areaKo = "핵심 영단어 ${vocabGradeTier}등급",
             verifiedLabel = "${vocabWords}단어",
             rateLabel = "${knownPct}%",
             verdictKo = when {
@@ -645,7 +645,7 @@ private fun SkillVerificationTableCard(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "수능 빈출 · 회화 실력 검증표",
+                    text = "핵심 어휘 · 회화 실력 검증표",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
                 )
             }

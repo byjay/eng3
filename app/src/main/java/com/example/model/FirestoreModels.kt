@@ -22,6 +22,25 @@ data class UserProgress(
     val todayWordsCompleted: Int = 0,
     val lastStudyDate: String = "",
     val unlockedItems: List<String> = listOf("badge_starter"),
+    val kakaoUserId: String = "",
+    val connectedKakaoIds: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
+data class FamilyStreakEntry(
+    @DocumentId val id: String = "",
+    val userId: String = "",
+    val kakaoUserId: String = "",
+    val displayName: String = "Explorer",
+    val avatarUrl: String = "",
+    val streakCount: Int = 0,
+    val todayWordsCompleted: Int = 0,
+    val totalXp: Int = 0,
+    val lastStudyDate: String = "",
+    val shareWithFriends: Boolean = false,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )

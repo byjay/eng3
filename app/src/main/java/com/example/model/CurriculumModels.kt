@@ -13,7 +13,7 @@ enum class VocabTopic(val labelKo: String) {
 }
 
 enum class VocabStudyTrack(val labelKo: String, val badgeKo: String) {
-    CSAT_FREQUENCY("수능 빈출순", "★★★★★ 최다빈출"),
+    CSAT_FREQUENCY("핵심 중요도순", "★★★★★ 필수 어휘"),
     CSAT_DIFFICULTY("수능 난이도별", "기초→킬러"),
     RANDOM_MIX("완전 랜덤", "인터리빙 셔플"),
     SMART_REVIEW("약점 복습", "망각곡선 SM-2"),
@@ -76,7 +76,8 @@ data class ParentProfiles(
     val dadName: String = "아빠 국왕",
     val momName: String = "엄마 왕비",
     val daughterName: String = "원삐",
-    val parentPin: String = "1234"
+    val parentPin: String = "",
+    val isPinConfigured: Boolean = false
 )
 
 data class GuestInviteSession(
@@ -145,17 +146,27 @@ data class KakaoFriend(
     val uuid: String,
     val nickname: String,
     val thumbnailUrl: String = "",
-    val favorite: Boolean = false
+    val favorite: Boolean = false,
+    val kakaoId: String = ""
 )
 
 data class KakaoSessionState(
     val isLoggedIn: Boolean = false,
     val isConfigured: Boolean = false,
+    val kakaoUserId: String = "",
     val nickname: String = "",
     val profileImageUrl: String = "",
     val accessToken: String = "",
     val friends: List<KakaoFriend> = emptyList(),
     val statusMessage: String = "테스트 모드: 로그인 없이 모든 기능 즉시 사용 중"
+)
+
+data class WrongNoteRecord(
+    val wordId: String,
+    val savedDateIso: String,
+    val lastStudiedDateIso: String,
+    val lastStudiedAtMs: Long = 0L,
+    val isMastered: Boolean = false
 )
 
 data class TravelZone(
@@ -304,14 +315,14 @@ enum class VocabLearningMethod(
     val descKo: String
 ) {
     HIPPOCAMPUS(
-        "해마학습법",
-        "해마연상",
-        "강렬한 장면·스토리·감정 결합 + 10분/1일/3일 골든타임 복습으로 장기기억 해마 각인"
+        "장면연상법",
+        "장면연상",
+        "의미와 연결된 시각 장면·스토리·간격 복습(10분/1일/3일)으로 선명하게 기억"
     ),
     WORD_ASSOCIATION(
         "단어연상법",
         "어근·발음연상",
-        "접두사·어근·접미사 분해 + 한국어 발음 이미지 연상 고리로 3초 암기"
+        "검증된 어근 분석 + 기억 보조 발음 고리로 뜻을 빠르게 떠올리는 학습"
     ),
     EBBINGHAUS_SM2(
         "망각곡선 SM-2",
