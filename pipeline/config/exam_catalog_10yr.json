@@ -1,0 +1,28 @@
+{
+  "schema_version": "2.0.0",
+  "span": {
+    "administration_start_year": 2017,
+    "administration_end_year": 2026,
+    "csat_academic_start_year": 2018,
+    "csat_academic_end_year": 2027,
+    "expected_total_exams": 150
+  },
+  "schedule_shift_notes": [
+    "2024학년도(2024년 시행)부터 고3 4월 학력평가가 5월로 변경됨",
+    "2024학년도(2024년 시행)부터 고1·고2 11월 학력평가가 10월로 변경됨",
+    "2020년 코로나19 일정 순연(수능 12월 시행) 및 2025년 대선 일정(6월 모평 6월 초 조정) 반영",
+    "고정 시행월 하드코딩 금지: 모든 파싱·파일명 정규화는 본 카탈로그의 연도별 스케줄 규칙을 참조"
+  ],
+  "yearly_schedules": [
+    { "admin_year": 2017, "academic_year": 2018, "g1_months": [3, 6, 9, 11], "g2_months": [3, 6, 9, 11], "g3_moe_months": [3, 4, 7, 10], "kice_mock_months": [6, 9], "csat_month": 11 },
+    { "admin_year": 2018, "academic_year": 2019, "g1_months": [3, 6, 9, 11], "g2_months": [3, 6, 9, 11], "g3_moe_months": [3, 4, 7, 10], "kice_mock_months": [6, 9], "csat_month": 11 },
+    { "admin_year": 2019, "academic_year": 2020, "g1_months": [3, 6, 9, 11], "g2_months": [3, 6, 9, 11], "g3_moe_months": [3, 4, 7, 10], "kice_mock_months": [6, 9], "csat_month": 11 },
+    { "admin_year": 2020, "academic_year": 2021, "g1_months": [4, 6, 9, 11], "g2_months": [4, 6, 9, 11], "g3_moe_months": [4, 5, 7, 10], "kice_mock_months": [6, 9], "csat_month": 12 },
+    { "admin_year": 2021, "academic_year": 2022, "g1_months": [3, 6, 9, 11], "g2_months": [3, 6, 9, 11], "g3_moe_months": [3, 4, 7, 10], "kice_mock_months": [6, 9], "csat_month": 11 },
+    { "admin_year": 2022, "academic_year": 2023, "g1_months": [3, 6, 9, 11], "g2_months": [3, 6, 9, 11], "g3_moe_months": [3, 4, 7, 10], "kice_mock_months": [6, 9], "csat_month": 11 },
+    { "admin_year": 2023, "academic_year": 2024, "g1_months": [3, 6, 9, 11], "g2_months": [3, 6, 9, 11], "g3_moe_months": [3, 4, 7, 10], "kice_mock_months": [6, 9], "csat_month": 11 },
+    { "admin_year": 2024, "academic_year": 2025, "g1_months": [3, 6, 9, 10], "g2_months": [3, 6, 9, 10], "g3_moe_months": [3, 5, 7, 10], "kice_mock_months": [6, 9], "csat_month": 11 },
+    { "admin_year": 2025, "academic_year": 2026, "g1_months": [3, 6, 9, 10], "g2_months": [3, 6, 9, 10], "g3_moe_months": [3, 5, 7, 10], "kice_mock_months": [6, 9], "csat_month": 11 },
+    { "admin_year": 2026, "academic_year": 2027, "g1_months": [3, 6, 9, 10], "g2_months": [3, 6, 9, 10], "g3_moe_months": [3, 5, 7, 10], "kice_mock_months": [6, 9], "csat_month": 11 }
+  ]
+}

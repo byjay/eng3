@@ -146,6 +146,7 @@ class DadKingdomLocalStore(private val context: Context) {
     private val vocabMissionsDateKey = stringPreferencesKey("vocab_missions_date")
     private val memoryPalaceKey = stringPreferencesKey("memory_palace_json")
     private val mediaReviewOverridesKey = stringPreferencesKey("media_review_overrides_json")
+    private val csatDDayDaysKey = intPreferencesKey("csat_dday_days_remaining")
 
     private fun todayIso(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
@@ -1400,6 +1401,17 @@ class DadKingdomLocalStore(private val context: Context) {
         parseMediaReviewOverrides(prefs[mediaReviewOverridesKey])
     }
 
+    val csatDDayDaysFlow: Flow<Int> = context.dadKingdomDataStore.data.map { prefs ->
+        (prefs[csatDDayDaysKey] ?: com.example.engine.FsrsSchedulerEngine.DEFAULT_DAYS_UNTIL_CSAT).coerceIn(1, 365)
+    }
+
+    suspend fun setCsatDDayDays(daysRemaining: Int) {
+        val safeDays = daysRemaining.coerceIn(1, 365)
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[csatDDayDaysKey] = safeDays
+        }
+    }
+
     suspend fun setDailyWordGoal(goal: Int) {
         val safeGoal = goal.coerceIn(5, 30)
         val today = todayIso()
@@ -1440,7 +1452,14 @@ class DadKingdomLocalStore(private val context: Context) {
         var resultProgress = WordLearningProgress(wordId = wordId)
         context.dadKingdomDataStore.edit { prefs ->
             val map = parseWordSm2Progress(prefs[wordSm2ProgressKey]).toMutableMap()
-            val updated = Sm2ReviewScheduler.review(map[wordId], wordId, grade, nowMs)
+            val daysUntilCsat = (prefs[csatDDayDaysKey] ?: com.example.engine.FsrsSchedulerEngine.DEFAULT_DAYS_UNTIL_CSAT).coerceIn(1, 365)
+            val updated = com.example.engine.FsrsSchedulerEngine.review(
+                existing = map[wordId],
+                wordId = wordId,
+                grade = grade,
+                daysUntilCsat = daysUntilCsat,
+                nowMs = nowMs
+            )
             map[wordId] = updated
             resultProgress = updated
             prefs[wordSm2ProgressKey] = serializeWordSm2Progress(map)
@@ -1631,6 +1650,9 @@ class DadKingdomLocalStore(private val context: Context) {
                     put("correct", p.correctCount)
                     put("wrong", p.wrongCount)
                     put("mastery", p.masteryScore)
+                    put("fsrsS", p.fsrsStabilityDays)
+                    put("fsrsD", p.fsrsDifficulty)
+                    put("fsrsR", p.desiredRetention)
                 }
             )
         }
@@ -1665,7 +1687,10 @@ class DadKingdomLocalStore(private val context: Context) {
                     consecutiveCorrect = o.optInt("consec", 0),
                     correctCount = o.optInt("correct", 0),
                     wrongCount = o.optInt("wrong", 0),
-                    masteryScore = o.optInt("mastery", 0)
+                    masteryScore = o.optInt("mastery", 0),
+                    fsrsStabilityDays = o.optDouble("fsrsS", 0.0),
+                    fsrsDifficulty = o.optDouble("fsrsD", 5.0),
+                    desiredRetention = o.optDouble("fsrsR", 0.90)
                 )
             }
             result

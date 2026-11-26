@@ -39,7 +39,10 @@ data class WordLearningProgress(
     val consecutiveCorrect: Int = 0,
     val correctCount: Int = 0,
     val wrongCount: Int = 0,
-    val masteryScore: Int = 0 // 0..100
+    val masteryScore: Int = 0, // 0..100
+    val fsrsStabilityDays: Double = 0.0,
+    val fsrsDifficulty: Double = 5.0,
+    val desiredRetention: Double = 0.90
 )
 
 object Sm2ReviewScheduler {

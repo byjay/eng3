@@ -1,0 +1,25 @@
+{
+  "schema_version": "2.0.0",
+  "tier": "TIER_C_BURSTY",
+  "difficulty_rank": 4,
+  "items": [
+    {
+      "lemma": "fluctuate",
+      "kr_2022_group": "G3_H2_H3_1000",
+      "is_awl": true,
+      "uniformity": 0.13,
+      "listening_ratio": 0.0,
+      "is_polysemous": false,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "deprive",
+      "kr_2022_group": "G3_H2_H3_1000",
+      "is_awl": false,
+      "uniformity": 0.12,
+      "listening_ratio": 0.0,
+      "is_polysemous": false,
+      "is_footnote_ever": false
+    }
+  ]
+}

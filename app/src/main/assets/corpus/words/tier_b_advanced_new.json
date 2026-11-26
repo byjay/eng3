@@ -1,0 +1,47 @@
+{
+  "schema_version": "2.0.0",
+  "tier": "TIER_B_ADVANCED_NEW",
+  "difficulty_rank": 3,
+  "items": [
+    {
+      "lemma": "pragmatic",
+      "kr_2022_group": "OOV",
+      "is_awl": false,
+      "uniformity": 0.34,
+      "listening_ratio": 0.05,
+      "is_polysemous": false,
+      "is_new_recent_3yr": true,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "ubiquitous",
+      "kr_2022_group": "OOV",
+      "is_awl": false,
+      "uniformity": 0.29,
+      "listening_ratio": 0.08,
+      "is_polysemous": false,
+      "is_new_recent_3yr": true,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "mitigate",
+      "kr_2022_group": "OOV",
+      "is_awl": true,
+      "uniformity": 0.36,
+      "listening_ratio": 0.04,
+      "is_polysemous": false,
+      "is_new_recent_3yr": true,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "empirical",
+      "kr_2022_group": "G3_H2_H3_1000",
+      "is_awl": true,
+      "uniformity": 0.38,
+      "listening_ratio": 0.0,
+      "is_polysemous": false,
+      "is_new_recent_3yr": true,
+      "is_footnote_ever": false
+    }
+  ]
+}

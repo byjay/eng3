@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0.0",
+  "provenance": "CURATED_TRAINING",
+  "provenanceNoticeKo": "자체 제작 학습용 코퍼스입니다. 한국교육과정평가원(KICE)·EBSi 원문 저작권을 침해하지 않으며, 공식 기출 JSON 임포트 시 동일한 스키마(v1.0)로 즉시 확장 가능합니다.",
+  "yearRange": {
+    "start": 2017,
+    "end": 2026
+  },
+  "shards": [
+    {
+      "id": "grammar_focus_patterns",
+      "path": "corpus/grammar_focus_patterns.json",
+      "kind": "GRAMMAR_PATTERNS"
+    }
+  ]
+}

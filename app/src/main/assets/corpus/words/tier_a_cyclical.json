@@ -1,0 +1,43 @@
+{
+  "schema_version": "2.0.0",
+  "tier": "TIER_A_CYCLICAL",
+  "difficulty_rank": 2,
+  "items": [
+    {
+      "lemma": "analyze",
+      "kr_2022_group": "G2_MID_H1_1200",
+      "is_awl": true,
+      "uniformity": 0.64,
+      "listening_ratio": 0.18,
+      "is_polysemous": false,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "enhance",
+      "kr_2022_group": "G2_MID_H1_1200",
+      "is_awl": true,
+      "uniformity": 0.61,
+      "listening_ratio": 0.22,
+      "is_polysemous": false,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "alternative",
+      "kr_2022_group": "G2_MID_H1_1200",
+      "is_awl": true,
+      "uniformity": 0.58,
+      "listening_ratio": 0.46,
+      "is_polysemous": true,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "assume",
+      "kr_2022_group": "G2_MID_H1_1200",
+      "is_awl": true,
+      "uniformity": 0.63,
+      "listening_ratio": 0.15,
+      "is_polysemous": true,
+      "is_footnote_ever": false
+    }
+  ]
+}

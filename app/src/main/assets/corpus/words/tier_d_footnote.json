@@ -1,0 +1,25 @@
+{
+  "schema_version": "2.0.0",
+  "tier": "TIER_D_FOOTNOTE",
+  "difficulty_rank": 5,
+  "items": [
+    {
+      "lemma": "alleviate",
+      "kr_2022_group": "OOV",
+      "is_awl": false,
+      "uniformity": 0.11,
+      "listening_ratio": 0.0,
+      "is_polysemous": false,
+      "is_footnote_ever": true
+    },
+    {
+      "lemma": "articulate",
+      "kr_2022_group": "OOV",
+      "is_awl": false,
+      "uniformity": 0.10,
+      "listening_ratio": 0.0,
+      "is_polysemous": true,
+      "is_footnote_ever": true
+    }
+  ]
+}

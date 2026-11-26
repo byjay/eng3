@@ -1688,6 +1688,12 @@ fun VocabMemorizationDeckView(
                             }
                         }
 
+                        // Expandable Usage History, Priority Tier & Linked Grammar Drawer
+                        WordCorpusExpandablePanel(
+                            word = currentWord,
+                            onSpeakEnglish = onSpeakEnglish
+                        )
+
                         // SM-2 4-Step Spaced Repetition Recall Bar (Spec Section 5.1)
                         Column(
                             modifier = Modifier
@@ -1701,7 +1707,7 @@ fun VocabMemorizationDeckView(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "간격 반복 자가 평가 (SM-2)",
+                                    text = "간격 반복 자가 평가 (FSRS)",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1719,7 +1725,7 @@ fun VocabMemorizationDeckView(
                             ) {
                                 RecallGrade.entries.forEach { grade ->
                                     val intervalLabel = remember(currentWord.id, currentSm2, grade) {
-                                        Sm2ReviewScheduler.previewIntervalLabel(currentSm2, currentWord.id, grade)
+                                        com.example.engine.FsrsSchedulerEngine.previewIntervalLabel(currentSm2, currentWord.id, grade)
                                     }
                                     val accent = when (grade) {
                                         RecallGrade.AGAIN -> RoseCrimson

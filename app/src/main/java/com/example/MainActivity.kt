@@ -224,6 +224,7 @@ private fun FamilyKingdomApp(
     val masteredWordIds by viewModel.masteredWordIds.collectAsStateWithLifecycle()
     val weakWordIds by viewModel.weakWordIds.collectAsStateWithLifecycle()
     val wrongNoteRecords by viewModel.wrongNoteRecords.collectAsStateWithLifecycle()
+    val csatDDayDays by viewModel.csatDDayDays.collectAsStateWithLifecycle()
     val harvestedApiWords by viewModel.harvestedApiWords.collectAsStateWithLifecycle()
     val vocabGradeTier by viewModel.vocabGradeTier.collectAsStateWithLifecycle()
     val scenarioProgress by viewModel.scenarioProgressState.collectAsStateWithLifecycle()
@@ -613,7 +614,9 @@ private fun FamilyKingdomApp(
                         onSubmitTypedRecall = { word, raw -> viewModel.submitTypedVocabRecall(word, raw) },
                         onSetMediaReviewStatus = { wordId, status -> viewModel.setMediaReviewStatus(wordId, status) },
                         dueReviewLaunchNonce = dueReviewLaunchNonce,
-                        wrongNoteRecords = wrongNoteRecords
+                        wrongNoteRecords = wrongNoteRecords,
+                        csatDDayDays = csatDDayDays,
+                        onSetCsatDDayDays = { days -> viewModel.setCsatDDayDays(days) }
                     )
                 }
 

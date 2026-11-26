@@ -1,0 +1,48 @@
+{
+  "schema_version": "2.0.0",
+  "curriculum_standard": "2022_REVISED_KR_ENGLISH_3000",
+  "allowed_derivational_affixes_36": {
+    "prefixes": [
+      "un-", "in-", "im-", "il-", "ir-", "dis-", "re-", "pre-", "mis-", "over-",
+      "under-", "sub-", "inter-", "co-", "non-", "anti-", "auto-", "bi-"
+    ],
+    "suffixes": [
+      "-er", "-or", "-ist", "-ian", "-ment", "-tion", "-sion", "-ness", "-ity",
+      "-ance", "-ence", "-able", "-ible", "-al", "-ful", "-less", "-ous", "-ly"
+    ]
+  },
+  "groups": {
+    "G1_ELEM_800": [
+      "conversation", "environment", "family", "friend", "school", "water", "time", "world",
+      "people", "study", "plan", "result", "change", "idea", "problem", "answer", "question",
+      "experience", "important", "different", "possible", "support", "create", "develop"
+    ],
+    "G2_MID_H1_1200": [
+      "consistent", "available", "aware", "compare", "combine", "confirm", "accomplish",
+      "adapt", "analyze", "assume", "concentrate", "crucial", "enhance", "emphasize",
+      "evidence", "factor", "influence", "maintain", "opportunity", "participate",
+      "perspective", "potential", "prevent", "process", "provide", "require", "significant",
+      "strategy", "structure", "suggest", "sustain", "transform", "adjust", "alternative"
+    ],
+    "G3_H2_H3_1000": [
+      "accumulate", "acknowledge", "adequate", "allocate", "alleviate", "ambiguous",
+      "appropriate", "articulate", "attribute", "coherent", "collaborate", "compensate",
+      "comprehend", "conceive", "confine", "confront", "contradict", "cultivate",
+      "deliberate", "demonstrate", "deprive", "derive", "distinguish", "elaborate",
+      "eliminate", "emerge", "empirical", "fluctuate", "inevitable", "mitigate",
+      "pragmatic", "resilient", "simultaneous", "substantial", "underlying"
+    ]
+  },
+  "awl_core": [
+    "adequate", "adjust", "allocate", "alternative", "ambiguous", "analyze", "appropriate",
+    "assume", "attribute", "available", "aware", "coherent", "compensate", "conceive",
+    "confirm", "consistent", "contradict", "crucial", "demonstrate", "derive", "eliminate",
+    "emerge", "empirical", "enhance", "evidence", "factor", "fluctuate", "inevitable",
+    "maintain", "perspective", "potential", "process", "require", "significant", "strategy",
+    "structure", "substantial", "sustain", "transform", "underlying"
+  ],
+  "excluded_units_and_abbreviations": [
+    "km", "cm", "mm", "kg", "mg", "ml", "mph", "am", "pm", "tv", "ai", "vr", "ar",
+    "usd", "krw", "dna", "rna", "co2", "ph", "gps", "sns", "ceo", "phd"
+  ]
+}

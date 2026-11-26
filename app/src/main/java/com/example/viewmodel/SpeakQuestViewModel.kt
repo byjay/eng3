@@ -307,6 +307,13 @@ class SpeakQuestViewModel(
     val mediaReviewOverrides: StateFlow<Map<String, MediaReviewStatus>> = localStore.mediaReviewOverridesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyMap())
 
+    val csatDDayDays: StateFlow<Int> = localStore.csatDDayDaysFlow
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000L),
+            com.example.engine.FsrsSchedulerEngine.DEFAULT_DAYS_UNTIL_CSAT
+        )
+
     val masteredWordIds: StateFlow<Set<String>> = localStore.masteredWordIdsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
 
@@ -2965,6 +2972,14 @@ class SpeakQuestViewModel(
             grade = if (known) RecallGrade.GOOD else RecallGrade.AGAIN,
             fromMnemonic = false
         )
+    }
+
+    fun setCsatDDayDays(daysRemaining: Int) {
+        viewModelScope.launch {
+            localStore.setCsatDDayDays(daysRemaining)
+            val policy = com.example.engine.FsrsSchedulerEngine.resolveDDayPolicy(daysRemaining)
+            showToast("수능 D-${policy.daysUntilCsat} (${policy.phase.shortBadgeKo}) · 목표 기억률 ${(policy.desiredRetention * 100).toInt()}%")
+        }
     }
 
     /**

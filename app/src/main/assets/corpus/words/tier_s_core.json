@@ -1,0 +1,52 @@
+{
+  "schema_version": "2.0.0",
+  "tier": "TIER_S_CORE",
+  "difficulty_rank": 1,
+  "items": [
+    {
+      "lemma": "consistent",
+      "kr_2022_group": "G2_MID_H1_1200",
+      "is_awl": true,
+      "uniformity": 0.78,
+      "listening_ratio": 0.32,
+      "is_polysemous": false,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "available",
+      "kr_2022_group": "G2_MID_H1_1200",
+      "is_awl": true,
+      "uniformity": 0.81,
+      "listening_ratio": 0.56,
+      "is_polysemous": false,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "crucial",
+      "kr_2022_group": "G2_MID_H1_1200",
+      "is_awl": true,
+      "uniformity": 0.75,
+      "listening_ratio": 0.24,
+      "is_polysemous": false,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "aware",
+      "kr_2022_group": "G2_MID_H1_1200",
+      "is_awl": true,
+      "uniformity": 0.74,
+      "listening_ratio": 0.48,
+      "is_polysemous": false,
+      "is_footnote_ever": false
+    },
+    {
+      "lemma": "confirm",
+      "kr_2022_group": "G2_MID_H1_1200",
+      "is_awl": true,
+      "uniformity": 0.72,
+      "listening_ratio": 0.62,
+      "is_polysemous": false,
+      "is_footnote_ever": false
+    }
+  ]
+}

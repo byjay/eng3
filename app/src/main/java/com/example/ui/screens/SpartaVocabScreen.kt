@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Loop
@@ -117,6 +118,7 @@ import com.example.ui.components.MediaAuditAndAnalyticsSheetContent
 import com.example.ui.components.PronunciationReportCard
 import com.example.ui.components.StitchIconButton
 import com.example.ui.components.StitchIconPillTab
+import com.example.ui.components.SystematicStudyLabSection
 import com.example.ui.components.Tactile3DButton
 import com.example.ui.components.VisualMnemonicAndChunkCard
 import com.example.ui.components.VocabAdventureHubSection
@@ -217,7 +219,9 @@ fun SpartaVocabScreen(
     onSubmitTypedRecall: ((VocabWord, String) -> TypedRecallResult)? = null,
     onSetMediaReviewStatus: (String, MediaReviewStatus) -> Unit = { _, _ -> },
     dueReviewLaunchNonce: Int = 0,
-    wrongNoteRecords: Map<String, WrongNoteRecord> = emptyMap()
+    wrongNoteRecords: Map<String, WrongNoteRecord> = emptyMap(),
+    csatDDayDays: Int = com.example.engine.FsrsSchedulerEngine.DEFAULT_DAYS_UNTIL_CSAT,
+    onSetCsatDDayDays: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     var activeSubMode by remember { mutableIntStateOf(0) } // 0 = 단어암기 카드, 1 = 퀴즈·발음, 2 = 패턴 블록
@@ -376,9 +380,18 @@ fun SpartaVocabScreen(
                             modifier = Modifier.weight(1f),
                             onClick = { activeSubMode = 2 }
                         )
+                        StitchIconPillTab(
+                            icon = Icons.Outlined.Analytics,
+                            label = "분석·문법",
+                            selected = activeSubMode == 3,
+                            accent = AdventureEmerald,
+                            tag = "tab_systematic_lab",
+                            modifier = Modifier.weight(1f),
+                            onClick = { activeSubMode = 3 }
+                        )
                     }
                 }
-                if (activeSubMode != 2) {
+                if (activeSubMode == 0 || activeSubMode == 1) {
                     StitchIconButton(
                         icon = Icons.Outlined.Tune,
                         contentDescription = "학습 설정",
@@ -1084,6 +1097,18 @@ fun SpartaVocabScreen(
                         )
                     }
                 }
+            }
+        } else if (activeSubMode == 3) {
+            // ==================== MODE 3: SYSTEMATIC CORPUS ANALYTICS & 6-CATEGORY GRAMMAR LAB ====================
+            item {
+                SystematicStudyLabSection(
+                    harvestedApiWords = harvestedApiWords,
+                    wordSm2Progress = wordSm2Progress,
+                    onSpeakEnglish = onSpeakChunk,
+                    onRecordSm2Recall = onRecordSm2Recall,
+                    csatDDayDays = csatDDayDays,
+                    onSetCsatDDayDays = onSetCsatDDayDays
+                )
             }
         } else {
             // ==================== MODE B: 1~3 SENTENCE PATTERN WORD-SWAP STUDIO ====================

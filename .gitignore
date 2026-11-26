@@ -18,3 +18,15 @@ local.properties
 debug.keystore
 *-debug.log
 
+# Copyright-safe isolation: never commit raw KICE/EBSi PDFs, HWP/HWPX files, or full exam passage texts
+pipeline/raw/
+data/corpus/sentences.json
+data/corpus/occurrences.json
+data/db/*.sqlite
+data/db/*.sqlite.gz
+pipeline/.venv/
+pipeline/__pycache__/
+pipeline/src/__pycache__/
+pipeline/tests/__pycache__/
+
+

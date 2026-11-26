@@ -1,0 +1,39 @@
+{
+  "schema_version": "2.0.0",
+  "corpus_span": {
+    "administration_start_year": 2017,
+    "administration_end_year": 2026,
+    "csat_years": "2018-2027",
+    "total_exams": 150
+  },
+  "provenance": "CURATED_TRAINING",
+  "provenanceNoticeKo": "저작권 안전 창작·통계 모드(대법원 2021다272001 준수): 5-Tier 정량 통계와 자체 창작 예문을 제공하며, 개인 로컬 BYOD SQLite·JSON 임포트를 지원합니다.",
+  "tiers": {
+    "TIER_S_CORE": {
+      "file": "words/tier_s_core.json",
+      "difficulty_rank": 1,
+      "labelKo": "Tier S 최우선 필수"
+    },
+    "TIER_A_CYCLICAL": {
+      "file": "words/tier_a_cyclical.json",
+      "difficulty_rank": 2,
+      "labelKo": "Tier A 주기 반복"
+    },
+    "TIER_B_ADVANCED_NEW": {
+      "file": "words/tier_b_advanced_new.json",
+      "difficulty_rank": 3,
+      "labelKo": "Tier B 변별·신출"
+    },
+    "TIER_C_BURSTY": {
+      "file": "words/tier_c_bursty.json",
+      "difficulty_rank": 4,
+      "labelKo": "Tier C 저빈도·편중"
+    },
+    "TIER_D_FOOTNOTE": {
+      "file": "words/tier_d_footnote.json",
+      "difficulty_rank": 5,
+      "labelKo": "Tier D 각주·제외군"
+    }
+  },
+  "grammar_file": "grammar_focus_patterns.json"
+}
