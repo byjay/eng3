@@ -83,6 +83,8 @@ import kotlin.math.roundToInt
 
 private enum class StudyLabTab(val labelKo: String) {
     ALL_ACTIVE("전체(D제외)"),
+    REVENGE_BOSS("보스 복수전"),
+    WORD_RUN_2027("2027 10일 챌린지"),
     TIER_S("Tier S"),
     TIER_A("Tier A"),
     TIER_B("Tier B"),
@@ -346,6 +348,8 @@ fun SystematicStudyLabSection(
         ) {
             items(StudyLabTab.entries) { tab ->
                 val countSuffix = when (tab) {
+                    StudyLabTab.REVENGE_BOSS -> " ⚡"
+                    StudyLabTab.WORD_RUN_2027 -> " (500)"
                     StudyLabTab.TIER_S -> " (${snapshot.summary.tierCounts[VocabDifficultyTier.TIER_S_CORE] ?: 0})"
                     StudyLabTab.TIER_A -> " (${snapshot.summary.tierCounts[VocabDifficultyTier.TIER_A_CYCLICAL] ?: 0})"
                     StudyLabTab.TIER_B -> " (${snapshot.summary.tierCounts[VocabDifficultyTier.TIER_B_ADVANCED_NEW] ?: 0})"
@@ -355,6 +359,8 @@ fun SystematicStudyLabSection(
                     else -> ""
                 }
                 val accent = when (tab) {
+                    StudyLabTab.REVENGE_BOSS -> SpartaRed
+                    StudyLabTab.WORD_RUN_2027 -> WordRunNavy
                     StudyLabTab.TIER_S -> SpartaRed
                     StudyLabTab.TIER_A -> StudioCobalt
                     StudyLabTab.TIER_B -> RoyalPurple
@@ -386,7 +392,20 @@ fun SystematicStudyLabSection(
             }
         }
 
-        if (activeTab == StudyLabTab.GRAMMAR) {
+        if (activeTab == StudyLabTab.REVENGE_BOSS) {
+            val arenaWords = remember(snapshot.entries) { snapshot.entries.map { it.sourceWord } }
+            GameRevengeBossArenaView(
+                candidateWords = arenaWords,
+                wordProgress = wordSm2Progress,
+                onSpeakEnglish = onSpeakEnglish,
+                onRecordFsrsWord = onRecordSm2Recall
+            )
+        } else if (activeTab == StudyLabTab.WORD_RUN_2027) {
+            WordRun2027ChallengeView(
+                onSpeakEnglish = onSpeakEnglish,
+                onRecordFsrsWord = onRecordSm2Recall
+            )
+        } else if (activeTab == StudyLabTab.GRAMMAR) {
             CorpusGrammarLabView(
                 snapshot = snapshot,
                 selectedCategory = selectedGrammarCategory,

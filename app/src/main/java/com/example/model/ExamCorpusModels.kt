@@ -269,6 +269,63 @@ data class SurfaceVariantCount(
     val count: Int
 )
 
+enum class GrammarSpanRole(
+    val code: String,
+    val labelKo: String,
+    val shortLabelKo: String,
+    val descriptionKo: String
+) {
+    SUBJECT_CHUNK(
+        code = "SUBJECT_CHUNK",
+        labelKo = "주어구",
+        shortLabelKo = "주어",
+        descriptionKo = "문장 핵심 주어 및 전치사·수식 포함 주어 덩어리"
+    ),
+    MAIN_VERB(
+        code = "MAIN_VERB",
+        labelKo = "본동사",
+        shortLabelKo = "본동사",
+        descriptionKo = "주어와 수·시제·태가 호응하는 절의 핵심 서술 동사"
+    ),
+    RELATIVE_CLAUSE(
+        code = "RELATIVE_CLAUSE",
+        labelKo = "관계절·접속절",
+        shortLabelKo = "관계절",
+        descriptionKo = "which/that/who/what/where/whether 등으로 이어지는 종속절"
+    ),
+    PARTICIPLE_PHRASE(
+        code = "PARTICIPLE_PHRASE",
+        labelKo = "분사구문·준동사",
+        shortLabelKo = "분사구문",
+        descriptionKo = "V-ing / p.p. / to부정사로 압축된 분사 및 준동사 수식구"
+    ),
+    PARALLEL_UNIT(
+        code = "PARALLEL_UNIT",
+        labelKo = "병렬구조",
+        shortLabelKo = "병렬",
+        descriptionKo = "and / or / but / not only A but also B 등 대칭 구조"
+    ),
+    PREPOSITIONAL_MODIFIER(
+        code = "PREPOSITIONAL_MODIFIER",
+        labelKo = "전치사 수식어",
+        shortLabelKo = "전치사구",
+        descriptionKo = "주어-동사 사이에 끼어들거나 문맥을 한정하는 전치사구"
+    );
+
+    companion object {
+        fun fromCode(raw: String): GrammarSpanRole? {
+            val clean = raw.trim()
+            return entries.firstOrNull { it.code.equals(clean, ignoreCase = true) }
+        }
+    }
+}
+
+data class GrammarSpan(
+    val role: GrammarSpanRole,
+    val start: Int,
+    val end: Int
+)
+
 data class ExamOccurrenceRecord(
     val id: String,
     val year: Int,
@@ -286,7 +343,8 @@ data class ExamOccurrenceRecord(
     val charSpanStart: Int = -1,
     val charSpanEnd: Int = -1,
     val isUnderlined: Boolean = false,
-    val isAnswerKeyToken: Boolean = false
+    val isAnswerKeyToken: Boolean = false,
+    val grammarSpans: List<GrammarSpan> = emptyList()
 )
 
 data class CorpusWordAnalytics(

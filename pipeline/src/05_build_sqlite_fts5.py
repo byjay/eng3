@@ -59,7 +59,8 @@ CREATE TABLE sentences (
   item_type TEXT NOT NULL,
   text TEXT NOT NULL,
   translation_ko TEXT,
-  grammar_tags_json TEXT
+  grammar_tags_json TEXT,
+  grammar_spans_json TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE occurrences (
@@ -150,12 +151,13 @@ def build_sqlite_fts5(
                 s["text"],
                 s.get("translation_ko", ""),
                 json.dumps(s.get("grammar_tags", []), ensure_ascii=False),
+                json.dumps(s.get("grammar_spans", []), ensure_ascii=False),
             ))
         conn.executemany(
             """INSERT OR IGNORE INTO sentences (
                  sent_id, year, exam_type, grade, month, section,
-                 item_no, item_type, text, translation_ko, grammar_tags_json
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 item_no, item_type, text, translation_ko, grammar_tags_json, grammar_spans_json
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             sent_rows,
         )
 

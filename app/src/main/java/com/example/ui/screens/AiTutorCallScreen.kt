@@ -72,6 +72,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WavingHand
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -227,7 +228,11 @@ fun AiTutorCallScreen(
     var showEnginePicker by remember { mutableStateOf(false) }
     var showPronunciationDetail by remember { mutableStateOf(false) }
     var showGestureBar by remember { mutableStateOf(false) }
-    var showGuidedHints by remember { mutableStateOf(true) }
+    var showStudioTray by remember { mutableStateOf(false) }
+    var showMissionGoalTray by remember { mutableStateOf(false) }
+    var showGuidedHints by remember { mutableStateOf(false) }
+    var showCoachCard by remember { mutableStateOf(false) }
+    var showTopicStrip by remember { mutableStateOf(false) }
     var showNameGoalDialog by remember { mutableStateOf(false) }
     var showReportAiDialog by remember { mutableStateOf(false) }
     var reportSubmittedNotice by remember { mutableStateOf(false) }
@@ -237,13 +242,16 @@ fun AiTutorCallScreen(
     var stageMode by remember { mutableStateOf(TutorStageMode.PHOTO) }
 
     val hasAnyOverlayOpen = showHistoryOverlay || showScorecardOverlay || showTutorPicker ||
-        showGestureBar || showEnginePicker || showPronunciationDetail || showNameGoalDialog || showReportAiDialog
+        showGestureBar || showEnginePicker || showStudioTray || showMissionGoalTray ||
+        showPronunciationDetail || showNameGoalDialog || showReportAiDialog
     BackHandler(enabled = hasAnyOverlayOpen) {
         showHistoryOverlay = false
         showScorecardOverlay = false
         showTutorPicker = false
         showGestureBar = false
         showEnginePicker = false
+        showStudioTray = false
+        showMissionGoalTray = false
         showPronunciationDetail = false
         showNameGoalDialog = false
         showReportAiDialog = false
@@ -518,7 +526,8 @@ fun AiTutorCallScreen(
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = Color.Black.copy(alpha = 0.48f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -539,7 +548,9 @@ fun AiTutorCallScreen(
                                 Text(
                                     text = "${tutor.name} · $timerText",
                                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Surface(
                                     shape = RoundedCornerShape(999.dp),
@@ -547,13 +558,13 @@ fun AiTutorCallScreen(
                                     modifier = Modifier.testTag("ai_tutor_disclosure_badge")
                                 ) {
                                     Text(
-                                        text = "AI 튜터",
+                                        text = "AI",
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.ExtraBold
                                         ),
                                         color = Color.White,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                                     )
                                 }
                                 if (voiceState.isSpeaking) {
@@ -564,31 +575,31 @@ fun AiTutorCallScreen(
                                 }
                             }
                             Text(
-                                text = "${state.sceneLocationLabelKo} · 인공지능 대화",
+                                text = state.sceneLocationLabelKo,
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = TrophyGold
+                                color = TrophyGold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                 }
 
-                // Compact Outlined Circular Icon Controls
+                // Clean 4-Button Top Action Bar (Zero right-edge overflow!)
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    FaceTalkIconBtn(
-                        icon = Icons.Outlined.Mood,
-                        desc = "표정",
-                        active = showGestureBar,
-                        activeColor = CoralOrange,
-                        tag = "facetalk_motion_gestures",
-                        onClick = { showGestureBar = !showGestureBar }
-                    )
                     FaceTalkIconBtn(
                         icon = Icons.Outlined.SwitchAccount,
                         desc = "선생님 변경",
                         active = showTutorPicker,
                         activeColor = StudioCobalt,
                         tag = "facetalk_switch_tutor",
-                        onClick = { showTutorPicker = !showTutorPicker }
+                        onClick = {
+                            showTutorPicker = !showTutorPicker
+                            if (showTutorPicker) {
+                                showStudioTray = false
+                                showGestureBar = false
+                            }
+                        }
                     )
                     FaceTalkIconBtn(
                         icon = Icons.Outlined.ClosedCaption,
@@ -607,105 +618,252 @@ fun AiTutorCallScreen(
                         onClick = { onSetHandsFree(!handsFreeMode) }
                     )
                     FaceTalkIconBtn(
-                        icon = Icons.Outlined.Flag,
-                        desc = "AI 응답 신고",
-                        active = showReportAiDialog,
-                        activeColor = SpartaRed,
-                        tag = "report_ai_response_button",
+                        icon = Icons.Outlined.Tune,
+                        desc = "대화 설정",
+                        active = showStudioTray || showGestureBar,
+                        activeColor = StudioIris,
+                        tag = "facetalk_studio_settings_btn",
                         onClick = {
-                            reportSubmittedNotice = false
-                            showReportAiDialog = true
-                        }
-                    )
-                    // 1-Tap Speed Cycle (0.8x -> 1.0x -> 1.15x)
-                    Surface(
-                        shape = CircleShape,
-                        color = Color.Black.copy(alpha = 0.48f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)),
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .clickable {
-                                val next = when {
-                                    speechRate < 0.9f -> 1.0f
-                                    speechRate < 1.1f -> 1.15f
-                                    else -> 0.8f
-                                }
-                                onSetSpeechRate(next)
+                            showStudioTray = !showStudioTray
+                            if (showStudioTray) {
+                                showTutorPicker = false
+                                showMissionGoalTray = false
+                            } else {
+                                showEnginePicker = false
                             }
-                            .testTag("facetalk_speed_cycle")
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "${speechRate}x",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
-                        }
-                    }
-                    FaceTalkIconBtn(
-                        icon = Icons.Outlined.EmojiEvents,
-                        desc = "성적표",
-                        active = showScorecardOverlay,
-                        activeColor = StudioCoral,
-                        tag = "facetalk_scorecard_btn",
-                        onClick = {
-                            showScorecardOverlay = !showScorecardOverlay
-                            if (showScorecardOverlay) showHistoryOverlay = false
-                        }
-                    )
-                    FaceTalkIconBtn(
-                        icon = Icons.Outlined.History,
-                        desc = "기록",
-                        active = showHistoryOverlay,
-                        activeColor = RoyalPurple,
-                        tag = "facetalk_history_btn",
-                        onClick = {
-                            showHistoryOverlay = !showHistoryOverlay
-                            if (showHistoryOverlay) showScorecardOverlay = false
                         }
                     )
                 }
             }
 
-            // 3-Step Live Roleplay Mission Progress Bar
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color.Black.copy(alpha = 0.42f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("roleplay_mission_strip")
+            // Ultra-Slim 1-Row Compact Status Strip (Minimizes portrait occlusion!)
+            val completedMissionCount = state.turnsInCall.coerceIn(0, roleplayMissions.size)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    roleplayMissions.forEachIndexed { idx, stepLabel ->
-                        val done = state.turnsInCall > idx
+                    // Compact Mission & Goal Toggle Pill
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (showMissionGoalTray) StudioCobalt.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.44f),
+                        border = BorderStroke(1.dp, if (showMissionGoalTray) GlacierCyan else Color.White.copy(alpha = 0.22f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable {
+                                showMissionGoalTray = !showMissionGoalTray
+                                if (showMissionGoalTray) showStudioTray = false
+                            }
+                            .testTag("toggle_mission_goal_pill")
+                    ) {
                         Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.CheckCircle,
-                                contentDescription = null,
-                                tint = if (done) GlacierCyan else Color.White.copy(alpha = 0.36f),
-                                modifier = Modifier.size(13.dp)
+                                imageVector = Icons.Outlined.Flag,
+                                contentDescription = "미션 및 목표",
+                                tint = GlacierCyan,
+                                modifier = Modifier.size(12.dp)
                             )
                             Text(
-                                text = "${idx + 1}.$stepLabel",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    fontWeight = if (done) FontWeight.Bold else FontWeight.Medium
-                                ),
-                                color = if (done) GlacierCyan else Color.White.copy(alpha = 0.82f),
+                                text = "미션 $completedMissionCount/${roleplayMissions.size} · ${state.activeTopicTag}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, fontWeight = FontWeight.Bold),
+                                color = Color.White,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    // Live Listening / Thinking / Scene Generating Status Pill (Only visible when active!)
+                    if (state.isGeneratingScene) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = StudioCobalt.copy(alpha = 0.88f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                CircularProgressIndicator(color = Color.White, strokeWidth = 1.8.dp, modifier = Modifier.size(11.dp))
+                                Text(
+                                    text = "배경 생성",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    } else if (voiceState.isListening || state.isThinking) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = if (voiceState.isListening) SpartaRed.copy(alpha = 0.90f) else StudioCoral.copy(alpha = 0.90f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (state.isThinking) {
+                                    CircularProgressIndicator(color = Color.White, strokeWidth = 1.8.dp, modifier = Modifier.size(11.dp))
+                                } else {
+                                    Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                }
+                                Text(
+                                    text = if (state.isThinking) "응답 중" else if (state.koreanVoiceInputMode) "KR 듣는 중" else "EN 듣는 중",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    } else {
+                        state.latestPronunciation?.let { report ->
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = AdventureEmerald.copy(alpha = 0.86f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .clickable { showPronunciationDetail = !showPronunciationDetail }
+                            ) {
+                                Text(
+                                    text = "발음 ${report.overallScore}점",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.ExtraBold),
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Sleek Compact Learner Profile Pill (Replaces bulky 76x96dp PiP box!)
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = Color.Black.copy(alpha = 0.46f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (voiceState.isListening) SpartaRed else Color.White.copy(alpha = 0.28f)
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable { showNameGoalDialog = true }
+                        .testTag("edit_learner_name_pip")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.GraphicEq,
+                            contentDescription = "내 이름 설정",
+                            tint = if (voiceState.isListening) SpartaRed else GlacierCyan,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "$activePlayerName · ${if (state.koreanVoiceInputMode) "KR" else "EN"}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, fontWeight = FontWeight.Bold),
+                            color = Color.White,
+                            maxLines = 1
+                        )
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.65f),
+                            modifier = Modifier.size(10.dp)
+                        )
+                    }
+                }
+            }
+
+            if (state.liveVoiceCommandNotice.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = RoyalPurple.copy(alpha = 0.82f)
+                ) {
+                    Text(
+                        text = state.liveVoiceCommandNotice.removePrefix("음성 설정 반영: "),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // Expandable 3-Step Mission & Conversation Goal Tray (Hidden by default!)
+            AnimatedVisibility(visible = showMissionGoalTray) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.Black.copy(alpha = 0.68f),
+                    border = BorderStroke(1.dp, GlacierCyan.copy(alpha = 0.42f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("roleplay_mission_strip")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            roleplayMissions.forEachIndexed { idx, stepLabel ->
+                                val done = state.turnsInCall > idx
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.CheckCircle,
+                                        contentDescription = null,
+                                        tint = if (done) GlacierCyan else Color.White.copy(alpha = 0.36f),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Text(
+                                        text = "${idx + 1}.$stepLabel",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 10.sp,
+                                            fontWeight = if (done) FontWeight.Bold else FontWeight.Medium
+                                        ),
+                                        color = if (done) GlacierCyan else Color.White.copy(alpha = 0.85f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { showNameGoalDialog = true }
+                                .testTag("conversation_goal_pill"),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "목표: ${state.conversationGoalKo}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                                color = Color.White.copy(alpha = 0.92f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "편집",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                color = GlacierCyan,
+                                modifier = Modifier.padding(start = 6.dp)
                             )
                         }
                     }
@@ -847,120 +1005,168 @@ fun AiTutorCallScreen(
                 }
             }
 
-            // Top-Right Floating Kakao FaceTalk Self-Cam PiP Window + Score Pill
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                // Left Status Pills: 3-Mode Stage Switcher + AI Engine Switcher + Live Listening/Thinking
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // 3D TalkingHead · Lottie Motion · Real Photo Toggle
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color.Black.copy(alpha = 0.52f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
-                        modifier = Modifier.testTag("tutor_stage_mode_toggle")
+            // Expandable Call Studio Controls Tray (Hidden by default so portrait stage stays clean!)
+            AnimatedVisibility(visible = showStudioTray) {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xE80D111A),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("facetalk_studio_control_tray")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // Row 1: Stage Mode (실사 · 캐릭터 · 3D · 모션) + Speed Cycle
                         Row(
-                            modifier = Modifier.padding(3.dp),
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TutorStageMode.entries.forEach { mode ->
-                                val active = stageMode == mode
-                                Surface(
-                                    shape = RoundedCornerShape(11.dp),
-                                    color = if (active) StudioCobalt else Color.Transparent,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(11.dp))
-                                        .clickable { stageMode = mode }
-                                        .testTag("tutor_stage_mode_${mode.name}")
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.White.copy(alpha = 0.08f),
+                                modifier = Modifier.testTag("tutor_stage_mode_toggle")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(3.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
+                                    TutorStageMode.entries.forEach { mode ->
+                                        val active = stageMode == mode
+                                        Surface(
+                                            shape = RoundedCornerShape(9.dp),
+                                            color = if (active) StudioCobalt else Color.Transparent,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(9.dp))
+                                                .clickable { stageMode = mode }
+                                                .testTag("tutor_stage_mode_${mode.name}")
+                                        ) {
+                                            Text(
+                                                text = mode.labelKo,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+                                                ),
+                                                color = if (active) Color.White else Color.White.copy(alpha = 0.72f),
+                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color.White.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        val next = when {
+                                            speechRate < 0.9f -> 1.0f
+                                            speechRate < 1.1f -> 1.15f
+                                            else -> 0.8f
+                                        }
+                                        onSetSpeechRate(next)
+                                    }
+                                    .testTag("facetalk_speed_cycle")
+                            ) {
+                                Text(
+                                    text = "속도 ${speechRate}x",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, fontWeight = FontWeight.Bold),
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+
+                        // Row 2: AI Engine + Proactive Mode + First-Speak
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color.White.copy(alpha = 0.10f),
+                                border = BorderStroke(1.dp, StudioCobalt.copy(alpha = 0.70f)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { showEnginePicker = !showEnginePicker }
+                                    .testTag("facetalk_engine_badge_btn")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.AutoAwesome,
+                                        contentDescription = "AI 엔진 전환",
+                                        tint = GlacierCyan,
+                                        modifier = Modifier.size(13.dp)
+                                    )
                                     Text(
-                                        text = mode.labelKo,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 10.5.sp,
-                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
-                                        ),
-                                        color = if (active) Color.White else Color.White.copy(alpha = 0.72f),
-                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                        text = "${state.activeEngineBadgeKo} ▾",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                        color = Color(0xFFBAE6FD),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
-                        }
-                    }
-
-                    if (state.isGeneratingScene) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = StudioCobalt.copy(alpha = 0.88f),
-                            border = BorderStroke(1.dp, GlacierCyan.copy(alpha = 0.7f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (state.proactiveModeEnabled) StudioIris.copy(alpha = 0.88f) else Color.White.copy(alpha = 0.10f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { onToggleProactiveMode() }
+                                    .testTag("proactive_mode_toggle_btn")
                             ) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Outlined.Psychology, contentDescription = "능동 사고", tint = Color.White, modifier = Modifier.size(13.dp))
+                                    Text(
+                                        text = if (state.proactiveModeEnabled) "능동 ON" else "능동 OFF",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = StudioCobalt.copy(alpha = 0.88f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable(enabled = !state.isThinking && !voiceState.isListening) {
+                                        showStudioTray = false
+                                        onTriggerProactiveCheckIn()
+                                    }
+                                    .testTag("proactive_speak_now_btn")
+                            ) {
                                 Text(
-                                    text = "'${state.sceneLocationLabelKo}' 배경 생성 중",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    text = "먼저 말걸기",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
                                 )
                             }
                         }
-                    }
-                    // 1-Tap AI Engine Switcher Pill
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color.Black.copy(alpha = 0.48f),
-                        border = BorderStroke(1.dp, StudioCobalt.copy(alpha = 0.65f)),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { showEnginePicker = !showEnginePicker }
-                            .testTag("facetalk_engine_badge_btn")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.AutoAwesome,
-                                contentDescription = "AI 엔진 전환",
-                                tint = GlacierCyan,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Text(
-                                text = "${state.activeEngineBadgeKo} ▾",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                color = Color(0xFFBAE6FD),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                    AnimatedVisibility(visible = showEnginePicker) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color(0xE80D0F14),
-                            border = BorderStroke(1.dp, StudioCobalt.copy(alpha = 0.6f))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
+
+                        AnimatedVisibility(visible = showEnginePicker) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 AiEngineMode.entries.forEach { mode ->
                                     val selected = mode == engineMode
                                     Surface(
-                                        shape = RoundedCornerShape(10.dp),
+                                        shape = RoundedCornerShape(9.dp),
                                         color = if (selected) StudioCobalt else Color.White.copy(alpha = 0.08f),
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(9.dp))
                                             .clickable {
                                                 onSelectEngineMode(mode)
                                                 showEnginePicker = false
@@ -977,197 +1183,63 @@ fun AiTutorCallScreen(
                                 }
                             }
                         }
-                    }
-                    if (voiceState.isListening || state.isThinking) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = if (voiceState.isListening) SpartaRed.copy(alpha = 0.88f) else StudioCoral.copy(alpha = 0.90f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (state.isThinking) {
-                                    CircularProgressIndicator(
-                                        color = Color.White,
-                                        strokeWidth = 2.dp,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                } else {
-                                    Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
-                                }
-                                Spacer(Modifier.width(5.dp))
-                                Text(
-                                    text = if (state.isThinking) "응답 중" else if (state.koreanVoiceInputMode) "KR 듣는 중" else "EN 듣는 중",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                    if (state.liveVoiceCommandNotice.isNotBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = RoyalPurple.copy(alpha = 0.82f)
-                        ) {
-                            Text(
-                                text = state.liveVoiceCommandNotice.removePrefix("음성 설정 반영: "),
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
-                        }
-                    }
-                    // Proactive AI Thinking Toggle + 1-Tap Proactive Prompt Trigger
-                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (state.proactiveModeEnabled) StudioIris.copy(alpha = 0.82f) else Color.Black.copy(alpha = 0.48f),
-                            border = BorderStroke(
-                                1.dp,
-                                if (state.proactiveModeEnabled) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.22f)
-                            ),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { onToggleProactiveMode() }
-                                .testTag("proactive_mode_toggle_btn")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Psychology,
-                                    contentDescription = "능동 사고 토글",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Text(
-                                    text = if (state.proactiveModeEnabled) "능동 ON" else "능동 OFF",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
-                            }
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = StudioCobalt.copy(alpha = 0.85f),
-                            border = BorderStroke(1.dp, GlacierCyan.copy(alpha = 0.55f)),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable(enabled = !state.isThinking && !voiceState.isListening) {
-                                    onTriggerProactiveCheckIn()
-                                }
-                                .testTag("proactive_speak_now_btn")
-                        ) {
-                            Text(
-                                text = "먼저 말걸기",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
 
-                    // Active Conversation Goal (목표) Pill — Tap to edit learner name & goal
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.Black.copy(alpha = 0.46f),
-                        border = BorderStroke(1.dp, GlacierCyan.copy(alpha = 0.42f)),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { showNameGoalDialog = true }
-                            .testTag("conversation_goal_pill")
-                    ) {
+                        // Row 3: Quick Utility Tools (표정, 성적표, 대화기록, 신고)
                         Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Flag,
-                                contentDescription = "대화 목표",
-                                tint = GlacierCyan,
-                                modifier = Modifier.size(12.dp)
+                            FaceTalkIconBtn(
+                                icon = Icons.Outlined.Mood,
+                                desc = "표정",
+                                active = showGestureBar,
+                                activeColor = CoralOrange,
+                                tag = "facetalk_motion_gestures",
+                                onClick = {
+                                    showGestureBar = !showGestureBar
+                                    if (showGestureBar) showStudioTray = false
+                                }
                             )
-                            Text(
-                                text = "목표: ${state.conversationGoalKo}",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium),
-                                color = Color.White.copy(alpha = 0.9f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(end = 2.dp)
+                            FaceTalkIconBtn(
+                                icon = Icons.Outlined.EmojiEvents,
+                                desc = "성적표",
+                                active = showScorecardOverlay,
+                                activeColor = StudioCoral,
+                                tag = "facetalk_scorecard_btn",
+                                onClick = {
+                                    showScorecardOverlay = !showScorecardOverlay
+                                    if (showScorecardOverlay) {
+                                        showHistoryOverlay = false
+                                        showStudioTray = false
+                                    }
+                                }
                             )
-                        }
-                    }
-
-                    state.latestPronunciation?.let { report ->
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = AdventureEmerald.copy(alpha = 0.85f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { showPronunciationDetail = !showPronunciationDetail }
-                        ) {
-                            Text(
-                                text = "발음 ${report.overallScore}점 (${report.fluencyGrade}) ▾",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            FaceTalkIconBtn(
+                                icon = Icons.Outlined.History,
+                                desc = "기록",
+                                active = showHistoryOverlay,
+                                activeColor = RoyalPurple,
+                                tag = "facetalk_history_btn",
+                                onClick = {
+                                    showHistoryOverlay = !showHistoryOverlay
+                                    if (showHistoryOverlay) {
+                                        showScorecardOverlay = false
+                                        showStudioTray = false
+                                    }
+                                }
                             )
-                        }
-                    }
-                }
-
-                // Floating Self-Cam PiP Frame (Tap to edit Learner Name & Conversation Goal!)
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.Black.copy(alpha = 0.45f),
-                    border = BorderStroke(
-                        1.5.dp,
-                        if (voiceState.isListening) SpartaRed else Color.White.copy(alpha = 0.4f)
-                    ),
-                    modifier = Modifier
-                        .size(width = 76.dp, height = 96.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { showNameGoalDialog = true }
-                        .testTag("edit_learner_name_pip")
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.GraphicEq,
-                                contentDescription = "내 이름 설정",
-                                tint = if (voiceState.isListening) SpartaRed else GlacierCyan,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                modifier = Modifier.padding(horizontal = 4.dp)
-                            ) {
-                                Text(
-                                    text = activePlayerName,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Icon(
-                                    imageVector = Icons.Outlined.Edit,
-                                    contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.65f),
-                                    modifier = Modifier.size(10.dp)
-                                )
-                            }
-                            Text(
-                                text = if (state.koreanVoiceInputMode) "KR" else "EN",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = Color.White.copy(alpha = 0.72f)
+                            FaceTalkIconBtn(
+                                icon = Icons.Outlined.Flag,
+                                desc = "AI 응답 신고",
+                                active = showReportAiDialog,
+                                activeColor = SpartaRed,
+                                tag = "report_ai_response_button",
+                                onClick = {
+                                    reportSubmittedNotice = false
+                                    showStudioTray = false
+                                    showReportAiDialog = true
+                                }
                             )
                         }
                     }
@@ -1542,37 +1614,108 @@ fun AiTutorCallScreen(
                 }
             }
 
-            // Compact Reply Hints Toggle
-            Row(
+            // Sleek 1-Row Quick Utility Toggle Strip (Collapsed by default so portrait stays crystal clear!)
+            val hasCoachFeedback = state.liveNaturalRephraseEn.isNotBlank() ||
+                state.liveGrammarFixKo.isNotBlank() ||
+                state.liveCoachingCommentKo.isNotBlank()
+            LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = if (showGuidedHints) StudioCoral.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.42f),
-                    border = BorderStroke(1.dp, StudioCoral.copy(alpha = 0.55f)),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .clickable { showGuidedHints = !showGuidedHints }
-                        .testTag("toggle_guided_hints_btn")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                item(key = "util_hints") {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (showGuidedHints) StudioCoral.copy(alpha = 0.30f) else Color.Black.copy(alpha = 0.46f),
+                        border = BorderStroke(1.dp, if (showGuidedHints) StudioCoral else StudioCoral.copy(alpha = 0.55f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable {
+                                showGuidedHints = !showGuidedHints
+                                if (showGuidedHints) {
+                                    showCoachCard = false
+                                    showTopicStrip = false
+                                }
+                            }
+                            .testTag("toggle_guided_hints_btn")
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Lightbulb,
-                            contentDescription = "추천 답변",
-                            tint = StudioCoral,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            text = if (showGuidedHints) "추천 답변 ▾" else "추천 답변 ▸",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
-                            color = StudioCoral
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Outlined.Lightbulb, contentDescription = "추천 답변", tint = StudioCoral, modifier = Modifier.size(13.dp))
+                            Text(
+                                text = if (showGuidedHints) "추천 답변 ▾" else "추천 답변",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+                if (hasCoachFeedback) {
+                    item(key = "util_coach") {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = if (showCoachCard) StudioCobalt.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.46f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (state.liveNaturalRephraseEn.isNotBlank()) TrophyGold.copy(alpha = 0.72f) else Color.White.copy(alpha = 0.28f)
+                            ),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .clickable {
+                                    showCoachCard = !showCoachCard
+                                    if (showCoachCard) {
+                                        showGuidedHints = false
+                                        showTopicStrip = false
+                                    }
+                                }
+                                .testTag("toggle_coach_card_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Outlined.AutoFixHigh, contentDescription = "코칭·따라말하기", tint = TrophyGold, modifier = Modifier.size(13.dp))
+                                Text(
+                                    text = if (showCoachCard) "코칭·따라말하기 ▾" else "코칭·따라말하기",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+                item(key = "util_topic") {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (showTopicStrip) AdventureEmerald.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.46f),
+                        border = BorderStroke(1.dp, if (showTopicStrip) AdventureEmerald else Color.White.copy(alpha = 0.26f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable {
+                                showTopicStrip = !showTopicStrip
+                                if (showTopicStrip) {
+                                    showGuidedHints = false
+                                    showCoachCard = false
+                                }
+                            }
+                            .testTag("toggle_topic_strip_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = "상황 변경", tint = AdventureEmerald, modifier = Modifier.size(13.dp))
+                            Text(
+                                text = if (showTopicStrip) "상황 · ${state.activeTopicTag} ▾" else "상황 · ${state.activeTopicTag}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                                color = Color.White
+                            )
+                        }
                     }
                 }
             }
@@ -1587,11 +1730,12 @@ fun AiTutorCallScreen(
                     items(guidedHints, key = { it.english }) { hint ->
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = Color.Black.copy(alpha = 0.56f),
-                            border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.55f)),
+                            color = Color.Black.copy(alpha = 0.64f),
+                            border = BorderStroke(1.dp, AdventureEmerald.copy(alpha = 0.60f)),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(14.dp))
                                 .clickable(enabled = !state.isThinking) {
+                                    showGuidedHints = false
                                     onSendTypedMessage(hint.english)
                                 }
                         ) {
@@ -1617,13 +1761,13 @@ fun AiTutorCallScreen(
                 }
             }
 
-            // Loora / Ringle-Style Inline Native Expression Upgrade + 1-Tap Shadowing Card
-            if (state.liveNaturalRephraseEn.isNotBlank() || state.liveGrammarFixKo.isNotBlank() || state.liveCoachingCommentKo.isNotBlank()) {
+            // Expandable Inline Native Expression Upgrade + 1-Tap Shadowing Card
+            AnimatedVisibility(visible = showCoachCard && hasCoachFeedback) {
                 val shadowSentence = state.liveNaturalRephraseEn.ifBlank { state.liveSubtitleEn }
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color.Black.copy(alpha = 0.52f),
-                    border = BorderStroke(1.dp, if (state.liveNaturalRephraseEn.isNotBlank()) TrophyGold.copy(alpha = 0.50f) else Color.White.copy(alpha = 0.22f)),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.Black.copy(alpha = 0.64f),
+                    border = BorderStroke(1.dp, if (state.liveNaturalRephraseEn.isNotBlank()) TrophyGold.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.24f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -1671,10 +1815,9 @@ fun AiTutorCallScreen(
                                 )
                             }
                         }
-                        // 1-Tap Exact-Sentence Shadowing Button
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = StudioCobalt.copy(alpha = 0.90f),
+                            color = StudioCobalt.copy(alpha = 0.92f),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
                                 .clickable {
@@ -1756,48 +1899,51 @@ fun AiTutorCallScreen(
                 }
             }
 
-            // 8 Realistic Live Roleplay Scenario Chips (Horizontally scrollable, active scene highlighted!)
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("roleplay_scenario_strip"),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(faceTalkQuickChips, key = { it.labelKo }) { chip ->
-                    val isSelectedScene = state.activeTopicTag.contains(chip.labelKo)
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (isSelectedScene) AdventureEmerald.copy(alpha = 0.82f) else Color.Black.copy(alpha = 0.44f),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isSelectedScene) Color.White else Color.White.copy(alpha = 0.24f)
-                        ),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable {
-                                if (chip.isQuestion) onSendTypedMessage(chip.prompt)
-                                else onSelectTopic(chip.labelKo, chip.prompt)
-                            }
-                            .testTag("quick_kr_chip_${chip.labelKo}")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
+            // Expandable 8 Realistic Live Roleplay Scenario Chips
+            AnimatedVisibility(visible = showTopicStrip) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("roleplay_scenario_strip"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(faceTalkQuickChips, key = { it.labelKo }) { chip ->
+                        val isSelectedScene = state.activeTopicTag.contains(chip.labelKo)
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelectedScene) AdventureEmerald.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.56f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSelectedScene) Color.White else Color.White.copy(alpha = 0.26f)
+                            ),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable {
+                                    showTopicStrip = false
+                                    if (chip.isQuestion) onSendTypedMessage(chip.prompt)
+                                    else onSelectTopic(chip.labelKo, chip.prompt)
+                                }
+                                .testTag("quick_kr_chip_${chip.labelKo}")
                         ) {
-                            Icon(
-                                imageVector = chip.icon,
-                                contentDescription = chip.labelKo,
-                                tint = if (isSelectedScene) Color.White else TrophyGold,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = chip.labelKo,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White,
-                                maxLines = 1
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = chip.icon,
+                                    contentDescription = chip.labelKo,
+                                    tint = if (isSelectedScene) Color.White else TrophyGold,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = chip.labelKo,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }

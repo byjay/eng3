@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.example.engine.ExamCorpusAnalyticsEngine
+import com.example.engine.GrammarSpanEngine
 import com.example.model.CorpusDataProvenance
 import com.example.model.ExamCorpusWordEntry
 import com.example.model.ExamOccurrenceRecord
@@ -96,7 +97,8 @@ class CorpusSqliteFtsStore private constructor(
               item_type TEXT NOT NULL,
               text TEXT NOT NULL,
               translation_ko TEXT,
-              grammar_tags_json TEXT
+              grammar_tags_json TEXT,
+              grammar_spans_json TEXT NOT NULL DEFAULT '[]'
             )
             """.trimIndent()
         )
@@ -137,11 +139,33 @@ class CorpusSqliteFtsStore private constructor(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion == 2 && newVersion >= 3) {
+            if (!hasColumn(db, "sentences", "grammar_spans_json")) {
+                runCatching {
+                    db.execSQL("ALTER TABLE sentences ADD COLUMN grammar_spans_json TEXT NOT NULL DEFAULT '[]'")
+                }
+            }
+            return
+        }
         db.execSQL("DROP TABLE IF EXISTS sentences_fts")
         db.execSQL("DROP TABLE IF EXISTS occurrences")
         db.execSQL("DROP TABLE IF EXISTS sentences")
         db.execSQL("DROP TABLE IF EXISTS words")
         onCreate(db)
+    }
+
+    private fun hasColumn(db: SQLiteDatabase, tableName: String, columnName: String): Boolean {
+        return runCatching {
+            db.rawQuery("PRAGMA table_info($tableName)", null).use { c ->
+                val nameIdx = c.getColumnIndex("name")
+                while (c.moveToNext()) {
+                    if (nameIdx >= 0 && c.getString(nameIdx).equals(columnName, ignoreCase = true)) {
+                        return@use true
+                    }
+                }
+                false
+            }
+        }.getOrDefault(false)
     }
 
     /**
@@ -188,6 +212,8 @@ class CorpusSqliteFtsStore private constructor(
                         val tagsJson = JSONArray().apply {
                             occ.grammarCategories.forEach { put(it.udRuleCode) }
                         }.toString()
+                        val effectiveSpans = GrammarSpanEngine.resolveEffectiveSpans(occ.sentenceEn, occ.grammarSpans)
+                        val spansJson = GrammarSpanEngine.serializeGrammarSpansJson(effectiveSpans)
                         val sCv = ContentValues().apply {
                             put("sent_id", sentId)
                             put("year", occ.year)
@@ -200,6 +226,7 @@ class CorpusSqliteFtsStore private constructor(
                             put("text", occ.sentenceEn)
                             put("translation_ko", occ.sentenceKo)
                             put("grammar_tags_json", tagsJson)
+                            put("grammar_spans_json", spansJson)
                         }
                         db.insertWithOnConflict("sentences", null, sCv, SQLiteDatabase.CONFLICT_IGNORE)
                     }
@@ -291,12 +318,15 @@ class CorpusSqliteFtsStore private constructor(
         val safeOffset = offset.coerceAtLeast(0)
         val pageArgs = args + listOf(safeLimit.toString(), safeOffset.toString())
 
+        val hasGrammarSpansCol = hasColumn(db, "sentences", "grammar_spans_json")
+        val spansSelectExpr = if (hasGrammarSpansCol) "s.grammar_spans_json" else "'[]'"
         val items = mutableListOf<ExamOccurrenceRecord>()
         db.rawQuery(
             """
             SELECT o.occ_id, s.year, s.month, s.exam_type, s.item_type, s.item_no,
                    o.surface_form, s.text, s.translation_ko, s.grammar_tags_json,
-                   s.section, o.span_start, o.span_end, o.is_underlined, o.is_answer_key
+                   s.section, o.span_start, o.span_end, o.is_underlined, o.is_answer_key,
+                   $spansSelectExpr
             FROM occurrences o
             JOIN sentences s ON s.sent_id = o.sent_id
             WHERE $whereSql
@@ -311,6 +341,8 @@ class CorpusSqliteFtsStore private constructor(
                 val textEn = c.getString(7).orEmpty()
                 val spanStart = c.getInt(11)
                 val spanEnd = c.getInt(12)
+                val parsedSpans = GrammarSpanEngine.parseGrammarSpansJson(c.getString(15), textEn.length)
+                val effectiveSpans = GrammarSpanEngine.resolveEffectiveSpans(textEn, parsedSpans)
                 items += ExamOccurrenceRecord(
                     id = c.getString(0),
                     year = c.getInt(1),
@@ -332,7 +364,8 @@ class CorpusSqliteFtsStore private constructor(
                     charSpanStart = spanStart,
                     charSpanEnd = spanEnd,
                     isUnderlined = c.getInt(13) == 1,
-                    isAnswerKeyToken = c.getInt(14) == 1
+                    isAnswerKeyToken = c.getInt(14) == 1,
+                    grammarSpans = effectiveSpans
                 )
             }
         }
@@ -439,7 +472,7 @@ class CorpusSqliteFtsStore private constructor(
     }
 
     companion object {
-        private const val DB_VERSION = 2
+        private const val DB_VERSION = 3
         private const val DEFAULT_DB_NAME = "csat_curated_corpus_v2.sqlite"
         private const val BYOD_DB_NAME = "csat_byod_local_v2.sqlite"
         private const val DEFAULT_PAGE_SIZE = 15

@@ -115,6 +115,10 @@ class PipelineQaTest(unittest.TestCase):
                 "text": "The conversation about renewable energy helped students refine their ideas.",
                 "translation_ko": "재생 에너지에 대한 대화는 학생들이 생각을 다듬도록 도왔다.",
                 "grammar_tags": ["SUBJECT_VERB_AGREE"],
+                "grammar_spans": [
+                    {"role": "SUBJECT_CHUNK", "char_span": [0, 39]},
+                    {"role": "MAIN_VERB", "char_span": [40, 46]},
+                ],
             }]
             occurrences = [{
                 "occ_id": "occ_001", "word_id": "w_001", "sent_id": "2027_CSAT_L05_S02",
@@ -133,11 +137,13 @@ class PipelineQaTest(unittest.TestCase):
             conn = sqlite3.connect(str(db_path))
             try:
                 rows = conn.execute(
-                    "SELECT s.sent_id FROM sentences_fts f JOIN sentences s ON s.rowid = f.rowid WHERE sentences_fts MATCH ?",
+                    "SELECT s.sent_id, s.grammar_spans_json FROM sentences_fts f JOIN sentences s ON s.rowid = f.rowid WHERE sentences_fts MATCH ?",
                     (db_mod.sanitize_fts_query("convers"),),
                 ).fetchall()
                 self.assertEqual(len(rows), 1)
                 self.assertEqual(rows[0][0], "2027_CSAT_L05_S02")
+                self.assertIn("SUBJECT_CHUNK", rows[0][1])
+                self.assertIn("MAIN_VERB", rows[0][1])
             finally:
                 conn.close()
 

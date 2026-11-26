@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.example.engine.ExamCorpusAnalyticsEngine
 import com.example.engine.ExamCorpusSearchIndex
+import com.example.engine.GrammarSpanEngine
 import com.example.model.CefrLevel
 import com.example.model.CorpusDataProvenance
 import com.example.model.CorpusRuntimeMode
@@ -332,6 +333,19 @@ object ExamCorpusRepository {
                     val surface = ((o["surfaceForm"] as? String) ?: (o["surface_form"] as? String))
                         .orEmpty().ifBlank { lemma }.take(64)
                     val span = ExamCorpusAnalyticsEngine.resolveCharSpan(sentenceEn, surface)
+                    val rawSpansList = (o["grammar_spans"] as? List<*>) ?: (o["grammarSpans"] as? List<*>)
+                    val parsedGrammarSpans = if (rawSpansList != null) {
+                        val spansJson = runCatching {
+                            val listType = Types.newParameterizedType(List::class.java, Any::class.java)
+                            moshi.adapter<List<Any?>>(listType).toJson(rawSpansList)
+                        }.getOrNull()
+                        GrammarSpanEngine.resolveEffectiveSpans(
+                            sentenceEn,
+                            GrammarSpanEngine.parseGrammarSpansJson(spansJson, sentenceEn.length)
+                        )
+                    } else {
+                        GrammarSpanEngine.detectGrammarSpans(sentenceEn)
+                    }
                     parsedOccs += ExamOccurrenceRecord(
                         id = (o["id"] as? String).orEmpty().ifBlank { "${lemma}_ext_${year}_${month}_$j" },
                         year = year,
@@ -349,7 +363,8 @@ object ExamCorpusRepository {
                         section = ExamSection.fromCode(o["section"] as? String ?: "reading"),
                         charSpanStart = span.first,
                         charSpanEnd = span.second,
-                        isUnderlined = (o["is_underlined"] as? Boolean) == true
+                        isUnderlined = (o["is_underlined"] as? Boolean) == true,
+                        grammarSpans = parsedGrammarSpans
                     )
                 }
                 if (parsedOccs.isNotEmpty()) {
@@ -604,7 +619,8 @@ object ExamCorpusRepository {
                 section = if (isListening) ExamSection.LISTENING else ExamSection.READING,
                 charSpanStart = span.first,
                 charSpanEnd = span.second,
-                isUnderlined = ((index + i) % 4 == 0)
+                isUnderlined = ((index + i) % 4 == 0),
+                grammarSpans = GrammarSpanEngine.detectGrammarSpans(ex.english)
             )
         }
 
@@ -628,7 +644,8 @@ object ExamCorpusRepository {
                     section = ExamSection.READING,
                     charSpanStart = span.first,
                     charSpanEnd = span.second,
-                    isUnderlined = true
+                    isUnderlined = true,
+                    grammarSpans = GrammarSpanEngine.detectGrammarSpans(gs.completeSentenceEn)
                 )
             }
         }
