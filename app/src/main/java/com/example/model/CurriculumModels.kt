@@ -73,9 +73,9 @@ data class PatternDrillItem(
 )
 
 data class ParentProfiles(
-    val dadName: String = "아빠 국왕",
-    val momName: String = "엄마 왕비",
-    val daughterName: String = "원삐",
+    val dadName: String = "멘토",
+    val momName: String = "코치",
+    val daughterName: String = "학습자",
     val parentPin: String = "",
     val isPinConfigured: Boolean = false
 )
@@ -83,7 +83,7 @@ data class ParentProfiles(
 data class GuestInviteSession(
     val isGuestMode: Boolean = false,
     val inviteCode: String = "",
-    val hostNickname: String = "원삐",
+    val hostNickname: String = "학습자",
     val guestNickname: String = "",
     val myGeneratedCode: String = "",
     val kakaoLinked: Boolean = false

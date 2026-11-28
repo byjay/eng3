@@ -228,7 +228,7 @@ class GroqRotationAndStreamingTest {
         val engine = HybridAiCoachEngine(slotStore = null)
         val bundledKeys = engine.configuredGroqEnvKeys()
         assertTrue(
-            "APK BuildConfig must never bundle Groq API keys; use Firebase AI Logic instead",
+            "APK BuildConfig must never bundle Groq API keys; use Cloudflare Workers AI instead",
             bundledKeys.isEmpty()
         )
     }

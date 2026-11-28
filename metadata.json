@@ -1,6 +1,6 @@
 {
-  "name": "아빠가딸들을 위한 학습도구",
-  "description": "아빠와 딸이 함께하는 가족 영어 학습 게임! 엄선된 고1~3 핵심 영단어 105개 정밀·속성 암기, 성적표·학습 일정·가족 보상 약속 기록, 100대 여행 회화, AI 영어 튜터 시뮬레이션 대화를 지원합니다.",
+  "name": "SpeakQuest",
+  "description": "수능 핵심 영단어 암기, 한글 번역 교정 엔진, 무로그인 유튜브 구간 대사 추출, 100대 여행 회화, 33종 모션 연동 AI 영어 튜터 화상 대화를 제공하는 올인원 영어 학습 앱입니다.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

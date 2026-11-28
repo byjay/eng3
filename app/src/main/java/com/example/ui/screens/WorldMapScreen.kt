@@ -120,8 +120,12 @@ import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Stars
+import com.example.engine.AppThemeMode
+import com.example.engine.LearnerGoalTrack
+import com.example.engine.PlayGrowthRetentionEngine
 import com.example.ui.components.MaterialButtonStyle
 import com.example.ui.components.MaterialLearningButton
+import com.example.ui.components.PlayStoreHeroQuickStartCard
 import com.example.ui.components.StitchIconBadge
 import com.example.ui.components.StitchIconButton
 import com.example.ui.components.travelZoneStitchIcon
@@ -171,8 +175,22 @@ fun WorldMapScreen(
     onRefreshFamilyLeaderboard: () -> Unit = {},
     onToggleShareStreakWithFriends: (Boolean) -> Unit = {},
     onInviteKakaoFriends: () -> Unit = {},
-    onOpenFullFamilyLeaderboard: () -> Unit = onOpenFamilyGiftHub
+    onOpenFullFamilyLeaderboard: () -> Unit = onOpenFamilyGiftHub,
+    learnerGoalTrack: LearnerGoalTrack = LearnerGoalTrack.DAILY_HABIT,
+    streakFreezeCount: Int = 1,
+    appThemeMode: AppThemeMode = AppThemeMode.SYSTEM,
+    onStartInstantDailyChallenge: () -> Unit = { onStartVocabTrack(VocabStudyTrack.CSAT_FREQUENCY) },
+    onShareAchievementCard: () -> Unit = {},
+    onBuyStreakFreeze: () -> Unit = {},
+    onCycleThemeMode: () -> Unit = {}
 ) {
+    val leagueStanding = remember(progress.totalXp, progress.streakCount, masteredWordsCount) {
+        PlayGrowthRetentionEngine.computeLeagueStanding(
+            totalXp = progress.totalXp,
+            streakCount = progress.streakCount,
+            masteredWordsCount = masteredWordsCount
+        )
+    }
     var focusMood by remember { mutableStateOf(SquirrelMoodState.IDLE) }
     var isWrongReviewMode by remember { mutableStateOf(false) }
     var reviewAllClearBanner by remember { mutableStateOf(false) }
@@ -190,13 +208,13 @@ fun WorldMapScreen(
     val levelFraction = ((levelPoints % 6) / 6f).coerceIn(0.08f, 1f)
     val clearedScenariosCount = scenarioProgress.size
 
-    val humorousFamilyQuotes = listOf(
-        "${parents.dadName}: \"${parents.daughterName}! 흰색 피그미 다람쥐와 수능 챕터 돌파하자!\"",
-        "${parents.momName}: \"${parents.daughterName}! 챕터 깨면 비밀 보물상자가 나타난대!\"",
-        "${parents.dadName}: \"원삐·투삐 출동! 오늘도 에메랄드 성채 지키자!\"",
-        "${parents.momName}: \"${parents.daughterName}, 오늘 뉴욕 친구랑 회화학습 어때?\""
+    val motivationQuotes = listOf(
+        "${parents.dadName}: \"${parents.daughterName}님, 오늘도 수능 핵심 챕터 돌파해 볼까요?\"",
+        "${parents.momName}: \"${parents.daughterName}님, 챕터를 클리어하면 비밀 보물상자가 열려요!\"",
+        "${parents.dadName}: \"매일 10분 반복 학습이 영어 실력을 가장 빠르게 끌어올립니다!\"",
+        "${parents.momName}: \"${parents.daughterName}님, 오늘 원어민 AI 선생님과 회화 연습 어때요?\""
     )
-    val activeQuote = humorousFamilyQuotes[(kingdomStats.missionClearCount + kingdomStats.princessLevel) % humorousFamilyQuotes.size]
+    val activeQuote = motivationQuotes[(kingdomStats.missionClearCount + kingdomStats.princessLevel) % motivationQuotes.size]
 
     LazyColumn(
         modifier = Modifier
@@ -215,7 +233,24 @@ fun WorldMapScreen(
             )
         }
 
-        // 2. Royal Family Castle Hero Banner with New Dad+Daughters Crest Logo
+        // 1-A. Above-the-Fold 3-Second Quick-Start Hero (League Tier + Streak Freeze + Theme Toggle + Viral Share Card)
+        item {
+            PlayStoreHeroQuickStartCard(
+                learnerName = parents.daughterName,
+                goalTrack = learnerGoalTrack,
+                leagueStanding = leagueStanding,
+                streakFreezes = streakFreezeCount,
+                todayWordsCompleted = progress.todayWordsCompleted,
+                dailyGoal = progress.dailyGoal,
+                themeMode = appThemeMode,
+                onStartDailyChallenge = onStartInstantDailyChallenge,
+                onShareAchievementCard = onShareAchievementCard,
+                onBuyStreakFreeze = onBuyStreakFreeze,
+                onCycleThemeMode = onCycleThemeMode
+            )
+        }
+
+        // 2. SpeakQuest Adventure Hero Banner
         item {
             Box(
                 modifier = Modifier
@@ -226,7 +261,7 @@ fun WorldMapScreen(
             ) {
                 Image(
                     painter = painterResource(R.drawable.img_world_map_hero_1795412460420),
-                    contentDescription = "가족 왕국 에메랄드 성채",
+                    contentDescription = "SpeakQuest 영어 학습 월드 배너",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -242,33 +277,32 @@ fun WorldMapScreen(
                             )
                         )
                 )
-                // Top-Left Instant 원삐 / 투삐 / 손님 Switcher Pill
+                // Top-Left Learner Profile & Guest Switcher Pill
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf("원삐", "투삐").forEach { player ->
-                        val active = parents.daughterName == player
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (active) TrophyGold else Color.Black.copy(alpha = 0.55f),
-                            border = BorderStroke(1.5.dp, if (active) Color.White else TrophyGold.copy(alpha = 0.5f)),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { onSwitchPlayer(player) }
-                                .testTag("switch_player_$player")
-                        ) {
-                            Text(
-                                text = player,
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
+                    val isGuest = parents.daughterName.startsWith("손님")
+                    val primaryLabel = if (isGuest) "학습자" else parents.daughterName.ifBlank { "학습자" }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (!isGuest) TrophyGold else Color.Black.copy(alpha = 0.55f),
+                        border = BorderStroke(1.5.dp, if (!isGuest) Color.White else TrophyGold.copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onSwitchPlayer(primaryLabel) }
+                            .testTag("switch_player_primary")
+                    ) {
+                        Text(
+                            text = primaryLabel,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
                     }
-                    if (parents.daughterName.startsWith("손님")) {
+                    if (isGuest) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = AdventureEmerald,
@@ -321,7 +355,7 @@ fun WorldMapScreen(
                         }
                     }
                     Text(
-                        text = "에메랄드 성채 수복률 ${kingdomStats.castleHpPercent}%",
+                        text = "학습 챌린지 달성률 ${kingdomStats.castleHpPercent}%",
                         style = MaterialTheme.typography.titleLarge,
                         color = Color.White
                     )

@@ -208,7 +208,7 @@ fun HubAndShopScreen(
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = "• Google 로그인 계정 식별자(UID)·표시 이름: 학습 기록·연속 학습일(스트릭)을 Firebase Firestore에 동기화하기 위해 사용합니다.\n• 음성(마이크 권한): 영어 발음 평가와 AI 영어 회화 연습을 위해 사용자가 마이크 버튼을 눌렀을 때만 인식되며, 음성 파일 원본을 별도 서버에 영구 저장하지 않습니다.\n• 카카오 친구목록(선택): 카카오 비즈앱 권한 및 친구의 개별 동의가 완료된 경우에 한해 가족 리더보드 스트릭 비교에 사용됩니다.",
+                        text = "• Google 로그인 계정 식별자(UID)·표시 이름: 학습 기록·연속 학습일(스트릭)을 Cloudflare D1 데이터베이스에 동기화하기 위해 사용합니다.\n• 음성(마이크 권한): 영어 발음 평가와 AI 영어 회화 연습을 위해 사용자가 마이크 버튼을 눌렀을 때만 인식되며, 음성 파일 원본을 별도 서버에 영구 저장하지 않습니다.\n• 카카오 친구목록(선택): 카카오 비즈앱 권한 및 친구의 개별 동의가 완료된 경우에 한해 가족 리더보드 스트릭 비교에 사용됩니다.",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text(
@@ -216,7 +216,7 @@ fun HubAndShopScreen(
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = "• 회화 화면의 모든 튜터는 실제 사람이 아닌 인공지능(Firebase AI Logic · Gemini) 시뮬레이션입니다.\n• 청소년 학습자를 위해 개인 연락처·학교·주소 등을 묻지 않도록 안전 가이드라인이 적용되어 있습니다.",
+                        text = "• 회화 화면의 모든 튜터는 실제 사람이 아닌 인공지능(Cloudflare Workers AI) 시뮬레이션입니다.\n• 청소년 학습자를 위해 개인 연락처·학교·주소 등을 묻지 않도록 안전 가이드라인이 적용되어 있습니다.",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text(
@@ -224,7 +224,7 @@ fun HubAndShopScreen(
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = "• 부모님 PIN은 솔트(Salt)가 적용된 SHA-256 해시로만 저장되며 클라우드 자동 백업에서 제외됩니다.\n• 사용자는 언제든지 '연동·설정' 탭의 [계정 및 모든 데이터 삭제] 버튼으로 클라우드(Firestore) 및 기기 내 모든 학습 기록을 즉시 영구 삭제할 수 있습니다.",
+                        text = "• 부모님 PIN은 솔트(Salt)가 적용된 SHA-256 해시로만 저장되며 클라우드 자동 백업에서 제외됩니다.\n• 사용자는 언제든지 '연동·설정' 탭의 [계정 및 모든 데이터 삭제] 버튼으로 클라우드(Cloudflare D1) 및 기기 내 모든 학습 기록을 즉시 영구 삭제할 수 있습니다.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -246,7 +246,7 @@ fun HubAndShopScreen(
             title = { Text("계정 및 모든 데이터 영구 삭제", fontWeight = FontWeight.ExtraBold, color = SpartaRed) },
             text = {
                 Text(
-                    text = "클라우드(Firestore)의 학습 진도·가족 리더보드 기록과 기기 내 오답노트·설정·부모님 PIN이 모두 즉시 삭제되며 복구할 수 없습니다. 정말 삭제하시겠습니까?",
+                    text = "클라우드(Cloudflare D1)의 학습 진도·가족 리더보드 기록과 기기 내 오답노트·설정·부모님 PIN이 모두 즉시 삭제되며 복구할 수 없습니다. 정말 삭제하시겠습니까?",
                     style = MaterialTheme.typography.bodySmall
                 )
             },
@@ -675,7 +675,7 @@ fun HubAndShopScreen(
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(
-                                            text = "아빠 승인 & 용돈 지급 약속 기록 완료! (앱 내 송금 없음 · 성채 HP +${mission.castleHpBonus}%)",
+                                            text = "멘토 승인 & 목표 보상 기록 완료! (앱 내 송금 없음 · 달성률 +${mission.castleHpBonus}%)",
                                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                             color = AdventureEmeraldShadow,
                                             modifier = Modifier.padding(10.dp)
@@ -1115,61 +1115,38 @@ private fun ParentRegistrationCard(
     var dadName by remember(parents.dadName) { mutableStateOf(parents.dadName) }
     var momName by remember(parents.momName) { mutableStateOf(parents.momName) }
     var selectedNickname by remember(parents.daughterName) {
-        mutableStateOf(
-            when {
-                parents.daughterName.startsWith("손님") -> parents.daughterName
-                parents.daughterName == "투삐" -> "투삐"
-                else -> "원삐"
-            }
-        )
+        mutableStateOf(parents.daughterName.ifBlank { "학습자" })
     }
     var pin by remember { mutableStateOf("") }
 
     Elevated3DCard(accentShadow = SkyQuestBlueShadow.copy(alpha = 0.35f)) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "애칭 선택 (원삐 · 투삐) & 부모님 PIN 보안",
+                text = "학습자 프로필 & 승인 PIN 보안",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
             )
-            // Nickname-only toggle chips (no real name input)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("원삐", "투삐").forEach { nickname ->
-                    val active = selectedNickname == nickname
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (active) TrophyGold else MaterialTheme.colorScheme.surfaceVariant,
-                        border = BorderStroke(
-                            if (active) 1.5.dp else 1.dp,
-                            if (active) TrophyGoldShadow else MaterialTheme.colorScheme.outline
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { selectedNickname = nickname }
-                            .testTag("select_nickname_$nickname")
-                    ) {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 10.dp)) {
-                            Text(
-                                text = nickname,
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                color = if (active) Color(0xFF3E2C00) else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            }
+            OutlinedTextField(
+                value = selectedNickname,
+                onValueChange = { if (it.length <= 16) selectedNickname = it },
+                label = { Text("학습자 닉네임") },
+                placeholder = { Text("예: 지민, Alex") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("learner_nickname_input")
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = dadName,
                     onValueChange = { dadName = it },
-                    label = { Text("아빠 호칭") },
+                    label = { Text("멘토 호칭") },
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedTextField(
                     value = momName,
                     onValueChange = { momName = it },
-                    label = { Text("엄마 호칭") },
+                    label = { Text("코치 호칭") },
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
@@ -1178,7 +1155,7 @@ private fun ParentRegistrationCard(
                 text = if (parents.isPinConfigured) {
                     "PIN 상태: 암호화 설정 완료 (변경할 때만 새 4~6자리 숫자를 입력하세요)"
                 } else {
-                    "PIN 상태: 미설정 — 용돈·선물 승인을 위해 안전한 4~6자리 숫자를 등록하세요 (1234·0000 불가)"
+                    "PIN 상태: 미설정 — 목표 보상 승인을 위해 안전한 4~6자리 숫자를 등록하세요 (1234·0000 불가)"
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = if (parents.isPinConfigured) AdventureEmeraldShadow else SpartaRed
@@ -1187,7 +1164,7 @@ private fun ParentRegistrationCard(
                 value = pin,
                 onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) pin = it },
                 label = {
-                    Text(if (parents.isPinConfigured) "새 부모님 PIN (변경 시 4~6자리)" else "부모님 PIN 최초 설정 (4~6자리)")
+                    Text(if (parents.isPinConfigured) "새 승인 PIN (변경 시 4~6자리)" else "승인 PIN 최초 설정 (4~6자리)")
                 },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
@@ -1206,9 +1183,9 @@ private fun ParentRegistrationCard(
                 onClick = {
                     onSave(
                         ParentProfiles(
-                            dadName = dadName.ifBlank { "아빠 국왕" },
-                            momName = momName.ifBlank { "엄마 왕비" },
-                            daughterName = selectedNickname.ifBlank { "원삐" },
+                            dadName = dadName.ifBlank { "멘토" },
+                            momName = momName.ifBlank { "코치" },
+                            daughterName = selectedNickname.trim().ifBlank { "학습자" },
                             parentPin = pin.trim(),
                             isPinConfigured = parents.isPinConfigured
                         )
@@ -1427,7 +1404,7 @@ private fun GiftRequestComposerCard(
     kingdomStats: KingdomProgressStats,
     onSubmitGift: (String, String, String) -> Unit
 ) {
-    var targetParent by remember { mutableStateOf("아빠") }
+    var targetParent by remember { mutableStateOf("멘토") }
     var giftTitle by remember { mutableStateOf("") }
     var reason by remember { mutableStateOf("") }
 
@@ -1447,7 +1424,7 @@ private fun GiftRequestComposerCard(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "아빠 · 엄마께 선물 요청하기",
+                        text = "목표 달성 보상 요청하기",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
                     )
                 }
@@ -1468,12 +1445,12 @@ private fun GiftRequestComposerCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("아빠" to parents.dadName, "엄마" to parents.momName).forEach { (key, label) ->
+                listOf("멘토" to parents.dadName, "코치" to parents.momName).forEach { (key, label) ->
                     val active = targetParent == key
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = if (active) {
-                            if (key == "아빠") SkyQuestBlue else CoralOrange
+                            if (key == "멘토") SkyQuestBlue else CoralOrange
                         } else MaterialTheme.colorScheme.surfaceVariant,
                         modifier = Modifier
                             .weight(1f)
@@ -1495,7 +1472,7 @@ private fun GiftRequestComposerCard(
             OutlinedTextField(
                 value = giftTitle,
                 onValueChange = { giftTitle = it },
-                label = { Text("받고 싶은 선물 (예: 떡볶이 세트, 문구 쇼핑, 영화 데이트)") },
+                label = { Text("목표 보상 (예: 카페 음료, 영화 관람, 간식 세트)") },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1504,12 +1481,12 @@ private fun GiftRequestComposerCard(
             OutlinedTextField(
                 value = reason,
                 onValueChange = { reason = it },
-                label = { Text("${parents.daughterName}의 당당한 사유 (예: 수능 단어 30개 만점!)") },
+                label = { Text("${parents.daughterName}의 달성 사유 (예: 수능 단어 30개 만점!)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
             Tactile3DButton(
-                text = "선물 요청장 등록하기",
+                text = "보상 요청 등록하기",
                 icon = Icons.Default.Add,
                 containerColor = TrophyGold,
                 shadowColor = TrophyGoldShadow,
@@ -1539,7 +1516,7 @@ private fun DadAllowanceMissionCreator(
     Elevated3DCard(accentShadow = AdventureEmeraldShadow.copy(alpha = 0.35f)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = "아빠의 직접 용돈 미션 추가",
+                text = "커스텀 목표 미션 추가",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
             )
             OutlinedTextField(
@@ -1699,7 +1676,7 @@ private fun ScheduleCreatorCard(
                 modifier = Modifier.fillMaxWidth(),
                 tag = "add_schedule_button",
                 onClick = {
-                    onAddSchedule(dayKo, timeLabel, title, "가족 왕국 학습 루틴")
+                    onAddSchedule(dayKo, timeLabel, title, "SpeakQuest 주간 학습 루틴")
                     title = ""
                 }
             )

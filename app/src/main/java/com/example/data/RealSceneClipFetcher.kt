@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.engine.YouTubeNoLoginSegmentExtractor
 import java.io.File
 import java.net.URLEncoder
 
@@ -27,7 +28,7 @@ data class YouTubeDialogueMatch(
     val isExactCaptionMatch: Boolean = false,
     val fromCache: Boolean = false,
     val captionTypeLabel: String = "YouTube",
-    val sourceBadge: String = "YouTube 공식 검색",
+    val sourceBadge: String = "YouTube 구간 추출 · 무로그인",
     val rateLimited: Boolean = false
 ) {
     val formattedTimestamp: String
@@ -56,9 +57,10 @@ data class YouTubeDialogueMatch(
 }
 
 /**
- * Policy-Compliant External Video & Pronunciation Link Helper:
- * - Zero unofficial HTML scraping, zero `timedtext` scraping, and zero unauthorized MP4 extraction.
- * - Sanitizes user phrases and constructs official YouTube / YouGlish / Filmot study links only.
+ * Login-Free YouTube Dialogue Segment Extraction & Official Link Helper:
+ * - Zero Google/YouTube login, zero OAuth, zero cookies required.
+ * - Supports direct YouTube URL / Video ID extraction, keyword-based CC video segment search,
+ *   manual SRT/transcript A-B parsing, and official YouTube / YouGlish / Filmot study links.
  */
 object RealSceneClipFetcher {
 
@@ -69,7 +71,7 @@ object RealSceneClipFetcher {
         "are", "was", "were", "been", "being", "does", "did", "done", "you", "our", "out"
     )
 
-    fun isCurrentlyRateLimited(): Boolean = false
+    fun isCurrentlyRateLimited(): Boolean = YouTubeNoLoginSegmentExtractor.isRateLimited()
 
     fun buildOfficialYouTubeSearchUrl(rawQuery: String): String {
         val clean = sanitizeQuery(rawQuery).ifBlank { "hello" }
@@ -118,16 +120,47 @@ object RealSceneClipFetcher {
     }
 
     /**
-     * Unofficial YouTube HTML and `timedtext` scraping have been removed for ToS & copyright compliance.
-     * The UI opens official YouTube search or embedded YouGlish / Filmot links directly instead.
+     * Login-free YouTube dialogue segment search (supports both English phrases and pasted YouTube URLs).
      */
     suspend fun searchYouTubeDialogues(
         rawQuery: String,
         cacheDir: File? = null
-    ): List<YouTubeDialogueMatch> = emptyList()
+    ): List<YouTubeDialogueMatch> {
+        return YouTubeNoLoginSegmentExtractor.searchNoLoginYouTubeSegments(rawQuery, cacheDir)
+    }
 
     /**
-     * Unofficial third-party movie/drama MP4 scraping has been removed for copyright compliance.
+     * Login-free direct extraction from a pasted YouTube URL or 11-char Video ID with optional keyword filter.
+     */
+    suspend fun extractDialoguesFromUrl(
+        youtubeUrlOrId: String,
+        keywordFilter: String = "",
+        cacheDir: File? = null
+    ): List<YouTubeDialogueMatch> {
+        return YouTubeNoLoginSegmentExtractor.extractFromVideoUrlOrId(
+            urlOrId = youtubeUrlOrId,
+            keywordQuery = keywordFilter,
+            cacheDir = cacheDir
+        )
+    }
+
+    /**
+     * Parses pasted SRT or YouTube transcript lines into A-B synced dialogue segments offline.
+     */
+    fun extractFromManualTranscript(
+        youtubeUrlOrId: String,
+        transcriptText: String,
+        keywordFilter: String = ""
+    ): List<YouTubeDialogueMatch> {
+        return YouTubeNoLoginSegmentExtractor.extractFromManualTranscript(
+            videoUrlOrId = youtubeUrlOrId,
+            transcriptText = transcriptText,
+            keywordQuery = keywordFilter
+        )
+    }
+
+    /**
+     * Unofficial third-party movie/drama MP4 scraping remains disabled for copyright compliance.
      */
     suspend fun fetchExactSceneClips(rawQuery: String): List<RealDialogueClip> = emptyList()
 }

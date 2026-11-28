@@ -87,6 +87,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -217,7 +218,8 @@ fun AiTutorCallScreen(
     onTriggerProactiveCheckIn: () -> Unit = {},
     onAutoProactiveCheckIn: () -> Unit = {},
     onUpdateLearnerName: (String) -> Unit = {},
-    onUpdateConversationGoal: (String) -> Unit = {}
+    onUpdateConversationGoal: (String) -> Unit = {},
+    onTriggerMotionVocabQuestion: (MotionPhotoGesture?) -> Unit = {}
 ) {
     val context = LocalContext.current
     var typedMessage by remember { mutableStateOf("") }
@@ -331,11 +333,12 @@ fun AiTutorCallScreen(
     }
 
     val tutor = state.selectedTutor
-    val activeGesture = manualGesture ?: MotionPhotoGesture.inferFromSpeech(
-        text = state.liveSubtitleEn,
-        isListening = voiceState.isListening,
-        isSpeaking = voiceState.isSpeaking
-    )
+    // Sync all 33 motions directly with the tutor's active learned-word question gesture (or user override)
+    val activeGesture = when {
+        voiceState.isListening -> MotionPhotoGesture.LISTEN_LEAN_IN
+        manualGesture != null -> manualGesture!!
+        else -> state.activeMotionGesture
+    }
     // Dynamic AI / Zero-LLM Skill hints refreshed every turn!
     val guidedHints = state.dynamicSuggestedReplies
     val roleplayMissions = remember(state.activeTopicTag) { roleplayMissionsForTopic(state.activeTopicTag) }
@@ -947,7 +950,10 @@ fun AiTutorCallScreen(
                                     ),
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(14.dp))
-                                        .clickable { manualGesture = gesture }
+                                        .clickable {
+                                            manualGesture = gesture
+                                            onTriggerMotionVocabQuestion(gesture)
+                                        }
                                         .testTag("motion_gesture_${gesture.name}")
                                 ) {
                                     Text(
@@ -1268,7 +1274,7 @@ fun AiTutorCallScreen(
                         OutlinedTextField(
                             value = draftName,
                             onValueChange = { draftName = it },
-                            label = { Text("불러줄 이름 (예: 지민, Alex, 원삐)") },
+                            label = { Text("불러줄 이름 (예: 지민, Alex)") },
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1512,6 +1518,107 @@ fun AiTutorCallScreen(
             }
 
             // MAIN INTERACTIVE KARAOKE + TAP-ANY-WORD TRANSPARENT CINEMA SUBTITLES
+            // Active Learned-Word & 33-Motion Sync Pill (tap to ask a fresh learned-word question!)
+            val translationOverrides by com.example.data.WordTranslationOverrideStore.overrides.collectAsState()
+            var editingActiveVocab by remember { mutableStateOf<com.example.model.VocabWord?>(null) }
+            val aiTranslationCoach = remember { com.example.engine.HybridAiCoachEngine() }
+
+            editingActiveVocab?.let { targetVocab ->
+                com.example.ui.components.WordTranslationEditorSheet(
+                    word = targetVocab,
+                    hasCustomOverride = translationOverrides.containsKey(targetVocab.id),
+                    onDismiss = { editingActiveVocab = null },
+                    onAiPolish = { w, pos, mKo, exEn, exKo ->
+                        aiTranslationCoach.polishWordTranslationWithAi(w, pos, mKo, exEn, exKo)
+                    },
+                    onSave = { newMeaning, newExEn, newExKo, newTip ->
+                        com.example.data.WordTranslationOverrideStore.saveOverride(
+                            context = context,
+                            wordId = targetVocab.id,
+                            word = targetVocab.word,
+                            meaningKo = newMeaning,
+                            exampleEn = newExEn,
+                            exampleKo = newExKo,
+                            pronunciationTipKo = newTip
+                        )
+                        com.example.data.ExamCorpusRepository.invalidateCache()
+                    },
+                    onResetToDefault = {
+                        com.example.data.WordTranslationOverrideStore.removeOverride(context, targetVocab.id)
+                        com.example.data.ExamCorpusRepository.invalidateCache()
+                    }
+                )
+            }
+
+            state.activeLearnedWord?.let { rawActiveVocab ->
+                val activeVocab = remember(rawActiveVocab, translationOverrides) {
+                    com.example.data.WordTranslationOverrideStore.applyTo(rawActiveVocab, translationOverrides)
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color(0xD80F172A),
+                        border = BorderStroke(1.2.dp, TrophyGold.copy(alpha = 0.72f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable(enabled = !state.isThinking && !voiceState.isListening) {
+                                manualGesture = null
+                                onTriggerMotionVocabQuestion(null)
+                            }
+                            .testTag("active_learned_word_motion_pill")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "학습단어: ${activeVocab.word} (${activeVocab.meaningKo})",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                color = TrophyGold
+                            )
+                            Text(
+                                text = "· ${activeGesture.labelKo}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = GlacierCyan
+                            )
+                            if (state.masteredWordsUsedInCall > 0) {
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = AdventureEmerald.copy(alpha = 0.25f)
+                                ) {
+                                    Text(
+                                        text = "활용 ${state.masteredWordsUsedInCall}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                        color = AdventureEmerald,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color(0xD81E1B4B),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { editingActiveVocab = activeVocab }
+                            .testTag("call_edit_word_translation_btn")
+                    ) {
+                        Text(
+                            text = "번역수정",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1524,22 +1631,28 @@ fun AiTutorCallScreen(
                         .fillMaxWidth()
                         .testTag("interactive_tap_word_subtitle")
                 ) {
+                    val activeTargetWord = state.activeLearnedWord?.word.orEmpty()
                     subtitleWordSpans.forEach { (rawWord, startIdx, endIdx) ->
                         val clean = rawWord.replace(Regex("[^A-Za-z'-]"), "")
                         val isSelected = clean.isNotBlank() && clean.equals(tappedWord, ignoreCase = true)
+                        val isLearnedTargetToken = activeTargetWord.isNotBlank() &&
+                            clean.isNotBlank() &&
+                            (clean.equals(activeTargetWord, ignoreCase = true) ||
+                                clean.startsWith(activeTargetWord.dropLast(if (activeTargetWord.length > 4) 1 else 0), ignoreCase = true))
                         val isCurrentlySpoken = isKaraokeActiveForSubtitle &&
                             voiceState.spokenCharStart < endIdx &&
                             voiceState.spokenCharEnd > startIdx
                         Text(
                             text = rawWord,
                             style = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = if (isCurrentlySpoken) 20.sp else 19.sp,
+                                fontSize = if (isCurrentlySpoken || isLearnedTargetToken) 20.sp else 19.sp,
                                 lineHeight = 25.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 shadow = subtitleShadow
                             ),
                             color = when {
                                 isCurrentlySpoken -> GlacierCyan
+                                isLearnedTargetToken -> TrophyGold
                                 isSelected -> StudioCoral
                                 else -> Color.White
                             },
@@ -1548,6 +1661,7 @@ fun AiTutorCallScreen(
                                 .background(
                                     when {
                                         isCurrentlySpoken -> StudioCobalt.copy(alpha = 0.36f)
+                                        isLearnedTargetToken -> TrophyGold.copy(alpha = 0.22f)
                                         isSelected -> StudioCoral.copy(alpha = 0.24f)
                                         else -> Color.Transparent
                                     }

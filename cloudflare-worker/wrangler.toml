@@ -1,0 +1,15 @@
+name = "speakquest-cloudflare-api"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "speakquest_db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# Configure secrets via CLI (NEVER commit real secrets here):
+#   wrangler secret put SESSION_SIGNING_SECRET
+#   wrangler secret put GOOGLE_CLIENT_ID

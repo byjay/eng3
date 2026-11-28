@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -58,8 +59,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -105,6 +108,17 @@ fun GameRevengeBossArenaView(
     onRecordFsrsWord: (VocabWord, RecallGrade, Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val isReducedMotionEnabled = remember(context) {
+        runCatching {
+            Settings.Global.getFloat(
+                context.contentResolver,
+                Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f
+            ) == 0f
+        }.getOrDefault(false)
+    }
+
     var battleState by remember { mutableStateOf<RevengeBattleState?>(null) }
     var sessionSummary by remember { mutableStateOf<RevengeSessionSummary?>(null) }
     var chestOpened by remember { mutableStateOf(false) }
@@ -113,18 +127,22 @@ fun GameRevengeBossArenaView(
     var bestComboToday by remember { mutableIntStateOf(0) }
     var audioMuted by remember { mutableStateOf(GameJuiceAudioEngine.isMuted()) }
     var questionShownAtMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var speedBonusRemainingMs by remember { mutableLongStateOf(GameRevengeLoopEngine.FAST_COMBO_WINDOW_MS) }
     var particleBurstNonce by remember { mutableIntStateOf(0) }
 
     val shakeOffsetX = remember { Animatable(0f) }
+    val comboPopScale = remember { Animatable(1f) }
     val burstProgress = remember { Animatable(1f) }
 
-    LaunchedEffect(particleBurstNonce) {
-        if (particleBurstNonce > 0) {
+    LaunchedEffect(particleBurstNonce, isReducedMotionEnabled) {
+        if (particleBurstNonce > 0 && !isReducedMotionEnabled) {
             burstProgress.snapTo(0f)
             burstProgress.animateTo(
                 targetValue = 1f,
                 animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing)
             )
+        } else {
+            burstProgress.snapTo(1f)
         }
     }
 
@@ -161,29 +179,54 @@ fun GameRevengeBossArenaView(
         )
         bossSeed += 1
         questionShownAtMs = System.currentTimeMillis()
+        speedBonusRemainingMs = GameRevengeLoopEngine.FAST_COMBO_WINDOW_MS
         battleState = started
     }
 
-    // Trigger soft shake animation when an answer is missed
+    // Screen-shake & combo pop animations — strictly gated by !isReducedMotionEnabled!
     val currentBattle = battleState
-    LaunchedEffect(currentBattle?.lastOutcome) {
+    LaunchedEffect(currentBattle?.lastOutcome, isReducedMotionEnabled) {
         val outcome = currentBattle?.lastOutcome ?: return@LaunchedEffect
-        if (!outcome.isCorrect) {
+        if (isReducedMotionEnabled) {
             shakeOffsetX.snapTo(0f)
-            listOf(-14f, 14f, -10f, 10f, -4f, 0f).forEach { target ->
+            comboPopScale.snapTo(1f)
+            return@LaunchedEffect
+        }
+        if (outcome.isCorrect && outcome.answeredWithin3Sec) {
+            // Punchy combo pop + impact screen-shake proportional to 2x / 3x / 5x multiplier
+            comboPopScale.snapTo(1.24f)
+            comboPopScale.animateTo(1f, animationSpec = spring(dampingRatio = 0.48f, stiffness = Spring.StiffnessMedium))
+            val amp = when {
+                outcome.multiplierAfter >= 5 -> 16f
+                outcome.multiplierAfter >= 3 -> 11f
+                else -> 7f
+            }
+            shakeOffsetX.snapTo(0f)
+            listOf(-amp, amp, -amp * 0.6f, amp * 0.6f, 0f).forEach { target ->
+                shakeOffsetX.animateTo(target, animationSpec = tween(30))
+            }
+        } else if (!outcome.isCorrect) {
+            shakeOffsetX.snapTo(0f)
+            listOf(-12f, 12f, -8f, 8f, 0f).forEach { target ->
                 shakeOffsetX.animateTo(target, animationSpec = tween(36))
             }
         }
     }
 
-    // Auto-speak target word on LISTENING_SENSE turns
-    LaunchedEffect(currentBattle?.currentIndex, currentBattle?.isFinished) {
+    // Live 3.0s Speed Combo countdown bar & auto-speak on LISTENING_SENSE turns
+    LaunchedEffect(currentBattle?.currentIndex, currentBattle?.isFinished, currentBattle?.lastOutcome != null) {
         val q = currentBattle?.currentQuestion ?: return@LaunchedEffect
-        if (!currentBattle.isFinished) {
-            questionShownAtMs = System.currentTimeMillis()
+        if (!currentBattle.isFinished && currentBattle.lastOutcome == null) {
+            val startedAt = System.currentTimeMillis()
+            questionShownAtMs = startedAt
+            speedBonusRemainingMs = GameRevengeLoopEngine.FAST_COMBO_WINDOW_MS
             if (q.mode == RevengeQuestionMode.LISTENING_SENSE) {
-                delay(180L)
                 onSpeakEnglish(q.targetWord.word)
+            }
+            while (speedBonusRemainingMs > 0L) {
+                delay(50L)
+                val elapsed = System.currentTimeMillis() - startedAt
+                speedBonusRemainingMs = (GameRevengeLoopEngine.FAST_COMBO_WINDOW_MS - elapsed).coerceAtLeast(0L)
             }
         }
     }
@@ -308,22 +351,29 @@ fun GameRevengeBossArenaView(
                                         )
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        if (currentBattle.combo > 0) {
-                                            Surface(
-                                                shape = RoundedCornerShape(999.dp),
-                                                color = if (currentBattle.feverActive) TrophyGold else CoralOrange
-                                            ) {
-                                                Text(
-                                                    text = if (currentBattle.feverActive) {
-                                                        "FEVER ${currentBattle.combo}x!"
-                                                    } else {
-                                                        "${currentBattle.combo} COMBO (${currentBattle.multiplier}x)"
-                                                    },
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
-                                                    color = if (currentBattle.feverActive) WordRunAmberInk else Color.White,
-                                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                                                )
-                                            }
+                                        // Visual Combo & 2x/3x/5x Multiplier Counter
+                                        Surface(
+                                            shape = RoundedCornerShape(999.dp),
+                                            color = when {
+                                                currentBattle.multiplier >= 5 -> TrophyGold
+                                                currentBattle.multiplier >= 3 -> SpartaRed
+                                                currentBattle.multiplier >= 2 -> CoralOrange
+                                                else -> Color.White.copy(alpha = 0.16f)
+                                            },
+                                            modifier = Modifier
+                                                .scale(comboPopScale.value)
+                                                .testTag("revenge_combo_counter")
+                                        ) {
+                                            Text(
+                                                text = if (currentBattle.combo > 0) {
+                                                    "COMBO ${currentBattle.combo} · ${currentBattle.multiplier}x"
+                                                } else {
+                                                    "COMBO 0 · 1x"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
+                                                color = if (currentBattle.multiplier >= 5) WordRunAmberInk else Color.White,
+                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                            )
                                         }
                                         Surface(
                                             shape = RoundedCornerShape(999.dp),
@@ -337,6 +387,45 @@ fun GameRevengeBossArenaView(
                                             )
                                         }
                                     }
+                                }
+
+                                // Live 3.0s Speed Combo Bonus Window Bar (2x -> 3x -> 5x)
+                                val speedRatio = (speedBonusRemainingMs.toFloat() / GameRevengeLoopEngine.FAST_COMBO_WINDOW_MS.toFloat()).coerceIn(0f, 1f)
+                                val nextSpeedTierLabel = when (GameRevengeLoopEngine.speedMultiplier(currentBattle.speedStreak + 1)) {
+                                    5 -> "5x MAX"
+                                    3 -> "3x"
+                                    else -> "2x"
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = if (speedBonusRemainingMs > 0L) {
+                                                "⚡ 3초 스피드 보너스 ($nextSpeedTierLabel 도전)"
+                                            } else {
+                                                "정확도 모드 (3초 초과)"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                            color = if (speedBonusRemainingMs > 0L) WordRunLime else Color(0xFF94A3B8)
+                                        )
+                                        Text(
+                                            text = "${"%.1f".format(speedBonusRemainingMs / 1000f)}s",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Black),
+                                            color = if (speedBonusRemainingMs > 0L) TrophyGold else Color(0xFF94A3B8)
+                                        )
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = { speedRatio },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(5.dp)
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .testTag("revenge_speed_window_bar"),
+                                        color = if (speedBonusRemainingMs > 1000L) WordRunLime else TrophyGold,
+                                        trackColor = Color.White.copy(alpha = 0.14f)
+                                    )
                                 }
 
                                 // Boss HP Bar
@@ -488,7 +577,7 @@ fun GameRevengeBossArenaView(
                                 .heightIn(min = 54.dp)
                                 .alpha(if (isEliminated) 0.42f else 1f)
                                 .clip(RoundedCornerShape(16.dp))
-                                .clickable(enabled = !answered && !isEliminated) {
+                                .instantQuizTouch(enabled = !answered && !isEliminated) {
                                     val elapsed = System.currentTimeMillis() - questionShownAtMs
                                     val nextState = GameRevengeLoopEngine.submitAnswer(
                                         state = currentBattle,

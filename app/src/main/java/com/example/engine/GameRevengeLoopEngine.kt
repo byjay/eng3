@@ -51,9 +51,11 @@ data class RevengeAnswerOption(
 data class RevengeAnswerOutcome(
     val isCorrect: Boolean,
     val isCriticalSpeedHit: Boolean,
+    val answeredWithin3Sec: Boolean = false,
     val damageDealt: Int,
     val xpEarned: Int,
     val comboAfter: Int,
+    val speedStreakAfter: Int = 0,
     val multiplierAfter: Int,
     val justTriggeredFever: Boolean,
     val flowAutoHintActivated: Boolean,
@@ -88,6 +90,7 @@ data class RevengeBattleState(
     val questions: List<RevengeEncounterQuestion>,
     val currentIndex: Int = 0,
     val combo: Int = 0,
+    val speedStreak: Int = 0,
     val maxCombo: Int = 0,
     val consecutiveMisses: Int = 0,
     val correctCount: Int = 0,
@@ -102,7 +105,10 @@ data class RevengeBattleState(
         get() = questions.getOrNull(currentIndex)
 
     val multiplier: Int
-        get() = GameRevengeLoopEngine.comboMultiplier(combo)
+        get() = maxOf(
+            GameRevengeLoopEngine.speedMultiplier(speedStreak),
+            GameRevengeLoopEngine.comboMultiplier(combo)
+        )
 
     val hpRatio: Float
         get() = if (boss.maxHp <= 0) 0f else (bossCurrentHp.toFloat() / boss.maxHp.toFloat()).coerceIn(0f, 1f)
@@ -111,12 +117,14 @@ data class RevengeBattleState(
 /**
  * Pure-Kotlin Game-First + SRS + Hooked micro-session engine ("오답 몬스터 복수전").
  * - Prioritizes FSRS due/lapsed/low-stability words first so gameplay directly powers memory retention.
+ * - 3-second Speed Combo Multiplier: consecutive answers within 3.0s scale 2x -> 3x -> 5x!
  * - Dynamic Flow Channel: auto-activates hint & eliminates 1 distractor after 2 consecutive misses.
  * - Variable Reward Chests & Daily 3-Minute Micro-Missions.
  */
 object GameRevengeLoopEngine {
     const val DEFAULT_SESSION_LENGTH = 8
-    const val FAST_CRITICAL_MS = 3500L
+    const val FAST_COMBO_WINDOW_MS = 3000L
+    const val FAST_CRITICAL_MS = FAST_COMBO_WINDOW_MS
     const val FEVER_COMBO_THRESHOLD = 5
     const val FLOW_HINT_MISS_THRESHOLD = 2
     private const val BASE_DAMAGE = 100
@@ -128,8 +136,16 @@ object GameRevengeLoopEngine {
         RevengeBossProfile("polysemy_titan", "다의어 타이탄", "함정 선지를 뿌리는 심연의 거인", 800)
     )
 
+    /** Speed-accuracy multiplier for consecutive answers within 3 seconds: 1x -> 2x -> 3x -> 5x. */
+    fun speedMultiplier(speedStreak: Int): Int = when {
+        speedStreak >= 3 -> 5
+        speedStreak == 2 -> 3
+        speedStreak == 1 -> 2
+        else -> 1
+    }
+
     fun comboMultiplier(combo: Int): Int = when {
-        combo >= 8 -> 4
+        combo >= 8 -> 5
         combo >= FEVER_COMBO_THRESHOLD -> 3
         combo >= 2 -> 2
         else -> 1
@@ -260,24 +276,33 @@ object GameRevengeLoopEngine {
 
         return if (selected.isCorrect) {
             val nextCombo = state.combo + 1
-            val nextMultiplier = comboMultiplier(nextCombo)
-            val isFastCritical = elapsedMs in 1..FAST_CRITICAL_MS && nextCombo >= 2
-            val criticalBonus = if (isFastCritical) 35 else 0
-            val damage = (BASE_DAMAGE * nextMultiplier) + criticalBonus
-            val xp = (BASE_XP * nextMultiplier) + if (isFastCritical) 10 else 0
+            val within3Sec = elapsedMs in 0..FAST_COMBO_WINDOW_MS
+            val nextSpeedStreak = if (within3Sec) state.speedStreak + 1 else 0
+            val nextSpeedMult = speedMultiplier(nextSpeedStreak)
+            val nextMultiplier = maxOf(nextSpeedMult, comboMultiplier(nextCombo))
+            val isFastCritical = within3Sec
+            val damage = when {
+                nextMultiplier >= 5 -> 260
+                nextMultiplier == 3 -> 180
+                nextMultiplier == 2 -> 120
+                else -> BASE_DAMAGE
+            }
+            val xp = (BASE_XP * nextMultiplier) + if (within3Sec) 12 * nextSpeedMult else 0
             val wasFever = state.feverActive
-            val nowFever = nextCombo >= FEVER_COMBO_THRESHOLD
+            val nowFever = nextMultiplier >= 5 || nextCombo >= FEVER_COMBO_THRESHOLD
             val nextHp = (state.bossCurrentHp - damage).coerceAtLeast(0)
 
             val feedback = buildString {
-                if (nowFever && !wasFever) append("FEVER 발동! ")
-                if (isFastCritical) append("크리티컬 스피드 타격! ")
+                if (nextMultiplier >= 5) append("5x 초고속 FEVER! ")
+                else if (within3Sec) append("3초 스피드 ${nextMultiplier}x 콤보! ")
+                else if (nowFever && !wasFever) append("FEVER 발동! ")
                 append("-$damage HP · +$xp XP")
             }
 
             state.copy(
                 bossCurrentHp = nextHp,
                 combo = nextCombo,
+                speedStreak = nextSpeedStreak,
                 maxCombo = maxOf(state.maxCombo, nextCombo),
                 consecutiveMisses = 0,
                 correctCount = state.correctCount + 1,
@@ -286,9 +311,11 @@ object GameRevengeLoopEngine {
                 lastOutcome = RevengeAnswerOutcome(
                     isCorrect = true,
                     isCriticalSpeedHit = isFastCritical,
+                    answeredWithin3Sec = within3Sec,
                     damageDealt = damage,
                     xpEarned = xp,
                     comboAfter = nextCombo,
+                    speedStreakAfter = nextSpeedStreak,
                     multiplierAfter = nextMultiplier,
                     justTriggeredFever = nowFever && !wasFever,
                     flowAutoHintActivated = false,
@@ -306,15 +333,18 @@ object GameRevengeLoopEngine {
 
             state.copy(
                 combo = 0,
+                speedStreak = 0,
                 consecutiveMisses = nextMissStreak,
                 feverActive = false,
                 missedWords = updatedMissed,
                 lastOutcome = RevengeAnswerOutcome(
                     isCorrect = false,
                     isCriticalSpeedHit = false,
+                    answeredWithin3Sec = false,
                     damageDealt = 0,
                     xpEarned = 0,
                     comboAfter = 0,
+                    speedStreakAfter = 0,
                     multiplierAfter = 1,
                     justTriggeredFever = false,
                     flowAutoHintActivated = activateFlowHint,

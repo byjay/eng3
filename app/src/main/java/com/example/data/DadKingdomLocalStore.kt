@@ -7,7 +7,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.engine.AppThemeMode
 import com.example.engine.DailyMissionEngine
+import com.example.engine.LearnerGoalTrack
 import com.example.engine.LearningMission
 import com.example.engine.LedgerGrantResult
 import com.example.engine.MediaReviewStatus
@@ -18,6 +20,7 @@ import com.example.engine.MissionKind
 import com.example.engine.MissionStatus
 import com.example.engine.ParentPinCrypto
 import com.example.engine.PinVerificationResult
+import com.example.engine.PlayGrowthRetentionEngine
 import com.example.engine.RecallGrade
 import com.example.engine.RewardEventType
 import com.example.engine.RewardLedgerEngine
@@ -148,7 +151,36 @@ class DadKingdomLocalStore(private val context: Context) {
     private val mediaReviewOverridesKey = stringPreferencesKey("media_review_overrides_json")
     private val csatDDayDaysKey = intPreferencesKey("csat_dday_days_remaining")
 
+    // Play Store Growth & Retention Keys (Onboarding, Goal Track, Streak Freeze, Dark Mode, Review Prompt)
+    private val onboardingCompletedKey = booleanPreferencesKey("play_onboarding_completed")
+    private val learnerGoalTrackKey = stringPreferencesKey("play_learner_goal_track")
+    private val streakFreezeCountKey = intPreferencesKey("play_streak_freeze_count")
+    private val appThemeModeKey = stringPreferencesKey("play_app_theme_mode")
+    private val reviewPromptLastMsKey = longPreferencesKey("play_review_prompt_last_ms")
+    private val reviewPromptDismissedKey = booleanPreferencesKey("play_review_prompt_dismissed")
+
     private fun todayIso(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+    val onboardingCompletedFlow: Flow<Boolean> = context.dadKingdomDataStore.data.map { prefs ->
+        val explicit = prefs[onboardingCompletedKey]
+        explicit ?: ((prefs[streakKey] ?: 0) > 0 || (prefs[missionClearCountKey] ?: 0) > 0)
+    }
+
+    val learnerGoalTrackFlow: Flow<LearnerGoalTrack> = context.dadKingdomDataStore.data.map { prefs ->
+        LearnerGoalTrack.fromStored(prefs[learnerGoalTrackKey])
+    }
+
+    val streakFreezeCountFlow: Flow<Int> = context.dadKingdomDataStore.data.map { prefs ->
+        (prefs[streakFreezeCountKey] ?: 1).coerceIn(0, PlayGrowthRetentionEngine.MAX_STREAK_FREEZES)
+    }
+
+    val appThemeModeFlow: Flow<AppThemeMode> = context.dadKingdomDataStore.data.map { prefs ->
+        AppThemeMode.fromStored(prefs[appThemeModeKey])
+    }
+
+    val reviewPromptStateFlow: Flow<Pair<Long, Boolean>> = context.dadKingdomDataStore.data.map { prefs ->
+        (prefs[reviewPromptLastMsKey] ?: 0L) to (prefs[reviewPromptDismissedKey] ?: false)
+    }
 
     val weeklyStudyReportFlow: Flow<WeeklyStudyReportData> = context.dadKingdomDataStore.data.map { prefs ->
         val today = todayIso()
@@ -191,7 +223,7 @@ class DadKingdomLocalStore(private val context: Context) {
     val guestInviteSessionFlow: Flow<GuestInviteSession> = context.dadKingdomDataStore.data.map { prefs ->
         val isGuest = prefs[guestModeKey] ?: false
         val code = prefs[guestInviteCodeKey] ?: ""
-        val host = prefs[guestHostKey] ?: "원삐"
+        val host = prefs[guestHostKey]?.takeIf { it.isNotBlank() && it != "원삐" && it != "투삐" } ?: "학습자"
         val myCode = prefs[myGeneratedInviteCodeKey] ?: ""
         val kakaoLinked = !(prefs[kakaoTokenKey].isNullOrBlank())
         GuestInviteSession(
@@ -248,11 +280,25 @@ class DadKingdomLocalStore(private val context: Context) {
         val trimmed = raw?.trim().orEmpty()
         return when {
             trimmed.isBlank() ||
+                trimmed == "원삐" ||
+                trimmed == "투삐" ||
                 trimmed.contains("공주") ||
                 trimmed.contains("우리 딸") ||
                 trimmed.contains("우리딸") ||
-                trimmed.contains("빅뚱") -> "원삐"
-            trimmed.contains("스몰뚱") -> "투삐"
+                trimmed.contains("빅뚱") ||
+                trimmed.contains("스몰뚱") -> "학습자"
+            else -> trimmed
+        }
+    }
+
+    private fun sanitizeMentorName(raw: String?, fallback: String): String {
+        val trimmed = raw?.trim().orEmpty()
+        return when {
+            trimmed.isBlank() ||
+                trimmed.contains("아빠") ||
+                trimmed.contains("엄마") ||
+                trimmed.contains("국왕") ||
+                trimmed.contains("왕비") -> fallback
             else -> trimmed
         }
     }
@@ -260,8 +306,8 @@ class DadKingdomLocalStore(private val context: Context) {
     val parentProfilesFlow: Flow<ParentProfiles> = context.dadKingdomDataStore.data.map { prefs ->
         val hasHashedPin = !prefs[parentPinSaltKey].isNullOrBlank() && !prefs[parentPinHashKey].isNullOrBlank()
         ParentProfiles(
-            dadName = prefs[dadNameKey] ?: "아빠 국왕",
-            momName = prefs[momNameKey] ?: "엄마 왕비",
+            dadName = sanitizeMentorName(prefs[dadNameKey], "멘토"),
+            momName = sanitizeMentorName(prefs[momNameKey], "코치"),
             daughterName = sanitizePlayerName(prefs[daughterNameKey]),
             parentPin = "",
             isPinConfigured = hasHashedPin
@@ -447,8 +493,8 @@ class DadKingdomLocalStore(private val context: Context) {
     suspend fun saveParentProfiles(profiles: ParentProfiles) {
         context.dadKingdomDataStore.edit { prefs ->
             prefs[schemaVersionKey] = CURRENT_SCHEMA_VERSION
-            prefs[dadNameKey] = profiles.dadName.trim().ifBlank { "아빠 국왕" }.take(24)
-            prefs[momNameKey] = profiles.momName.trim().ifBlank { "엄마 왕비" }.take(24)
+            prefs[dadNameKey] = sanitizeMentorName(profiles.dadName, "멘토").take(24)
+            prefs[momNameKey] = sanitizeMentorName(profiles.momName, "코치").take(24)
             prefs[daughterNameKey] = sanitizePlayerName(profiles.daughterName).take(24)
             val candidatePin = profiles.parentPin.filter { it.isDigit() }.take(6)
             if (ParentPinCrypto.isValidPinFormat(candidatePin)) {
@@ -498,8 +544,9 @@ class DadKingdomLocalStore(private val context: Context) {
 
     suspend fun updateActivePlayerName(playerName: String) {
         context.dadKingdomDataStore.edit { prefs ->
-            prefs[daughterNameKey] = sanitizePlayerName(playerName).take(24)
-            if (playerName == "원삐" || playerName == "투삐") {
+            val sanitized = sanitizePlayerName(playerName).take(24)
+            prefs[daughterNameKey] = sanitized
+            if (!sanitized.startsWith("손님")) {
                 prefs[guestModeKey] = false
             }
         }
@@ -515,7 +562,7 @@ class DadKingdomLocalStore(private val context: Context) {
         context.dadKingdomDataStore.edit { prefs ->
             prefs[guestModeKey] = true
             prefs[guestInviteCodeKey] = code
-            prefs[guestHostKey] = hostNickname.ifBlank { "원삐" }
+            prefs[guestHostKey] = sanitizePlayerName(hostNickname)
             prefs[daughterNameKey] = "손님($code)"
         }
     }
@@ -554,6 +601,16 @@ class DadKingdomLocalStore(private val context: Context) {
             prefs[coinsKey] = ((prefs[coinsKey] ?: 250) + coinsDelta).coerceAtLeast(0)
 
             val prevDate = prefs[lastStudyDateKey] ?: today
+            if (prevDate != today) {
+                val rollover = PlayGrowthRetentionEngine.resolveStreakTransition(
+                    lastStudyDateIso = prevDate,
+                    todayIso = today,
+                    currentStreak = prefs[streakKey] ?: 0,
+                    streakFreezes = prefs[streakFreezeCountKey] ?: 1
+                )
+                prefs[streakKey] = rollover.nextStreak
+                prefs[streakFreezeCountKey] = rollover.remainingFreezes
+            }
             val oldTodayWords = if (prevDate == today) (prefs[todayWordsKey] ?: 0) else 0
             val newTodayWords = (oldTodayWords + wordsDelta).coerceAtLeast(0)
             updatedTodayWords = newTodayWords
@@ -872,44 +929,44 @@ class DadKingdomLocalStore(private val context: Context) {
     private fun defaultDadMissions(): List<DadAllowanceMission> = listOf(
         DadAllowanceMission(
             id = "mission_castle_gate",
-            titleKo = "성문 사수: 수능 빈출 영단어 + 예문 4개 말하기",
-            descriptionKo = "ABC 순서 없는 빈출 단어를 뚫고 원어민처럼 소리 내어 읽으면 치킨 성벽이 세워진다!",
+            titleKo = "데일리 챌린지: 수능 빈출 영단어 + 예문 4개 말하기",
+            descriptionKo = "ABC 순서 없는 빈출 단어를 뚫고 원어민처럼 소리 내어 읽으면 목표 달성률이 올라갑니다!",
             rewardWon = 3000,
             castleHpBonus = 15,
-            categoryKo = "아빠 국왕 칙령"
+            categoryKo = "핵심 어휘 챌린지"
         ),
         DadAllowanceMission(
             id = "mission_royal_voice",
-            titleKo = "마법 통신탑 해방: 원어민 회화학습 5턴 수다",
-            descriptionKo = "원어민 회화학습 화면에서 선생님과 영어 질문·수다 5번 성공하기!",
+            titleKo = "실전 스피킹: 원어민 AI 회화 5턴 완주",
+            descriptionKo = "원어민 AI 화상 회화 화면에서 5턴 이상 영어로 자연스럽게 대화를 이어가세요!",
             rewardWon = 2000,
             castleHpBonus = 12,
-            categoryKo = "엄마 왕비 퀘스트"
+            categoryKo = "스피킹 퀘스트"
         ),
         DadAllowanceMission(
             id = "mission_exam_dragon",
-            titleKo = "시험 마왕 격파: 영어 시험 90점 돌파!",
-            descriptionKo = "점수표에 90점 이상 기록하고 국왕님(아빠)께 PIN 승인 받으면 특별 용돈 약속 기록!",
+            titleKo = "실전 돌파: 영어 모의고사 90점 달성!",
+            descriptionKo = "점수표에 90점 이상 기록하고 승인 PIN 인증을 마치면 특별 보상이 기록됩니다!",
             rewardWon = 10000,
             castleHpBonus = 25,
-            categoryKo = "보스전 용돈"
+            categoryKo = "보스전 목표"
         )
     )
 
     private fun defaultGiftRequests(): List<GiftRequestItem> = listOf(
         GiftRequestItem(
             id = "gift_1",
-            targetParent = "아빠",
-            giftTitleKo = "주말 저녁 치킨 + 탕후루 세트",
-            reasonKo = "예습·복습 누적 레벨 2 달성 & 성문 수복 기념!",
+            targetParent = "멘토",
+            giftTitleKo = "주말 스페셜 간식 세트",
+            reasonKo = "예습·복습 누적 레벨 2 달성 기념!",
             requiredLevel = 2,
             isApproved = false,
             createdDateLabel = todayIso()
         ),
         GiftRequestItem(
             id = "gift_2",
-            targetParent = "엄마",
-            giftTitleKo = "예쁜 필기구 세트 & 카페 데이트",
+            targetParent = "코치",
+            giftTitleKo = "필기구 세트 & 카페 타임",
             reasonKo = "수능 빈출 단어 오답 복습 완벽 클리어!",
             requiredLevel = 1,
             isApproved = false,
@@ -924,10 +981,10 @@ class DadKingdomLocalStore(private val context: Context) {
     )
 
     private fun defaultSchedules(): List<StudyScheduleItem> = listOf(
-        StudyScheduleItem("sch_1", "월~금", "오후 8:00", "성벽 방어: 수능 빈출·랜덤 영단어 + 예문 4개", "ABC 순서 없이 읽고·듣고·말하기 15분"),
-        StudyScheduleItem("sch_2", "화·목", "오후 8:30", "1~3문장 패턴 교체 & 반복 듣기 도장", "자기소개 및 마트/카페 실전 문장 3회 반복"),
-        StudyScheduleItem("sch_3", "토요일", "오전 10:30", "원어민 선생님과 LIVE 회화학습", "한국어로 궁금한 문장 물어보고 바로 발음 교정"),
-        StudyScheduleItem("sch_4", "일요일", "오후 7:00", "아빠 국왕·엄마 왕비 주간 정산식", "성적표 확인 · 용돈 승인 · 선물 요청서 제출")
+        StudyScheduleItem("sch_1", "월~금", "오후 8:00", "수능 빈출·랜덤 영단어 + 예문 4개", "ABC 순서 없이 읽고·듣고·말하기 15분"),
+        StudyScheduleItem("sch_2", "화·목", "오후 8:30", "1~3문장 패턴 교체 & 반복 듣기", "자기소개 및 마트/카페 실전 문장 3회 반복"),
+        StudyScheduleItem("sch_3", "토요일", "오전 10:30", "원어민 AI 선생님과 LIVE 화상 회화", "학습한 단어를 활용해 바로 발음·표현 교정"),
+        StudyScheduleItem("sch_4", "일요일", "오후 7:00", "주간 학습 리포트 정산", "성적표 확인 · 주간 목표 점검 · 보상 확인")
     )
 
     private fun parseStringList(json: String?): List<String> {
@@ -973,7 +1030,7 @@ class DadKingdomLocalStore(private val context: Context) {
                 descriptionKo = o.optString("descriptionKo"),
                 rewardWon = o.optInt("rewardWon", 2000),
                 castleHpBonus = o.optInt("castleHpBonus", 10),
-                categoryKo = o.optString("categoryKo", "아빠 국왕 칙령"),
+                categoryKo = o.optString("categoryKo", "학습 챌린지"),
                 isCompletedByDaughter = o.optBoolean("isCompletedByDaughter", false),
                 isApprovedByDad = o.optBoolean("isApprovedByDad", false)
             )
@@ -1004,7 +1061,7 @@ class DadKingdomLocalStore(private val context: Context) {
             val o = arr.getJSONObject(idx)
             GiftRequestItem(
                 id = o.optString("id"),
-                targetParent = o.optString("targetParent", "아빠"),
+                targetParent = o.optString("targetParent", "멘토"),
                 giftTitleKo = o.optString("giftTitleKo"),
                 reasonKo = o.optString("reasonKo"),
                 requiredLevel = o.optInt("requiredLevel", 1),
@@ -1912,5 +1969,81 @@ class DadKingdomLocalStore(private val context: Context) {
             }
             result
         }.getOrDefault(emptyMap())
+    }
+
+    suspend fun completeFirstLaunchOnboarding(
+        nickname: String,
+        goalTrack: LearnerGoalTrack,
+        dailyGoal: Int,
+        bonusXp: Int,
+        bonusCoins: Int
+    ) {
+        val safeName = nickname.trim().take(12).ifBlank { "학습자" }
+        val safeGoal = dailyGoal.coerceIn(5, 30)
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[onboardingCompletedKey] = true
+            prefs[daughterNameKey] = safeName
+            prefs[learnerGoalTrackKey] = goalTrack.name
+            prefs[dailyGoalKey] = safeGoal
+            prefs[streakFreezeCountKey] = (prefs[streakFreezeCountKey] ?: 1)
+                .coerceIn(1, PlayGrowthRetentionEngine.MAX_STREAK_FREEZES)
+            if (bonusXp > 0) {
+                prefs[totalXpKey] = ((prefs[totalXpKey] ?: 150) + bonusXp).coerceAtLeast(0)
+            }
+            if (bonusCoins > 0) {
+                prefs[coinsKey] = ((prefs[coinsKey] ?: 250) + bonusCoins).coerceAtLeast(0)
+            }
+        }
+    }
+
+    suspend fun markOnboardingSkipped() {
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[onboardingCompletedKey] = true
+            if (prefs[streakFreezeCountKey] == null) {
+                prefs[streakFreezeCountKey] = 1
+            }
+        }
+    }
+
+    suspend fun purchaseStreakFreeze(): Pair<Boolean, String> {
+        var succeeded = false
+        var message = ""
+        context.dadKingdomDataStore.edit { prefs ->
+            val currentFreezes = (prefs[streakFreezeCountKey] ?: 1)
+                .coerceIn(0, PlayGrowthRetentionEngine.MAX_STREAK_FREEZES)
+            val currentCoins = (prefs[coinsKey] ?: 250).coerceAtLeast(0)
+            when {
+                currentFreezes >= PlayGrowthRetentionEngine.MAX_STREAK_FREEZES -> {
+                    message = "스트릭 보호막이 이미 최대(${PlayGrowthRetentionEngine.MAX_STREAK_FREEZES}개)입니다!"
+                }
+                currentCoins < PlayGrowthRetentionEngine.STREAK_FREEZE_COST_COINS -> {
+                    val need = PlayGrowthRetentionEngine.STREAK_FREEZE_COST_COINS - currentCoins
+                    message = "코인이 ${need}개 부족해요 (보호막 1개 = ${PlayGrowthRetentionEngine.STREAK_FREEZE_COST_COINS}코인)"
+                }
+                else -> {
+                    prefs[coinsKey] = currentCoins - PlayGrowthRetentionEngine.STREAK_FREEZE_COST_COINS
+                    val nextFreezes = currentFreezes + 1
+                    prefs[streakFreezeCountKey] = nextFreezes
+                    succeeded = true
+                    message = "스트릭 보호막 장착 완료! (보유 ${nextFreezes}/${PlayGrowthRetentionEngine.MAX_STREAK_FREEZES})"
+                }
+            }
+        }
+        return succeeded to message
+    }
+
+    suspend fun setAppThemeMode(mode: AppThemeMode) {
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[appThemeModeKey] = mode.name
+        }
+    }
+
+    suspend fun recordReviewPromptInteraction(permanent: Boolean, nowMs: Long = System.currentTimeMillis()) {
+        context.dadKingdomDataStore.edit { prefs ->
+            prefs[reviewPromptLastMsKey] = nowMs
+            if (permanent) {
+                prefs[reviewPromptDismissedKey] = true
+            }
+        }
     }
 }

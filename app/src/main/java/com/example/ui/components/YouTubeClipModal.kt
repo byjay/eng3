@@ -66,7 +66,9 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -89,6 +91,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.RealDialogueClip
 import com.example.data.RealSceneClipFetcher
 import com.example.data.YouTubeDialogueMatch
+import com.example.engine.YouTubeNoLoginSegmentExtractor
 import com.example.ui.theme.GlacierCyan
 import com.example.ui.theme.NightBackground
 import com.example.ui.theme.NightBorder
@@ -176,17 +179,23 @@ fun YouTubeWordContextDialog(
         RealSceneClipFetcher.extractBestSearchPhrase(wordOrPhrase)
     }
 
+    val coroutineScope = rememberCoroutineScope()
     var searchInput by remember(wordOrPhrase) { mutableStateOf(initialQuery) }
     var activeQuery by remember(wordOrPhrase) { mutableStateOf(initialQuery) }
-    var playerMode by remember { mutableIntStateOf(2) } // 0 = Official YT Link, 1 = Filmot, 2 = YouGlish (Official Embed)
+    var playerMode by remember { mutableIntStateOf(0) } // 0 = No-Login Segment Extractor, 2 = YouGlish, 1 = Filmot
 
-    // Tab 0: YouTube IFrame A-B Loop state
+    // Tab 0: Zero-Login YouTube Segment Extractor & IFrame A-B Loop state
     var isLoadingYouTube by remember { mutableStateOf(true) }
     var ytMatches by remember { mutableStateOf<List<YouTubeDialogueMatch>>(emptyList()) }
     var activeYtIndex by remember { mutableIntStateOf(0) }
     var isAbLoopEnabled by remember { mutableStateOf(true) }
     var playbackRate by remember { mutableFloatStateOf(1.0f) }
     var ytWebViewRef by remember { mutableStateOf<WebView?>(null) }
+    var youtubeUrlInput by remember { mutableStateOf("") }
+    var showDirectUrlPanel by remember { mutableStateOf(false) }
+    var showManualTranscriptPanel by remember { mutableStateOf(false) }
+    var manualTranscriptInput by remember { mutableStateOf("") }
+    var extractionStatusKo by remember { mutableStateOf<String?>(null) }
 
     // Tab 3: Movie MP4 state
     var isLoadingClips by remember { mutableStateOf(false) }
@@ -230,7 +239,13 @@ fun YouTubeWordContextDialog(
     LaunchedEffect(activeQuery) {
         isLoadingYouTube = true
         activeYtIndex = 0
-        ytMatches = RealSceneClipFetcher.searchYouTubeDialogues(activeQuery, context.cacheDir)
+        extractionStatusKo = null
+        val parsed = YouTubeNoLoginSegmentExtractor.parseYouTubeInput(activeQuery)
+        ytMatches = if (parsed != null) {
+            RealSceneClipFetcher.extractDialoguesFromUrl(activeQuery, "", context.cacheDir)
+        } else {
+            RealSceneClipFetcher.searchYouTubeDialogues(activeQuery, context.cacheDir)
+        }
         isLoadingYouTube = false
     }
 
@@ -353,14 +368,20 @@ fun YouTubeWordContextDialog(
                     OutlinedTextField(
                         value = searchInput,
                         onValueChange = { searchInput = it },
-                        placeholder = { Text("단어·표현 검색", fontSize = 13.sp, color = Color.White.copy(alpha = 0.5f)) },
+                        placeholder = { Text("단어·표현 또는 YouTube 링크 붙여넣기", fontSize = 12.sp, color = Color.White.copy(alpha = 0.55f)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(
                             onSearch = {
-                                val next = YouTubeContextClipLauncher.sanitizeEnglishQuery(searchInput)
-                                searchInput = next
-                                activeQuery = next
+                                val raw = searchInput.trim()
+                                if (YouTubeNoLoginSegmentExtractor.parseYouTubeInput(raw) != null) {
+                                    activeQuery = raw
+                                    playerMode = 0
+                                } else {
+                                    val next = YouTubeContextClipLauncher.sanitizeEnglishQuery(raw)
+                                    searchInput = next
+                                    activeQuery = next
+                                }
                             }
                         ),
                         shape = RoundedCornerShape(14.dp),
@@ -383,9 +404,15 @@ fun YouTubeWordContextDialog(
                             .height(52.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .clickable {
-                                val next = YouTubeContextClipLauncher.sanitizeEnglishQuery(searchInput)
-                                searchInput = next
-                                activeQuery = next
+                                val raw = searchInput.trim()
+                                if (YouTubeNoLoginSegmentExtractor.parseYouTubeInput(raw) != null) {
+                                    activeQuery = raw
+                                    playerMode = 0
+                                } else {
+                                    val next = YouTubeContextClipLauncher.sanitizeEnglishQuery(raw)
+                                    searchInput = next
+                                    activeQuery = next
+                                }
                             }
                             .testTag("youtube_dialogue_search_btn")
                     ) {
@@ -395,7 +422,7 @@ fun YouTubeWordContextDialog(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(Icons.Default.Search, contentDescription = "검색", tint = Color.White, modifier = Modifier.size(18.dp))
-                            Text("검색", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                            Text("추출", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
                         }
                     }
                 }
@@ -436,9 +463,9 @@ fun YouTubeWordContextDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     listOf(
+                        0 to "무로그인 구간추출",
                         2 to "YouGlish",
-                        1 to "Filmot",
-                        0 to "공식 YouTube"
+                        1 to "Filmot"
                     ).forEach { (mode, label) ->
                         val active = playerMode == mode
                         Surface(
@@ -471,6 +498,194 @@ fun YouTubeWordContextDialog(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                // Zero-Login Direct YouTube URL / Transcript Extractor Bar
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = GlacierCyan.copy(alpha = 0.16f),
+                                        border = BorderStroke(1.dp, GlacierCyan.copy(alpha = 0.5f))
+                                    ) {
+                                        Text(
+                                            text = "로그인 불필요 · 자동 A-B 구간",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                                            color = GlacierCyan,
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = if (showDirectUrlPanel) StudioCobalt else NightSurfaceElevated,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .clickable {
+                                                showDirectUrlPanel = !showDirectUrlPanel
+                                                if (showDirectUrlPanel) showManualTranscriptPanel = false
+                                            }
+                                            .testTag("yt_toggle_direct_url_btn")
+                                    ) {
+                                        Text(
+                                            text = "URL 직접 추출",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = if (showManualTranscriptPanel) StudioIris else NightSurfaceElevated,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .clickable {
+                                                showManualTranscriptPanel = !showManualTranscriptPanel
+                                                if (showManualTranscriptPanel) showDirectUrlPanel = false
+                                            }
+                                            .testTag("yt_toggle_transcript_paste_btn")
+                                    ) {
+                                        Text(
+                                            text = "SRT·자막 붙여넣기",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                        )
+                                    }
+                                }
+
+                                if (showDirectUrlPanel) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedTextField(
+                                            value = youtubeUrlInput,
+                                            onValueChange = { youtubeUrlInput = it },
+                                            placeholder = { Text("https://youtu.be/... 또는 영상 ID", fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f)) },
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = Color.White,
+                                                unfocusedTextColor = Color.White,
+                                                focusedContainerColor = NightSurface,
+                                                unfocusedContainerColor = NightSurface,
+                                                focusedBorderColor = GlacierCyan,
+                                                unfocusedBorderColor = NightBorder
+                                            ),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .testTag("yt_direct_url_input")
+                                        )
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = GlacierCyan,
+                                            modifier = Modifier
+                                                .height(48.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable {
+                                                    val rawUrl = youtubeUrlInput.trim()
+                                                    if (YouTubeNoLoginSegmentExtractor.parseYouTubeInput(rawUrl) == null) {
+                                                        extractionStatusKo = "올바른 YouTube 링크 또는 11자리 영상 ID를 입력해 주세요."
+                                                    } else {
+                                                        coroutineScope.launch {
+                                                            isLoadingYouTube = true
+                                                            extractionStatusKo = null
+                                                            val kw = if (YouTubeNoLoginSegmentExtractor.parseYouTubeInput(activeQuery) != null) "" else activeQuery
+                                                            val extracted = RealSceneClipFetcher.extractDialoguesFromUrl(rawUrl, kw, context.cacheDir)
+                                                            ytMatches = extracted
+                                                            activeYtIndex = 0
+                                                            isLoadingYouTube = false
+                                                            extractionStatusKo = "로그인 없이 ${extracted.size}개 구간 대사를 추출했어요!"
+                                                        }
+                                                    }
+                                                }
+                                                .testTag("yt_direct_url_extract_btn")
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 12.dp)) {
+                                                Text("추출", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold), color = Color.Black)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (showManualTranscriptPanel) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        OutlinedTextField(
+                                            value = youtubeUrlInput,
+                                            onValueChange = { youtubeUrlInput = it },
+                                            placeholder = { Text("YouTube 링크/ID (예: dQw4w9WgXcQ)", fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f)) },
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = Color.White,
+                                                unfocusedTextColor = Color.White,
+                                                focusedContainerColor = NightSurface,
+                                                unfocusedContainerColor = NightSurface,
+                                                focusedBorderColor = StudioIris,
+                                                unfocusedBorderColor = NightBorder
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        OutlinedTextField(
+                                            value = manualTranscriptInput,
+                                            onValueChange = { manualTranscriptInput = it },
+                                            placeholder = { Text("YouTube 스크립트 또는 SRT 붙여넣기 (예: 0:12 This habit is crucial.)", fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f)) },
+                                            maxLines = 3,
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = Color.White,
+                                                unfocusedTextColor = Color.White,
+                                                focusedContainerColor = NightSurface,
+                                                unfocusedContainerColor = NightSurface,
+                                                focusedBorderColor = StudioIris,
+                                                unfocusedBorderColor = NightBorder
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("yt_manual_transcript_input")
+                                        )
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = StudioIris,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .clickable {
+                                                    val kw = if (YouTubeNoLoginSegmentExtractor.parseYouTubeInput(activeQuery) != null) "" else activeQuery
+                                                    val parsedList = RealSceneClipFetcher.extractFromManualTranscript(
+                                                        youtubeUrlOrId = youtubeUrlInput,
+                                                        transcriptText = manualTranscriptInput,
+                                                        keywordFilter = kw
+                                                    )
+                                                    if (parsedList.isEmpty()) {
+                                                        extractionStatusKo = "링크/ID와 타임스탬프 자막(예: 0:15 문장)을 함께 입력해 주세요."
+                                                    } else {
+                                                        ytMatches = parsedList
+                                                        activeYtIndex = 0
+                                                        showManualTranscriptPanel = false
+                                                        extractionStatusKo = "자막에서 ${parsedList.size}개 구간을 즉시 추출했어요!"
+                                                    }
+                                                }
+                                                .testTag("yt_manual_transcript_apply_btn")
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 8.dp)) {
+                                                Text("타임스탬프 구간 즉시 생성", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                extractionStatusKo?.let { msg ->
+                                    Text(
+                                        text = msg,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = GlacierCyan
+                                    )
+                                }
+
                                 // HTTP 429 Defensive Notice
                                 if (RealSceneClipFetcher.isCurrentlyRateLimited()) {
                                     Surface(
@@ -485,18 +700,18 @@ fun YouTubeWordContextDialog(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "자막 요청 제한 감지 · 캐시/Filmot 우선 사용",
+                                                text = "일시적 요청 제한 감지 · URL 직접 추출 또는 Filmot/YouGlish 사용",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = Color.White,
                                                 modifier = Modifier.weight(1f)
                                             )
                                             Text(
-                                                text = "Filmot ▸",
+                                                text = "YouGlish ▸",
                                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                                 color = StudioCoral,
                                                 modifier = Modifier
                                                     .clip(RoundedCornerShape(6.dp))
-                                                    .clickable { playerMode = 1 }
+                                                    .clickable { playerMode = 2 }
                                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
@@ -585,12 +800,26 @@ fun YouTubeWordContextDialog(
                                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 Text(
-                                                    text = "저작권·이용약관 준수를 위해 공식 YouTube 앱/웹에서 \"$activeQuery\" 영어 회화 영상을 바로 검색합니다.",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = Color.White,
+                                                    text = "\"$activeQuery\" 공개 자막 구간을 찾지 못했어요. 상단 [URL 직접 추출]에 YouTube 링크를 붙여넣거나 YouGlish·공식 검색으로 바로 확인해 보세요.",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color.White.copy(alpha = 0.9f),
                                                     textAlign = TextAlign.Center
                                                 )
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        color = GlacierCyan,
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .clickable { showDirectUrlPanel = true }
+                                                    ) {
+                                                        Text(
+                                                            text = "URL 붙여넣기",
+                                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                            color = Color.Black,
+                                                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
+                                                        )
+                                                    }
                                                     Surface(
                                                         shape = RoundedCornerShape(10.dp),
                                                         color = RoseCrimson,
@@ -602,10 +831,10 @@ fun YouTubeWordContextDialog(
                                                             .testTag("open_official_youtube_search_btn")
                                                     ) {
                                                         Text(
-                                                            text = "YouTube 공식 검색",
+                                                            text = "YouTube 검색",
                                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                                             color = Color.White,
-                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
                                                         )
                                                     }
                                                     Surface(
@@ -616,10 +845,10 @@ fun YouTubeWordContextDialog(
                                                             .clickable { playerMode = 2 }
                                                     ) {
                                                         Text(
-                                                            text = "YouGlish 듣기",
+                                                            text = "YouGlish",
                                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                                             color = Color.White,
-                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
                                                         )
                                                     }
                                                 }
@@ -672,7 +901,13 @@ fun YouTubeWordContextDialog(
                                             modifier = Modifier
                                                 .weight(0.75f)
                                                 .clip(RoundedCornerShape(10.dp))
-                                                .clickable { playbackRate = if (playbackRate == 1.0f) 0.75f else 1.0f }
+                                                .clickable {
+                                                    playbackRate = when (playbackRate) {
+                                                        1.0f -> 0.75f
+                                                        0.75f -> 1.25f
+                                                        else -> 1.0f
+                                                    }
+                                                }
                                                 .testTag("yt_speed_toggle")
                                         ) {
                                             Row(

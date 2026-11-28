@@ -76,7 +76,7 @@ object HumanTutorRepository {
             greetingEn = "Hey! Good to see you! Let's turn high school vocabulary into natural spoken sentences!",
             greetingKo = "안녕! 반가워! 고등 필수 단어를 바로 써먹는 회화 문장으로 바꿔보자!",
             friendPersonaPrompt = "You are Lucas, a sharp yet friendly American AI English tutor helping Korean high school students turn core vocabulary into spoken fluency. Speak warmly in 2-3 spoken sentences.",
-            portraitRes = R.drawable.img_real_tutor_liam_clean_1795478701897,
+            portraitRes = R.drawable.img_real_tutor_liam_1795478674528,
             themeColorHex = 0xFFE11D48,
             badgeTag = "어휘 회화"
         ),
@@ -94,7 +94,7 @@ object HumanTutorRepository {
             greetingEn = "Hey there! Walking around New York! Any tricky travel situation you want to practice?",
             greetingKo = "안녕! 뉴욕 거리 걷고 있어! 연습해보고 싶은 돌발 영어 상황 있어?",
             friendPersonaPrompt = "You are Maya, an adventurous AI English tutor in Brooklyn who specializes in handling unexpected travel situations calmly and humorously. Speak like a supportive tutor in 2-3 natural sentences.",
-            portraitRes = R.drawable.img_real_tutor_emma_1795478674413,
+            portraitRes = R.drawable.img_real_tutor_sophia_1795478674364,
             themeColorHex = 0xFF7C3AED,
             badgeTag = "돌발 회화"
         ),
@@ -112,13 +112,30 @@ object HumanTutorRepository {
             greetingEn = "Hi! Take your time and chat with me slowly. Every single sentence counts!",
             greetingKo = "안녕! 천천히 또박또박 편하게 영어 수다 떨어보자! 한 문장씩 해보면 돼!",
             friendPersonaPrompt = "You are Noah, a calm, super patient friend who speaks slowly and clearly using simple everyday English in 2 short sentences.",
-            portraitRes = R.drawable.img_real_tutor_sophia_clean_1795478702156,
+            portraitRes = R.drawable.img_tutor_liam_1795412460241,
             themeColorHex = 0xFF0D9488,
             badgeTag = "천천히 회화"
         )
     )
 
     fun findById(id: String): AiHumanTutor = tutors.firstOrNull { it.id == id } ?: tutors.first()
+
+    /**
+     * Automatically pairs each conversation theme with a distinct local character
+     * so switching topics changes both the scenery AND the conversation partner.
+     */
+    fun recommendedTutorForTopic(topicKo: String): AiHumanTutor {
+        val t = topicKo.lowercase()
+        val id = when {
+            t.contains("공항") || t.contains("airport") || t.contains("길찾기") || t.contains("direction") -> "maya_nyc"
+            t.contains("카페") || t.contains("cafe") || t.contains("커피") -> "liam_guam"
+            t.contains("호텔") || t.contains("hotel") || t.contains("바다") || t.contains("괌") -> "sophia_nyc"
+            t.contains("마트") || t.contains("쇼핑") || t.contains("shop") || t.contains("market") -> "lucas_guam"
+            t.contains("식당") || t.contains("restaurant") || t.contains("소개") || t.contains("intro") -> "noah_guam"
+            else -> "emma_nyc"
+        }
+        return findById(id)
+    }
 
     val collectibleShopItems: List<CollectibleItem> = listOf(
         CollectibleItem(

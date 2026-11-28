@@ -95,7 +95,7 @@ class LlmSlotStore(private val context: Context) {
                 lastStatus = when {
                     savedKey.isNotBlank() -> "디버그 키 설정됨"
                     isLocalDebug -> "로컬 디버그 엔드포인트"
-                    else -> "미설정 (기본 Firebase AI Logic 사용)"
+                    else -> "미설정 (기본 Cloudflare Workers AI 사용)"
                 }
             )
         }

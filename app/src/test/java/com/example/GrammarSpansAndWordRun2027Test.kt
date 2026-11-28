@@ -1,12 +1,27 @@
 package com.example
 
+import com.example.cloudflare.CloudflareConfig
+import com.example.data.HumanTutorRepository
 import com.example.data.WordRun2027Repository
 import com.example.engine.GameJuiceAudioEngine
+import com.example.engine.AppThemeMode
 import com.example.engine.GameRevengeLoopEngine
+import com.example.engine.LeagueTier
+import com.example.engine.PlayGrowthRetentionEngine
+import com.example.ui.components.QUIZ_OPTION_ANIM_DURATION_MS
+import com.example.ui.components.QUIZ_TOUCH_DEBOUNCE_MS
+import com.example.ui.components.TravelStreetDirectory
+import com.example.ui.components.shouldAcceptInstantTouch
+import com.example.data.WordTranslationOverride
+import com.example.data.WordTranslationOverrideStore
 import com.example.engine.GrammarSpanEngine
+import com.example.engine.KoreanTranslationRefinerEngine
+import com.example.engine.LearnedVocabCallMotionEngine
 import com.example.engine.RewardChestRarity
 import com.example.engine.WordLearningProgress
 import com.example.engine.WordRun2027Engine
+import com.example.engine.YouTubeNoLoginSegmentExtractor
+import com.example.ui.components.MotionPhotoGesture
 import com.example.model.GrammarSpan
 import com.example.model.GrammarSpanRole
 import com.example.model.VocabTopic
@@ -258,7 +273,7 @@ class GrammarSpansAndWordRun2027Test {
         assertTrue(summary.chestRarity != RewardChestRarity.COMMON || summary.accuracyPercent < 100)
         // Explicit Fever threshold verification
         assertEquals(3, GameRevengeLoopEngine.comboMultiplier(5))
-        assertEquals(4, GameRevengeLoopEngine.comboMultiplier(8))
+        assertEquals(5, GameRevengeLoopEngine.comboMultiplier(8))
         assertTrue(feverTriggered || battle.bossCurrentHp == 0)
     }
 
@@ -316,5 +331,344 @@ class GrammarSpansAndWordRun2027Test {
         val initialMute = GameJuiceAudioEngine.isMuted()
         assertEquals(!initialMute, GameJuiceAudioEngine.toggleMuted())
         GameJuiceAudioEngine.setMuted(initialMute)
+    }
+
+    @Test
+    fun `3-second speed combo multiplier escalates 2x 3x 5x and resets speed bonus on slow answers`() {
+        assertEquals(1, GameRevengeLoopEngine.speedMultiplier(0))
+        assertEquals(2, GameRevengeLoopEngine.speedMultiplier(1))
+        assertEquals(3, GameRevengeLoopEngine.speedMultiplier(2))
+        assertEquals(5, GameRevengeLoopEngine.speedMultiplier(3))
+        assertEquals(5, GameRevengeLoopEngine.speedMultiplier(7))
+
+        val pool = (1..8).map { i ->
+            VocabWord(
+                id = "spd_$i",
+                grade = 1,
+                textbookUnitKo = "스피드",
+                csatFrequency = 4,
+                csatDifficulty = 2,
+                topic = VocabTopic.SCHOOL_EXAM,
+                word = "quick$i",
+                ipa = "",
+                partOfSpeech = "adj.",
+                meaningKo = "빠른$i",
+                exampleEn = "A quick$i response builds fluency.",
+                exampleKo = "빠른${i} 반응이 유창함을 만든다.",
+                examples = emptyList(),
+                pronunciationTipKo = "",
+                distractors = emptyList()
+            )
+        }
+        var battle = GameRevengeLoopEngine.startBattle(pool, emptyMap(), sessionLength = 6, random = Random(5))
+
+        // Turn 1: fast (1800ms <= 3000ms) -> 2x
+        battle = GameRevengeLoopEngine.submitAnswer(
+            battle,
+            battle.currentQuestion!!.options.first { it.isCorrect }.wordId,
+            elapsedMs = 1800L
+        )
+        val outcome1 = battle.lastOutcome!!
+        assertTrue(outcome1.answeredWithin3Sec)
+        assertEquals(2, outcome1.multiplierAfter)
+        assertEquals(1, battle.speedStreak)
+        battle = GameRevengeLoopEngine.advanceTurn(battle, Random(1))
+
+        // Turn 2: fast (2400ms <= 3000ms) -> 3x
+        battle = GameRevengeLoopEngine.submitAnswer(
+            battle,
+            battle.currentQuestion!!.options.first { it.isCorrect }.wordId,
+            elapsedMs = 2400L
+        )
+        assertEquals(3, battle.lastOutcome!!.multiplierAfter)
+        assertEquals(2, battle.speedStreak)
+        battle = GameRevengeLoopEngine.advanceTurn(battle, Random(2))
+
+        // Turn 3: fast (2999ms <= 3000ms) -> 5x
+        battle = GameRevengeLoopEngine.submitAnswer(
+            battle,
+            battle.currentQuestion!!.options.first { it.isCorrect }.wordId,
+            elapsedMs = 2999L
+        )
+        assertEquals(5, battle.lastOutcome!!.multiplierAfter)
+        assertEquals(3, battle.speedStreak)
+        if (!battle.isFinished) {
+            battle = GameRevengeLoopEngine.advanceTurn(battle, Random(3))
+            // Turn 4: slow (4500ms > 3000ms) -> speedStreak resets to 0 (1x speed bonus) while combo continues
+            battle = GameRevengeLoopEngine.submitAnswer(
+                battle,
+                battle.currentQuestion!!.options.first { it.isCorrect }.wordId,
+                elapsedMs = 4500L
+            )
+            assertFalse(battle.lastOutcome!!.answeredWithin3Sec)
+            assertEquals(0, battle.speedStreak)
+            assertEquals(1, GameRevengeLoopEngine.speedMultiplier(battle.speedStreak))
+        }
+    }
+
+    @Test
+    fun `cloudflare config rejects placeholder and insecure urls while accepting https workers`() {
+        assertEquals("", CloudflareConfig.resolveWorkerUrl("https://your-worker.your-subdomain.workers.dev"))
+        assertEquals("", CloudflareConfig.resolveWorkerUrl("http://insecure.example.com"))
+        assertEquals(
+            "https://speakquest-api.example.workers.dev",
+            CloudflareConfig.resolveWorkerUrl("https://speakquest-api.example.workers.dev/")
+        )
+    }
+
+    @Test
+    fun `travel zones and conversation themes map to diverse characters and matching scenic backgrounds`() {
+        val zones = (1..10).map { TravelStreetDirectory.locationForZone(it) }
+        val distinctBgCount = zones.map { it.sceneBgRes }.distinct().size
+        val distinctHostNames = zones.map { it.defaultHost.name }.distinct().size
+        val distinctPortraits = zones.map { it.defaultHost.portraitRes }.distinct().size
+        assertTrue("Expected at least 7 distinct scenic backgrounds across 10 zones, got $distinctBgCount", distinctBgCount >= 7)
+        assertTrue("Expected at least 8 distinct local host names across 10 zones, got $distinctHostNames", distinctHostNames >= 8)
+        assertTrue("Expected at least 6 distinct character portraits across 10 zones, got $distinctPortraits", distinctPortraits >= 6)
+
+        val topicTutors = listOf("수다", "카페", "공항", "호텔", "마트", "식당")
+            .map { HumanTutorRepository.recommendedTutorForTopic(it) }
+        assertEquals(6, topicTutors.map { it.id }.distinct().size)
+        assertEquals(6, topicTutors.map { it.portraitRes }.distinct().size)
+    }
+
+    @Test
+    fun `instant quiz touch enforces 50ms animation delay and debounces rapid bounce without blocking fast taps`() {
+        assertEquals(50, QUIZ_OPTION_ANIM_DURATION_MS)
+        assertTrue(shouldAcceptInstantTouch(nowMs = 1000L, lastFiredMs = 0L))
+        assertFalse(shouldAcceptInstantTouch(nowMs = 1040L, lastFiredMs = 1000L, debounceMs = QUIZ_TOUCH_DEBOUNCE_MS))
+        assertTrue(shouldAcceptInstantTouch(nowMs = 1000L + QUIZ_TOUCH_DEBOUNCE_MS, lastFiredMs = 1000L, debounceMs = QUIZ_TOUCH_DEBOUNCE_MS))
+    }
+
+    @Test
+    fun `play growth engine computes league tiers, applies streak freeze shield on 1-day miss, and enforces 14-day review cooldown`() {
+        val bronze = PlayGrowthRetentionEngine.computeLeagueStanding(totalXp = 150, streakCount = 0, masteredWordsCount = 0)
+        assertEquals(LeagueTier.BRONZE, bronze.currentTier)
+        assertEquals(LeagueTier.SILVER, bronze.nextTier)
+
+        val master = PlayGrowthRetentionEngine.computeLeagueStanding(totalXp = 5500, streakCount = 20, masteredWordsCount = 80)
+        assertEquals(LeagueTier.MASTER, master.currentTier)
+        assertNull(master.nextTier)
+        assertEquals(1f, master.progressToNext, 0.001f)
+
+        // Missing exactly 1 calendar day (gap == 2) with 1 freeze preserves streak and consumes 1 shield
+        val shielded = PlayGrowthRetentionEngine.resolveStreakTransition(
+            lastStudyDateIso = "2026-11-25",
+            todayIso = "2026-11-27",
+            currentStreak = 7,
+            streakFreezes = 2
+        )
+        assertEquals(7, shielded.nextStreak)
+        assertEquals(1, shielded.remainingFreezes)
+        assertTrue(shielded.freezeConsumed)
+
+        // Missing 1 day with 0 freezes resets streak
+        val unshielded = PlayGrowthRetentionEngine.resolveStreakTransition(
+            lastStudyDateIso = "2026-11-25",
+            todayIso = "2026-11-27",
+            currentStreak = 7,
+            streakFreezes = 0
+        )
+        assertEquals(0, unshielded.nextStreak)
+        assertFalse(unshielded.freezeConsumed)
+
+        // Peak-happiness review prompt respects onboarding, 14-day cooldown, and permanent dismissal
+        val now = 2_000_000_000L
+        assertFalse(
+            PlayGrowthRetentionEngine.shouldTriggerPlayReviewPrompt(
+                onboardingCompleted = false,
+                hasDismissedPermanently = false,
+                lastPromptedAtMs = 0L,
+                nowMs = now,
+                todayWordsCompleted = 10,
+                dailyGoal = 10,
+                streakCount = 5,
+                bossVictories = 1
+            )
+        )
+        assertTrue(
+            PlayGrowthRetentionEngine.shouldTriggerPlayReviewPrompt(
+                onboardingCompleted = true,
+                hasDismissedPermanently = false,
+                lastPromptedAtMs = 0L,
+                nowMs = now,
+                todayWordsCompleted = 10,
+                dailyGoal = 10,
+                streakCount = 1,
+                bossVictories = 0
+            )
+        )
+        assertFalse(
+            PlayGrowthRetentionEngine.shouldTriggerPlayReviewPrompt(
+                onboardingCompleted = true,
+                hasDismissedPermanently = false,
+                lastPromptedAtMs = now - 1000L,
+                nowMs = now,
+                todayWordsCompleted = 10,
+                dailyGoal = 10,
+                streakCount = 5,
+                bossVictories = 2
+            )
+        )
+        assertEquals(AppThemeMode.DARK, AppThemeMode.SYSTEM.next())
+        assertEquals(AppThemeMode.LIGHT, AppThemeMode.DARK.next())
+        assertEquals(AppThemeMode.SYSTEM, AppThemeMode.LIGHT.next())
+    }
+
+    @Test
+    fun `all 33 tutor motions generate mandatory learned-word questions with natural Korean particles`() {
+        val sampleWord = VocabWord(
+            id = "test_crucial",
+            grade = 2,
+            textbookUnitKo = "고2 수능핵심",
+            csatFrequency = 5,
+            csatDifficulty = 2,
+            topic = VocabTopic.SCHOOL_EXAM,
+            word = "crucial",
+            ipa = "/ˈkruːʃəl/",
+            partOfSpeech = "adj.",
+            meaningKo = "결정적인, 매우 중요한",
+            exampleEn = "Regular practice is crucial for fluency.",
+            exampleKo = "꾸준한 연습은 유창함에 결정적이다.",
+            examples = emptyList(),
+            pronunciationTipKo = "크루셜",
+            distractors = emptyList()
+        )
+        assertEquals(33, MotionPhotoGesture.entries.size)
+
+        MotionPhotoGesture.entries.forEach { gesture ->
+            val bundle = LearnedVocabCallMotionEngine.buildMotionQuestionBundle(
+                word = sampleWord,
+                motion = gesture,
+                learnerName = "학습자"
+            )
+            assertEquals(gesture, bundle.motion)
+            assertTrue(
+                "Gesture ${gesture.name} question must contain learned word 'crucial': ${bundle.questionEn}",
+                LearnedVocabCallMotionEngine.containsLearnedWord(bundle.questionEn, sampleWord.word)
+            )
+            assertTrue(
+                "Gesture ${gesture.name} must include question mark: ${bundle.questionEn}",
+                bundle.questionEn.contains("?")
+            )
+            assertFalse(
+                "Gesture ${gesture.name} Korean translation must not have awkward '이(가)': ${bundle.questionKo}",
+                bundle.questionKo.contains("이(가)") || bundle.questionKo.contains("을(를)")
+            )
+        }
+    }
+
+    @Test
+    fun `korean translation refiner fixes batchim particles, awkward templates, and persists overrides`() {
+        // Exact Hangul Jongseong particle agreement
+        assertEquals("결정적인은", KoreanTranslationRefinerEngine.attachJosa("결정적인", "은/는"))
+        assertEquals("기회는", KoreanTranslationRefinerEngine.attachJosa("기회", "은/는"))
+        assertEquals("사과를", KoreanTranslationRefinerEngine.attachJosa("사과", "을/를"))
+        assertEquals("책상을", KoreanTranslationRefinerEngine.attachJosa("책상", "을/를"))
+        assertEquals("서울로", KoreanTranslationRefinerEngine.attachJosa("서울", "으로/로"))
+        assertEquals("부산으로", KoreanTranslationRefinerEngine.attachJosa("부산", "으로/로"))
+
+        // Polish awkward translationese
+        val polished = KoreanTranslationRefinerEngine.polishKorean("기회이(가) 중요하다. '책임' 한다.")
+        assertFalse(polished.contains("이(가)"))
+
+        // Quality analyzer detects awkwardness
+        val badQuality = KoreanTranslationRefinerEngine.analyzeQuality("그는 '탐구하다' 한다 그리고 기회이(가) 있다.")
+        assertTrue(badQuality.naturalnessScore < 85)
+        assertTrue(badQuality.issuesDetected.isNotEmpty())
+
+        val goodQuality = KoreanTranslationRefinerEngine.analyzeQuality("꾸준한 연습은 실력 향상에 결정적인 역할을 합니다.")
+        assertTrue(goodQuality.naturalnessScore >= 90)
+
+        // Override store JSON round-trip & applyTo
+        val overrideMap = mapOf(
+            "test_crucial" to WordTranslationOverride(
+                wordId = "test_crucial",
+                word = "crucial",
+                meaningKo = "매우 중요한, 결정적인",
+                exampleEn = "Sleep is crucial for memory.",
+                exampleKo = "수면은 기억력에 매우 중요합니다.",
+                pronunciationTipKo = "크루셜(ru에 강세)",
+                updatedAtMs = 123456L
+            )
+        )
+        val json = WordTranslationOverrideStore.serializeOverridesJson(overrideMap)
+        val parsed = WordTranslationOverrideStore.parseOverridesJson(json)
+        assertEquals("매우 중요한, 결정적인", parsed["test_crucial"]?.meaningKo)
+        assertEquals("수면은 기억력에 매우 중요합니다.", parsed["test_crucial"]?.exampleKo)
+    }
+
+    @Test
+    fun `youtube no-login segment extractor parses urls, json3, xml, and srt captions into exact A-B dialogue clips`() {
+        // URL parsing across all YouTube formats
+        val watch = YouTubeNoLoginSegmentExtractor.parseYouTubeInput("https://www.youtube.com/watch?v=abc123XYZ_9&t=1m25s")
+        assertNotNull(watch)
+        assertEquals("abc123XYZ_9", watch!!.videoId)
+        assertEquals(85, watch.startTimeSec)
+
+        val shortUrl = YouTubeNoLoginSegmentExtractor.parseYouTubeInput("https://youtu.be/abc123XYZ_9?t=42")
+        assertNotNull(shortUrl)
+        assertEquals("abc123XYZ_9", shortUrl!!.videoId)
+        assertEquals(42, shortUrl.startTimeSec)
+
+        val shorts = YouTubeNoLoginSegmentExtractor.parseYouTubeInput("https://www.youtube.com/shorts/abc123XYZ_9")
+        assertNotNull(shorts)
+        assertEquals("abc123XYZ_9", shorts!!.videoId)
+
+        // JSON3 caption parser
+        val sampleJson3 = """
+            {
+              "events": [
+                {"tStartMs": 5000, "dDurationMs": 2500, "segs": [{"utf8": "Hello everyone."}]},
+                {"tStartMs": 8000, "dDurationMs": 3200, "segs": [{"utf8": "We need to "}, {"utf8": "implement a better plan."}]},
+                {"tStartMs": 12000, "dDurationMs": 2500, "segs": [{"utf8": "Thank you."}]}
+              ]
+            }
+        """.trimIndent()
+        val json3Cues = YouTubeNoLoginSegmentExtractor.parseJson3Captions(sampleJson3)
+        assertEquals(3, json3Cues.size)
+        val matches = YouTubeNoLoginSegmentExtractor.extractDialogueMatchesFromCues(
+            videoId = "abc123XYZ_9",
+            title = "TED Talk Sample",
+            channelName = "TED",
+            cues = json3Cues,
+            query = "implement"
+        )
+        assertEquals(1, matches.size)
+        assertEquals(7, matches.first().startSeconds) // 8s - 1s lead-in
+        assertTrue(matches.first().endSeconds >= 12)  // 11.2s + 1.5s tail
+        assertTrue(matches.first().matchedDialogueEn.contains("implement", ignoreCase = true))
+        assertTrue(matches.first().contextBeforeEn.contains("Hello everyone."))
+
+        // XML timedtext parser
+        val sampleXml = """
+            <transcript>
+              <text start="12.5" dur="3.0">They implemented new rules immediately.</text>
+            </transcript>
+        """.trimIndent()
+        val xmlCues = YouTubeNoLoginSegmentExtractor.parseXmlCaptions(sampleXml)
+        assertEquals(1, xmlCues.size)
+        val xmlMatches = YouTubeNoLoginSegmentExtractor.extractDialogueMatchesFromCues(
+            videoId = "abc123XYZ_9",
+            title = "News Clip",
+            channelName = "BBC",
+            cues = xmlCues,
+            query = "implement"
+        )
+        assertEquals(1, xmlMatches.size) // Inflection matching ("implemented")
+        assertEquals(11, xmlMatches.first().startSeconds)
+
+        // YouTube copy-pasted timestamp transcript parser
+        val ytTranscript = """
+            0:04
+            Welcome back to the channel.
+            0:09
+            Consistency is crucial when learning a language.
+            0:14
+            Keep practicing every day.
+        """.trimIndent()
+        val manualCues = YouTubeNoLoginSegmentExtractor.parseManualTranscriptOrSrt(ytTranscript)
+        assertEquals(3, manualCues.size)
+        assertEquals(9.0, manualCues[1].startSec, 0.01)
     }
 }

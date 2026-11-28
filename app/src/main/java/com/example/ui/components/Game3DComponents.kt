@@ -43,10 +43,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.ui.graphics.graphicsLayer
+import android.os.SystemClock
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,7 +63,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -85,30 +101,92 @@ fun Tactile3DButton(
     icon: ImageVector? = null,
     enabled: Boolean = true,
     height: Dp = 54.dp,
-    tag: String = "tactile_3d_button"
+    tag: String = "tactile_3d_button",
+    instantTouch: Boolean = false
 ) {
+    val view = LocalView.current
+    val haptic = LocalHapticFeedback.current
+    val reducedMotion = rememberIsReducedMotionEnabled()
+
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+    val interactionPressed by interactionSource.collectIsPressedAsState()
+    var instantPressed by remember { mutableStateOf(false) }
+    var lastFiredAtMs by remember { mutableLongStateOf(0L) }
+    val currentOnClick by rememberUpdatedState(onClick)
+    val currentEnabled by rememberUpdatedState(enabled)
+
+    val isPressed = if (instantTouch) instantPressed else interactionPressed
     val lipHeight = 5.dp
     val pressOffset by animateDpAsState(
-        targetValue = if (isPressed && enabled) lipHeight else 0.dp,
-        animationSpec = spring(stiffness = 700f),
+        targetValue = if (isPressed && enabled && !reducedMotion) lipHeight else 0.dp,
+        animationSpec = if (instantTouch) {
+            tween(durationMillis = QUIZ_OPTION_ANIM_DURATION_MS, easing = FastOutSlowInEasing)
+        } else {
+            spring(stiffness = 700f)
+        },
         label = "btn3dOffset"
+    )
+    val pressScale by animateFloatAsState(
+        targetValue = if (instantTouch && isPressed && enabled && !reducedMotion) QUIZ_PRESSED_SCALE else 1f,
+        animationSpec = tween(durationMillis = QUIZ_OPTION_ANIM_DURATION_MS, easing = FastOutSlowInEasing),
+        label = "btn3dScale"
     )
 
     val actualBg = if (enabled) containerColor else Color(0xFFBDC5CE)
     val actualShadow = if (enabled) shadowColor else Color(0xFF9AA3AD)
 
+    fun fireInstantTrigger() {
+        if (!currentEnabled) return
+        val now = SystemClock.uptimeMillis()
+        if (!shouldAcceptInstantTouch(nowMs = now, lastFiredMs = lastFiredAtMs)) return
+        lastFiredAtMs = now
+        triggerQuizOptionHaptic(view = view, hapticFeedback = haptic)
+        currentOnClick()
+    }
+
+    val touchModifier = if (instantTouch) {
+        Modifier
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                if (!enabled) disabled()
+                onClick {
+                    if (!currentEnabled) return@onClick false
+                    fireInstantTrigger()
+                    true
+                }
+            }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    instantPressed = true
+                    down.consume()
+                    fireInstantTrigger()
+                    try {
+                        waitForUpOrCancellation()
+                    } finally {
+                        instantPressed = false
+                    }
+                }
+            }
+    } else {
+        Modifier.clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            enabled = enabled,
+            onClick = onClick
+        )
+    }
+
     Box(
         modifier = modifier
             .height(height + lipHeight)
             .testTag(tag)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                enabled = enabled,
-                onClick = onClick
-            )
+            .then(touchModifier)
     ) {
         // 3D Extruded Bottom Lip Shadow
         Box(

@@ -135,7 +135,8 @@ fun WeeklyStudyReportModal(
     report: WeeklyStudyReportData,
     playerName: String,
     activeHero: SquirrelJobHero,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onShareReportCard: (() -> Unit)? = null
 ) {
     var revealed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { revealed = true }
@@ -301,18 +302,34 @@ fun WeeklyStudyReportModal(
 
                 // Bottom Action Footer
                 Surface(
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 2.dp,
-                    border = BorderStroke(1.dp, Color(0xFFE8E0D0)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (onShareReportCard != null) {
+                            Tactile3DButton(
+                                text = "카드 공유",
+                                containerColor = SkyQuestBlue,
+                                shadowColor = SkyQuestBlueShadow,
+                                height = 48.dp,
+                                modifier = Modifier.weight(0.9f),
+                                tag = "weekly_report_share_card_btn",
+                                onClick = onShareReportCard
+                            )
+                        }
                         Tactile3DButton(
-                            text = "확인 · 계속 학습하기",
+                            text = "확인 · 계속 학습",
                             containerColor = AdventureEmerald,
                             shadowColor = AdventureEmeraldShadow,
                             height = 48.dp,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.weight(1.2f),
                             tag = "weekly_report_close_btn",
                             onClick = onDismiss
                         )

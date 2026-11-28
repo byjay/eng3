@@ -1,6 +1,8 @@
 package com.example.ui.components
 
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -43,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -59,10 +64,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.engine.GameJuiceAudioEngine
+import com.example.engine.GameRevengeLoopEngine
 import com.example.engine.GrammarSpanEngine
+import kotlin.math.roundToInt
 import com.example.engine.WordRun2027Engine
 import com.example.model.GrammarSpanRole
 import com.example.model.WordRunEntry
@@ -585,13 +593,39 @@ fun WordRunQuizSessionView(
     onComplete: () -> Unit,
     onExit: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isReducedMotionEnabled = remember(context) {
+        runCatching {
+            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+        }.getOrDefault(false)
+    }
     var queue by remember(day, isPreviousDayReview, initialWordIds) { mutableStateOf(initialWordIds.shuffled()) }
     var doneCount by remember(day, isPreviousDayReview) { mutableIntStateOf(0) }
     val totalCount = remember(initialWordIds) { initialWordIds.size.coerceAtLeast(1) }
     var currentQuestion by remember { mutableStateOf<WordRunQuizQuestion?>(null) }
     var chosenWordId by remember { mutableStateOf<Int?>(null) }
     var comboStreak by remember(day, isPreviousDayReview) { mutableIntStateOf(0) }
+    var speedStreak by remember(day, isPreviousDayReview) { mutableIntStateOf(0) }
+    var questionStartedMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var shakeNonce by remember { mutableIntStateOf(0) }
     var showBreakDialog by remember { mutableStateOf(false) }
+    val shakeOffset = remember { Animatable(0f) }
+
+    LaunchedEffect(shakeNonce, isReducedMotionEnabled) {
+        if (shakeNonce > 0 && !isReducedMotionEnabled) {
+            val amp = when (GameRevengeLoopEngine.speedMultiplier(speedStreak)) {
+                5 -> 14f
+                3 -> 10f
+                else -> 6f
+            }
+            shakeOffset.snapTo(0f)
+            listOf(-amp, amp, -amp * 0.5f, amp * 0.5f, 0f).forEach { target ->
+                shakeOffset.animateTo(target, animationSpec = tween(30))
+            }
+        } else {
+            shakeOffset.snapTo(0f)
+        }
+    }
 
     LaunchedEffect(queue) {
         if (queue.isEmpty()) {
@@ -605,6 +639,7 @@ fun WordRunQuizSessionView(
                     reverseKoreanToEnglish = (doneCount + queue.size) % 2 == 0
                 )
                 chosenWordId = null
+                questionStartedMs = System.currentTimeMillis()
             }
         }
     }
@@ -615,10 +650,12 @@ fun WordRunQuizSessionView(
 
     val q = currentQuestion ?: return
     val targetWord = allWordsById[q.targetWordId] ?: return
+    val activeMult = GameRevengeLoopEngine.speedMultiplier(speedStreak)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .offset { IntOffset(shakeOffset.value.roundToInt(), 0) }
             .testTag("wordrun_quiz_session"),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -633,10 +670,36 @@ fun WordRunQuizSessionView(
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
                     color = StudioCobalt
                 )
-                Text(
-                    text = "$doneCount/$totalCount 완료",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "$doneCount/$totalCount 완료",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = when {
+                            activeMult >= 5 -> WordRunAmber
+                            activeMult >= 3 -> SpartaRed
+                            activeMult >= 2 -> CoralOrange
+                            else -> StudioCobalt.copy(alpha = 0.14f)
+                        },
+                        modifier = Modifier.testTag("wordrun_quiz_combo_badge")
+                    ) {
+                        Text(
+                            text = "COMBO $comboStreak · ${activeMult}x",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
+                            color = when {
+                                activeMult >= 5 -> WordRunAmberInk
+                                activeMult >= 2 -> Color.White
+                                else -> StudioCobalt
+                            },
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
             }
             OutlinedButton(onClick = onExit, modifier = Modifier.heightIn(min = 44.dp)) {
                 Text("나가기")
@@ -701,11 +764,18 @@ fun WordRunQuizSessionView(
                     .fillMaxWidth()
                     .heightIn(min = 56.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .clickable(enabled = !answered) {
+                    .instantQuizTouch(enabled = !answered) {
                         chosenWordId = optId
+                        val elapsedMs = System.currentTimeMillis() - questionStartedMs
                         if (optId == q.targetWordId) {
                             comboStreak += 1
-                            if (comboStreak == 5) {
+                            if (elapsedMs in 0..GameRevengeLoopEngine.FAST_COMBO_WINDOW_MS) {
+                                speedStreak += 1
+                                shakeNonce += 1
+                            } else {
+                                speedStreak = 0
+                            }
+                            if (GameRevengeLoopEngine.speedMultiplier(speedStreak) >= 5 || comboStreak == 5) {
                                 GameJuiceAudioEngine.playFeverTrigger()
                             } else {
                                 GameJuiceAudioEngine.playComboHit(comboStreak)
@@ -713,6 +783,8 @@ fun WordRunQuizSessionView(
                             onWordCorrect(optId)
                         } else {
                             comboStreak = 0
+                            speedStreak = 0
+                            shakeNonce += 1
                             GameJuiceAudioEngine.playWrongThud()
                             onAddWrongToFsrs(targetWord)
                         }
@@ -945,7 +1017,7 @@ fun WordRunTimedExamSessionView(
                     .fillMaxWidth()
                     .heightIn(min = 54.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .clickable {
+                    .instantQuizTouch(enabled = !submitted) {
                         answers[currentIndex] = optId
                         if (currentIndex < questions.lastIndex) {
                             currentIndex += 1

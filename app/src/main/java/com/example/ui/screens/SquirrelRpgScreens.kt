@@ -329,7 +329,7 @@ fun SquirrelStoryAndBattleOverlay(
                         onClick = onClose,
                         modifier = Modifier.testTag("rpg_back_home_button")
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "왕국홈으로")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "홈으로")
                     }
                     Column {
                         Text(
@@ -759,6 +759,7 @@ fun SquirrelStoryAndBattleOverlay(
                                     height = 48.dp,
                                     modifier = Modifier.fillMaxWidth(),
                                     tag = "rpg_word_option_$idx",
+                                    instantTouch = true,
                                     onClick = { onSubmitWordAnswer(opt) }
                                 )
                             }
@@ -818,6 +819,7 @@ fun SquirrelStoryAndBattleOverlay(
                                     height = 50.dp,
                                     modifier = Modifier.fillMaxWidth(),
                                     tag = "rpg_phrase_option_$idx",
+                                    instantTouch = true,
                                     onClick = { onSubmitPhraseAnswer(opt) }
                                 )
                             }
@@ -932,7 +934,7 @@ fun SquirrelStoryAndBattleOverlay(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Tactile3DButton(
-                                        text = "왕국홈",
+                                        text = "홈으로",
                                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                         shadowColor = MaterialTheme.colorScheme.outline,
                                         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -977,7 +979,7 @@ fun SquirrelStoryAndBattleOverlay(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Tactile3DButton(
-                                        text = "왕국홈",
+                                        text = "홈으로",
                                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                         shadowColor = MaterialTheme.colorScheme.outline,
                                         contentColor = MaterialTheme.colorScheme.onSurface,

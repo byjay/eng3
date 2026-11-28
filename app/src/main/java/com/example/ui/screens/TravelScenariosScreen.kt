@@ -151,7 +151,7 @@ fun TravelScenariosScreen(
         // 1. Google Stitch Iconified 10 Adventure Travel Zones
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(TravelCurriculumRepository.zones) { zone ->
+                items(TravelCurriculumRepository.zones, key = { it.id }) { zone ->
                     val selected = zone.id == state.selectedZoneId
                     val accent = Color(zone.accentHex)
                     Column(
@@ -213,7 +213,7 @@ fun TravelScenariosScreen(
         // 2. 10 Scenarios inside the selected Zone (1..100 total)
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(scenariosInZone) { scenario ->
+                items(scenariosInZone, key = { it.id }) { scenario ->
                     val selected = scenario.id == state.activeScenario.id
                     val prog = progressByScenario[scenario.id]
                     Surface(

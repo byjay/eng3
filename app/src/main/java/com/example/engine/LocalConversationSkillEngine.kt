@@ -507,7 +507,7 @@ object LocalConversationSkillEngine {
         isOpening: Boolean
     ): AiCoachReply {
         val enName = HybridAiCoachEngine.formatLearnerEnglishName(learnerName)
-        val koName = learnerName.trim().ifBlank { "원삐" }
+        val koName = learnerName.trim().ifBlank { "학습자" }
         val goal = conversationGoalKo.ifBlank { HybridAiCoachEngine.goalForTopic(activeTopicTag) }
         val (replyEn, replyKo, mood, thoughtKo) = when {
             activeTopicTag.contains("카페") -> if (isOpening) {
@@ -600,11 +600,11 @@ object LocalConversationSkillEngine {
         history: List<TutorChatMessage>,
         activeTopicTag: String,
         activeTwist: TravelTwist? = null,
-        learnerName: String = "원삐",
+        learnerName: String = "학습자",
         conversationGoalKo: String = ""
     ): AiCoachReply {
         val enName = HybridAiCoachEngine.formatLearnerEnglishName(learnerName)
-        val koName = learnerName.trim().ifBlank { "원삐" }
+        val koName = learnerName.trim().ifBlank { "학습자" }
         val resolvedGoal = conversationGoalKo.ifBlank { HybridAiCoachEngine.goalForTopic(activeTopicTag) }
         val trimmed = userText.trim()
         val lower = trimmed.lowercase()

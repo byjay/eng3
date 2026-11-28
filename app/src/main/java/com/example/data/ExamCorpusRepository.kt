@@ -137,7 +137,55 @@ object ExamCorpusRepository {
             }
         }
 
-        val combinedWords = (VocabRepository.allWords + extraWords).distinctBy { it.id }
+        val wordRunVocabWords: List<VocabWord> = if (context != null) {
+            WordRun2027Repository.loadAllWords(context).map { entry ->
+                val grade = when {
+                    entry.difficulty <= 1 -> 1
+                    entry.difficulty == 2 -> 2
+                    else -> 3
+                }
+                val normalizedMeaning = com.example.engine.KoreanTranslationRefinerEngine.normalizeMeaningKo(entry.meaningKo)
+                val examples = com.example.engine.KoreanTranslationRefinerEngine.buildNaturalVocabExamples(
+                    word = entry.word,
+                    ipa = "/${entry.word.lowercase(Locale.US)}/",
+                    pos = "${entry.pos}.",
+                    meaningKo = normalizedMeaning,
+                    coreEn = entry.exampleEn,
+                    coreKo = entry.exampleKo
+                )
+                VocabWord(
+                    id = "wr27_${entry.id}_${entry.word.lowercase(Locale.US)}",
+                    grade = grade,
+                    textbookUnitKo = "수능 기출 Day ${entry.day} · ${entry.questionNum}번",
+                    csatFrequency = if (entry.difficulty <= 2) 5 else 4,
+                    csatDifficulty = entry.difficulty,
+                    topic = com.example.model.VocabTopic.SCHOOL_EXAM,
+                    word = entry.word,
+                    ipa = "/${entry.word.lowercase(Locale.US)}/",
+                    partOfSpeech = "${entry.pos}.",
+                    meaningKo = normalizedMeaning,
+                    exampleEn = examples.first().english,
+                    exampleKo = examples.first().korean,
+                    examples = examples,
+                    pronunciationTipKo = "품사(${entry.pos})와 문맥 속 의미를 함께 소리 내어 익히세요.",
+                    distractors = emptyList()
+                )
+            }
+        } else {
+            emptyList()
+        }
+
+        val overridesMap = if (context != null) {
+            WordTranslationOverrideStore.ensureLoaded(context)
+        } else {
+            WordTranslationOverrideStore.overrides.value
+        }
+
+        val combinedWords = WordTranslationOverrideStore.applyAll(
+            (VocabRepository.allWords + wordRunVocabWords + extraWords)
+                .distinctBy { it.word.trim().lowercase(Locale.US) },
+            overridesMap
+        )
         val entries = combinedWords.mapIndexed { idx, vocabWord ->
             val key = vocabWord.word.trim().lowercase(Locale.US)
             buildWordEntry(

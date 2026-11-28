@@ -88,6 +88,7 @@ import com.example.engine.TypedRecallResult
 import com.example.engine.VocabMediaResolver
 import com.example.engine.VocabMnemonicEngine
 import com.example.engine.VoiceEngineState
+import com.example.ui.components.instantQuizTouch
 import com.example.engine.WordLearningProgress
 import com.example.model.LoopRepeatMode
 import com.example.model.PronunciationReport
@@ -916,7 +917,7 @@ fun SpartaVocabScreen(
                                                     .fillMaxWidth()
                                                     .height(50.dp)
                                                     .clip(RoundedCornerShape(14.dp))
-                                                    .clickable { onSubmitAnswer(option) }
+                                                    .instantQuizTouch { onSubmitAnswer(option) }
                                                     .testTag("vocab_option_$idx")
                                             ) {
                                                 Row(

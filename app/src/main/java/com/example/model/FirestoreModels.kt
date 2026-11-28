@@ -1,19 +1,14 @@
 package com.example.model
 
 import androidx.annotation.Keep
-import com.google.firebase.Timestamp
-import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.IgnoreExtraProperties
-import com.google.firebase.firestore.ServerTimestamp
 
 @Keep
-@IgnoreExtraProperties
 data class UserProgress(
-    @DocumentId val id: String = "",
+    val id: String = "",
     val userId: String = "",
     val displayName: String = "Explorer",
     val selectedGrade: Int = 1,
-    val selectedTeacherId: String = "emma_uk",
+    val selectedTeacherId: String = "emma_nyc",
     val dailyGoal: Int = 30,
     val streakCount: Int = 1,
     val totalXp: Int = 0,
@@ -24,14 +19,13 @@ data class UserProgress(
     val unlockedItems: List<String> = listOf("badge_starter"),
     val kakaoUserId: String = "",
     val connectedKakaoIds: List<String> = emptyList(),
-    @ServerTimestamp val createdAt: Timestamp? = null,
-    @ServerTimestamp val updatedAt: Timestamp? = null
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
 )
 
 @Keep
-@IgnoreExtraProperties
 data class FamilyStreakEntry(
-    @DocumentId val id: String = "",
+    val id: String = "",
     val userId: String = "",
     val kakaoUserId: String = "",
     val displayName: String = "Explorer",
@@ -41,46 +35,43 @@ data class FamilyStreakEntry(
     val totalXp: Int = 0,
     val lastStudyDate: String = "",
     val shareWithFriends: Boolean = false,
-    @ServerTimestamp val createdAt: Timestamp? = null,
-    @ServerTimestamp val updatedAt: Timestamp? = null
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
 )
 
 @Keep
-@IgnoreExtraProperties
 data class WordMastery(
-    @DocumentId val id: String = "",
+    val id: String = "",
     val wordId: String = "",
     val grade: Int = 1,
     val correctCount: Int = 0,
     val missCount: Int = 0,
     val speakingBestScore: Int = 0,
     val mastered: Boolean = false,
-    @ServerTimestamp val createdAt: Timestamp? = null,
-    @ServerTimestamp val updatedAt: Timestamp? = null
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
 )
 
 @Keep
-@IgnoreExtraProperties
 data class ScenarioProgress(
-    @DocumentId val id: String = "",
+    val id: String = "",
     val scenarioId: String = "",
     val zoneId: Int = 1,
     val completedSentencesCount: Int = 0,
     val twistCleared: Boolean = false,
     val bestFluencyScore: Int = 0,
-    @ServerTimestamp val createdAt: Timestamp? = null,
-    @ServerTimestamp val updatedAt: Timestamp? = null
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
 )
 
 @Keep
-@IgnoreExtraProperties
 data class StudySessionLog(
-    @DocumentId val id: String = "",
+    val id: String = "",
     val mode: String = "SPARTA_VOCAB",
-    val teacherId: String = "emma_uk",
+    val teacherId: String = "emma_nyc",
     val accuracyPercent: Int = 0,
     val wpm: Int = 0,
     val xpEarned: Int = 0,
     val coinsEarned: Int = 0,
-    @ServerTimestamp val createdAt: Timestamp? = null
+    val createdAt: Long = 0L
 )

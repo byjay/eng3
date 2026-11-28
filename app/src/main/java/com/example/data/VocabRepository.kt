@@ -140,85 +140,13 @@ object VocabRepository {
     )
 
     private fun buildRichExamples(r: RawWord): List<VocabExample> {
-        val w = r.word
-        val m = r.meaningKo.substringBefore(",")
-        val isVerb = r.pos.startsWith("v")
-        val isAdj = r.pos.startsWith("adj")
-        val isNoun = r.pos.startsWith("n")
-
-        val readingSentence = when {
-            isVerb -> VocabExample(
-                labelKo = "수능 독해 지문",
-                english = "Researchers often $w key factors before drawing a final conclusion.",
-                korean = "연구자들은 최종 결론을 내리기 전에 핵심 요인들을 종종 '$m' 한다.",
-                ipaHint = r.ipa
-            )
-            isAdj -> VocabExample(
-                labelKo = "수능 독해 지문",
-                english = "In the passage, the author explains why a $w mindset matters today.",
-                korean = "지문에서 필자는 오늘날 '$m' 태도가 왜 중요한지 설명한다.",
-                ipaHint = r.ipa
-            )
-            else -> VocabExample(
-                labelKo = "수능 독해 지문",
-                english = "Understanding this $w is the fastest key to solving the exam question.",
-                korean = "이 '$m' 개념을 이해하는 것이 시험 문제를 푸는 가장 빠른 열쇠다.",
-                ipaHint = r.ipa
-            )
-        }
-
-        val conversationSentence = when {
-            isVerb -> VocabExample(
-                labelKo = "원어민 일상 회화",
-                english = "Can we $w this together right after school today?",
-                korean = "오늘 방과 후에 우리 이거 같이 '$m' 해볼 수 있을까?",
-                ipaHint = r.ipa
-            )
-            isAdj -> VocabExample(
-                labelKo = "원어민 일상 회화",
-                english = "Honestly, I think your idea sounds really $w and smart!",
-                korean = "솔직히 네 아이디어가 정말 '$m' 하고 똑똑하게 들려!",
-                ipaHint = r.ipa
-            )
-            else -> VocabExample(
-                labelKo = "원어민 일상 회화",
-                english = "Did you notice the $w in what the teacher just said?",
-                korean = "방금 선생님이 말씀하신 내용 속의 '$m' 눈치챘어?",
-                ipaHint = r.ipa
-            )
-        }
-
-        val kingdomSentence = when {
-            isVerb -> VocabExample(
-                labelKo = "왕국 수호 응용문",
-                english = "Our family team will $w every obstacle to save the emerald castle!",
-                korean = "우리 가족 팀은 에메랄드 성을 구하기 위해 모든 장애물을 '$m' 할 거야!",
-                ipaHint = r.ipa
-            )
-            isAdj -> VocabExample(
-                labelKo = "왕국 수호 응용문",
-                english = "Staying $w during the quiz gives our castle full golden shields!",
-                korean = "퀴즈 동안 '$m' 상태를 유지하면 우리 성에 황금 방패가 채워져!",
-                ipaHint = r.ipa
-            )
-            else -> VocabExample(
-                labelKo = "왕국 수호 응용문",
-                english = "With great $w, One-Ppi and Two-Ppi defeated the exam monster effortlessly!",
-                korean = "멋진 '$m' 덕분에 원삐와 투삐는 시험 괴물을 가뿐히 물리쳤어!",
-                ipaHint = r.ipa
-            )
-        }
-
-        return listOf(
-            VocabExample(
-                labelKo = "교과서 핵심 예문",
-                english = r.coreEn,
-                korean = r.coreKo,
-                ipaHint = r.ipa
-            ),
-            readingSentence,
-            conversationSentence,
-            kingdomSentence
+        return com.example.engine.KoreanTranslationRefinerEngine.buildNaturalVocabExamples(
+            word = r.word,
+            ipa = r.ipa,
+            pos = r.pos,
+            meaningKo = r.meaningKo,
+            coreEn = r.coreEn,
+            coreKo = r.coreKo
         )
     }
 

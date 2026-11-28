@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.Looks3
@@ -80,6 +81,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -103,7 +105,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.data.ExamCorpusRepository
 import com.example.data.VocabRepository
+import com.example.data.WordTranslationOverrideStore
+import com.example.engine.HybridAiCoachEngine
 import com.example.engine.MemoryPalaceEntry
 import com.example.engine.MemoryPalaceRoom
 import com.example.engine.RecallGrade
@@ -276,8 +281,18 @@ fun VocabMemorizationDeckView(
         mutableStateMapOf<Int, Boolean>()
     }
 
+    val translationOverrides by WordTranslationOverrideStore.overrides.collectAsState()
+    LaunchedEffect(context) {
+        WordTranslationOverrideStore.ensureLoaded(context)
+    }
+    var editingWordForTranslation by remember { mutableStateOf<VocabWord?>(null) }
+    val aiTranslationCoach = remember { HybridAiCoachEngine() }
+
     val safeIndex = cardIndex % activeDeck.size.coerceAtLeast(1)
-    val currentWord = activeDeck[safeIndex]
+    val rawCurrentWord = activeDeck[safeIndex]
+    val currentWord = remember(rawCurrentWord, translationOverrides) {
+        WordTranslationOverrideStore.applyTo(rawCurrentWord, translationOverrides)
+    }
     val currentSm2 = wordSm2Progress[currentWord.id]
     val isCurrentWordSuspended = currentSm2?.learningStatus == WordLearningStatus.SUSPENDED
     val structuredGuide = remember(currentWord.id) { VocabMnemonicEngine.buildStructuredGuide(currentWord) }
@@ -287,7 +302,7 @@ fun VocabMemorizationDeckView(
     }
     var typedRecallInput by remember(currentWord.id, cardStudyMode) { mutableStateOf("") }
     var typedRecallResult by remember(currentWord.id, cardStudyMode) { mutableStateOf<TypedRecallResult?>(null) }
-    val examplesList = remember(currentWord.id) {
+    val examplesList = remember(currentWord.id, currentWord.exampleEn, currentWord.exampleKo, currentWord.examples) {
         currentWord.examples.ifEmpty {
             listOf(
                 VocabExample(
@@ -298,6 +313,33 @@ fun VocabMemorizationDeckView(
                 )
             )
         }
+    }
+
+    editingWordForTranslation?.let { targetWord ->
+        WordTranslationEditorSheet(
+            word = targetWord,
+            hasCustomOverride = translationOverrides.containsKey(targetWord.id),
+            onDismiss = { editingWordForTranslation = null },
+            onAiPolish = { w, pos, mKo, exEn, exKo ->
+                aiTranslationCoach.polishWordTranslationWithAi(w, pos, mKo, exEn, exKo)
+            },
+            onSave = { newMeaning, newExEn, newExKo, newTip ->
+                WordTranslationOverrideStore.saveOverride(
+                    context = context,
+                    wordId = targetWord.id,
+                    word = targetWord.word,
+                    meaningKo = newMeaning,
+                    exampleEn = newExEn,
+                    exampleKo = newExKo,
+                    pronunciationTipKo = newTip
+                )
+                ExamCorpusRepository.invalidateCache()
+            },
+            onResetToDefault = {
+                WordTranslationOverrideStore.removeOverride(context, targetWord.id)
+                ExamCorpusRepository.invalidateCache()
+            }
+        )
     }
     val safeDailyGoal = dailyGoalTarget.coerceIn(5, 30)
     val dailyGoalFraction = (todayWordsCompleted.coerceAtMost(safeDailyGoal).toFloat() / safeDailyGoal.toFloat()).coerceIn(0f, 1f)
@@ -636,16 +678,30 @@ fun VocabMemorizationDeckView(
 
                                 Spacer(Modifier.height(14.dp))
 
-                                StitchIconButton(
-                                    icon = Icons.AutoMirrored.Outlined.VolumeUp,
-                                    contentDescription = "발음 듣기",
-                                    accent = StudioCobalt,
-                                    filled = true,
-                                    size = 50.dp,
-                                    iconSize = 24.dp,
-                                    tag = "vocab_speed_audio_btn",
-                                    onClick = { onSpeakEnglish(currentWord.word) }
-                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    StitchIconButton(
+                                        icon = Icons.AutoMirrored.Outlined.VolumeUp,
+                                        contentDescription = "발음 듣기",
+                                        accent = StudioCobalt,
+                                        filled = true,
+                                        size = 50.dp,
+                                        iconSize = 24.dp,
+                                        tag = "vocab_speed_audio_btn",
+                                        onClick = { onSpeakEnglish(currentWord.word) }
+                                    )
+                                    StitchIconButton(
+                                        icon = Icons.Outlined.Edit,
+                                        contentDescription = "단어 및 한글 번역 수정",
+                                        accent = StudioIris,
+                                        size = 46.dp,
+                                        iconSize = 20.dp,
+                                        tag = "vocab_speed_edit_translation_btn",
+                                        onClick = { editingWordForTranslation = currentWord }
+                                    )
+                                }
 
                                 Spacer(Modifier.height(14.dp))
 
@@ -1210,6 +1266,15 @@ fun VocabMemorizationDeckView(
                             }
 
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                StitchIconButton(
+                                    icon = Icons.Outlined.Edit,
+                                    contentDescription = "단어 및 한글 번역 수정",
+                                    accent = StudioIris,
+                                    size = 44.dp,
+                                    iconSize = 20.dp,
+                                    tag = "vocab_card_edit_translation_btn",
+                                    onClick = { editingWordForTranslation = currentWord }
+                                )
                                 StitchIconButton(
                                     icon = Icons.Outlined.PlayCircle,
                                     contentDescription = "유튜브 실전 발음",

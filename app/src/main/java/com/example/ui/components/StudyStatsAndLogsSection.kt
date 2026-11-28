@@ -87,8 +87,8 @@ fun StudyStatsOverviewCards(
     val knownRatio = (totalKnown.toFloat() / totalChecked.toFloat()).coerceIn(0f, 1f)
     val knownPct = (knownRatio * 100).toInt()
 
-    val onePpiSec = logs.filter { it.playerName.contains("원삐") }.sumOf { it.durationSec }
-    val twoPpiSec = logs.filter { it.playerName.contains("투삐") }.sumOf { it.durationSec }
+    val mainLearnerSec = logs.filter { !it.playerName.startsWith("손님") }.sumOf { it.durationSec }
+    val guestLearnerSec = logs.filter { it.playerName.startsWith("손님") }.sumOf { it.durationSec }
 
     // Last 7 days bar chart data
     val last7Days = remember(logs, activeStudyElapsedSec) {
@@ -185,14 +185,14 @@ fun StudyStatsOverviewCards(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     StatMiniTile(
-                        title = "원삐 누적 시간",
-                        value = formatDurationKo(onePpiSec),
+                        title = "개인 누적 학습",
+                        value = formatDurationKo(mainLearnerSec),
                         accent = TrophyGoldShadow,
                         modifier = Modifier.weight(1f)
                     )
                     StatMiniTile(
-                        title = "투삐 누적 시간",
-                        value = formatDurationKo(twoPpiSec),
+                        title = "게스트·공유 학습",
+                        value = formatDurationKo(guestLearnerSec),
                         accent = CoralOrange,
                         modifier = Modifier.weight(1f)
                     )

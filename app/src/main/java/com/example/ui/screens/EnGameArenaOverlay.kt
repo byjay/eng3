@@ -88,6 +88,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.instantQuizTouch
 import com.example.R
 import com.example.engine.EnGameMathEngine
 import com.example.engine.EnGameMode
@@ -898,9 +899,9 @@ private fun EnGamePlayingContent(
                                     shape = RoundedCornerShape(12.dp),
                                     color = tileAccent,
                                     modifier = Modifier
-                                        .heightIn(min = 42.dp)
+                                        .heightIn(min = 48.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .clickable { onRemoveSelectedToken(pos) }
+                                        .instantQuizTouch { onRemoveSelectedToken(pos) }
                                         .testTag("engame_placed_token_$pos")
                                 ) {
                                     Box(
@@ -936,9 +937,9 @@ private fun EnGamePlayingContent(
                                 if (used) MaterialTheme.colorScheme.outline.copy(alpha = 0.25f) else tileAccent.copy(alpha = 0.45f)
                             ),
                             modifier = Modifier
-                                .heightIn(min = 44.dp)
+                                .heightIn(min = 48.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .clickable(enabled = !used) { onTapScrambledToken(idx) }
+                                .instantQuizTouch(enabled = !used) { onTapScrambledToken(idx) }
                                 .testTag("engame_bank_token_$idx")
                         ) {
                             Box(
@@ -1016,7 +1017,7 @@ private fun EnGamePlayingContent(
                                         .weight(1f)
                                         .height(82.dp)
                                         .clip(RoundedCornerShape(16.dp))
-                                        .clickable(enabled = !isMatched) { onTapMemoryFlipCard(card.cardIndex) }
+                                        .instantQuizTouch(enabled = !isMatched) { onTapMemoryFlipCard(card.cardIndex) }
                                         .testTag("engame_flip_card_${card.cardIndex}")
                                 ) {
                                     Box(
@@ -1086,24 +1087,24 @@ private fun EnGamePlayingContent(
                     )
                 }
 
-                // 4 Clean Material 3 Option Buttons
+                // 4 Ultra-Responsive Material 3 Option Buttons (touchstart + immediate haptic + 50ms animation)
                 question.options.forEachIndexed { idx, opt ->
-                    OutlinedButton(
-                        onClick = { onSubmitChoice(opt) },
+                    Surface(
                         shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
                         border = BorderStroke(1.2.dp, modeAccent.copy(alpha = 0.35f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 52.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .instantQuizTouch { onSubmitChoice(opt) }
                             .testTag("engame_option_$idx")
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {

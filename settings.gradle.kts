@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "아빠가딸들을 위한 학습도구"
+rootProject.name = "SpeakQuest"
 
 include(":app")

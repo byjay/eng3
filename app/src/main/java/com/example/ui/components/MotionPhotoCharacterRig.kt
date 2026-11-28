@@ -14,13 +14,21 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -28,6 +36,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.engine.NanoBananaMotionEngine
 import kotlinx.coroutines.delay
 import kotlin.math.PI
@@ -313,27 +323,88 @@ fun LiveMotionPhotoFriendView(
             transformOrigin = TransformOrigin(0.5f, 0.42f)
         }
 
+    // Instant photorealistic scenic background matching the selected conversation theme!
+    @DrawableRes val topicBackdropRes: Int? = remember(topicKey) {
+        when (topicKey) {
+            "airport" -> R.drawable.img_scene_airport_terminal_1795687513640
+            "cafe", "restaurant" -> R.drawable.img_scene_paris_cafe_1795687515140
+            "hotel" -> R.drawable.img_scene_luxury_hotel_1795687515906
+            "mart" -> R.drawable.img_scene_london_shopping_1795687513464
+            "directions" -> R.drawable.img_scene_tokyo_shibuya_1795687516377
+            "guam_beach" -> R.drawable.img_friend_guam_beach_no_mic_1795422199110
+            "intro" -> R.drawable.img_friend_nyc_no_mic_1795422201093
+            else -> null
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
-        // Crossfade smoothly between base real-human portrait and Nano Banana 2.1 scene portrait
+        // Crossfade smoothly between base real-human portrait, topic scenic stage, and AI-edited scene portrait
         Crossfade(
-            targetState = sceneImageBitmap to portraitRes,
-            animationSpec = tween(480),
+            targetState = Triple(sceneImageBitmap, topicBackdropRes, portraitRes),
+            animationSpec = tween(220),
             label = "topicSceneCrossfade"
-        ) { (aiBitmap, fallbackRes) ->
-            if (aiBitmap != null) {
-                Image(
-                    bitmap = aiBitmap,
-                    contentDescription = contentDescription,
-                    contentScale = ContentScale.Crop,
-                    modifier = motionModifier
-                )
-            } else {
-                Image(
-                    painter = painterResource(fallbackRes),
-                    contentDescription = contentDescription,
-                    contentScale = ContentScale.Crop,
-                    modifier = motionModifier
-                )
+        ) { (aiBitmap, backdropRes, fallbackRes) ->
+            when {
+                aiBitmap != null -> {
+                    Image(
+                        bitmap = aiBitmap,
+                        contentDescription = contentDescription,
+                        contentScale = ContentScale.Crop,
+                        modifier = motionModifier
+                    )
+                }
+                backdropRes != null -> {
+                    // Full-bleed themed real-world scene + crisp framed live tutor video portrait
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Image(
+                            painter = painterResource(backdropRes),
+                            contentDescription = activeTopicTag,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color(0xFF0F172A).copy(alpha = 0.25f),
+                                            Color.Transparent,
+                                            Color(0xFF0F172A).copy(alpha = 0.72f)
+                                        )
+                                    )
+                                )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(bottom = 128.dp)
+                                .width(236.dp)
+                                .height(308.dp)
+                                .clip(RoundedCornerShape(32.dp))
+                                .border(
+                                    width = if (isSpeaking) 3.dp else 2.dp,
+                                    color = if (isSpeaking) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.88f),
+                                    shape = RoundedCornerShape(32.dp)
+                                )
+                        ) {
+                            Image(
+                                painter = painterResource(fallbackRes),
+                                contentDescription = contentDescription,
+                                contentScale = ContentScale.Crop,
+                                modifier = motionModifier
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    Image(
+                        painter = painterResource(fallbackRes),
+                        contentDescription = contentDescription,
+                        contentScale = ContentScale.Crop,
+                        modifier = motionModifier
+                    )
+                }
             }
         }
 

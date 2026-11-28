@@ -51,8 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import com.example.R
-import com.example.firebase.attemptAutoSignIn
-import com.example.firebase.onGoogleSignInClicked
+import com.example.cloudflare.CloudflareAuthManager
 import com.example.ui.components.Elevated3DCard
 import com.example.ui.components.Tactile3DButton
 import com.example.ui.theme.AdventureEmerald
@@ -74,7 +73,7 @@ fun AuthScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        attemptAutoSignIn(
+        CloudflareAuthManager.attemptAutoSignIn(
             context = context,
             credentialManager = credentialManager,
             onAuthSuccess = onAuthSuccess,
@@ -171,7 +170,7 @@ fun AuthScreen(
                     FeatureBullet(
                         icon = Icons.Default.AutoAwesome,
                         tint = TrophyGoldShadow,
-                        text = "Firebase AI Logic(Gemini) 보안 연동 + 오프라인 학습 모드 지원"
+                        text = "Cloudflare Workers AI + D1 보안 연동 + 오프라인 학습 모드 지원"
                     )
                 }
             }
@@ -214,7 +213,7 @@ fun AuthScreen(
                     onClick = {
                         errorMessage = null
                         isLoading = true
-                        onGoogleSignInClicked(
+                        CloudflareAuthManager.onGoogleSignInClicked(
                             context = context,
                             credentialManager = credentialManager,
                             onAuthSuccess = {

@@ -137,19 +137,43 @@ class PreLaunchSecurityAndComplianceTest {
     }
 
     @Test
-    fun `unofficial YouTube and MP4 scraping are disabled while official URL helpers work`() = runBlocking {
-        assertTrue(RealSceneClipFetcher.searchYouTubeDialogues("crucial").isEmpty())
+    fun `no-login YouTube segment extractor parses URLs and captions without cookies while MP4 scraping stays disabled`() = runBlocking {
         assertTrue(RealSceneClipFetcher.fetchExactSceneClips("crucial").isEmpty())
         assertFalse(RealSceneClipFetcher.isCurrentlyRateLimited())
 
         val ytSearchUrl = RealSceneClipFetcher.buildOfficialYouTubeSearchUrl("Hello! How are you?")
         assertTrue(ytSearchUrl.startsWith("https://www.youtube.com/results?search_query="))
+
+        // Login-free SRT/transcript extraction works completely offline with zero OAuth/cookies
+        val manualSrt = """
+            1
+            00:00:08,000 --> 00:00:11,000
+            Good morning everyone.
+
+            2
+            00:00:11,500 --> 00:00:15,000
+            This crucial decision will shape our entire project.
+
+            3
+            00:00:15,500 --> 00:00:18,000
+            Let's review the details together.
+        """.trimIndent()
+        val extracted = RealSceneClipFetcher.extractFromManualTranscript(
+            youtubeUrlOrId = "https://youtu.be/dQw4w9WgXcQ?t=10",
+            transcriptText = manualSrt,
+            keywordFilter = "crucial"
+        )
+        assertEquals(1, extracted.size)
+        assertEquals("dQw4w9WgXcQ", extracted.first().videoId)
+        assertTrue(extracted.first().matchedDialogueEn.contains("crucial", ignoreCase = true))
+        assertEquals(10, extracted.first().startSeconds)
+        assertTrue(extracted.first().endSeconds >= 16)
     }
 
     @Test
     fun `cloudflare level sync enforces HTTPS worker URLs`() = runBlocking {
         val payload = CloudflareLevelPayload(
-            daughterName = "원삐",
+            daughterName = "학습자",
             vocabGradeTier = 2,
             princessLevel = 5,
             castleHpPercent = 80,

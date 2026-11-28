@@ -393,7 +393,7 @@ object SquirrelRpgRepository {
             titleKo = "Ch.6 에메랄드 성채 결전",
             locationKo = "왕국 정상 크리스탈 홀",
             storyIntroKo = "드디어 성채 꼭대기! 왕국의 영어 결정을 봉인한 암흑 시험 마왕이 기다리고 있어. 지금껏 모은 어휘와 회화로 왕국을 되찾자!",
-            squirrelLineKo = "원삐·투삐와 함께한 연습이 빛날 순간이야! 최종 결전 시작!",
+            squirrelLineKo = "지금까지 쌓아온 어휘와 회화 실력이 빛날 순간이야! 최종 결전 시작!",
             choices = listOf(
                 RpgStoryChoice(
                     id = "c6_a",

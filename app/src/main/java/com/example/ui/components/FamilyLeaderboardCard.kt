@@ -198,7 +198,7 @@ fun FamilyLeaderboardCard(
                             )
                             Text(
                                 text = buildString {
-                                    append("Firebase 연동")
+                                    append("Cloudflare 연동")
                                     if (!firebaseUserDisplayName.isNullOrBlank()) {
                                         append(" · ${firebaseUserDisplayName.take(14)}")
                                     }
@@ -396,7 +396,7 @@ fun FamilyLeaderboardCard(
                                             modifier = Modifier.size(16.dp)
                                         )
                                         Spacer(Modifier.width(4.dp))
-                                        Text("Firebase 로그아웃", style = MaterialTheme.typography.labelMedium)
+                                        Text("Cloudflare 로그아웃", style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
                             }
@@ -431,7 +431,7 @@ private fun SignedOutLeaderboardPanel(onGoogleSignIn: () -> Unit) {
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    text = "Firebase Google 인증이 필요해요",
+                    text = "Cloudflare Google 인증이 필요해요",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )

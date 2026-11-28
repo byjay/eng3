@@ -8,8 +8,10 @@ import com.example.model.AiHumanTutor
 import com.example.model.LlmSlotConfig
 import com.example.model.TravelTwist
 import com.example.model.TutorChatMessage
-import com.google.firebase.Firebase
-import com.google.firebase.ai.ai
+import com.example.model.VocabWord
+import com.example.ui.components.MotionPhotoGesture
+import com.example.cloudflare.CloudflareApiClient
+import com.example.cloudflare.CloudflareConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -117,12 +119,8 @@ class HybridAiCoachEngine(
         val message = first["message"] as? Map<*, *> ?: return ""
         return (message["content"] as? String).orEmpty()
     }
-    private val primaryGeminiModel by lazy {
-        Firebase.ai.generativeModel(modelName = "gemini-3.8-flash")
-    }
-    private val fastFallbackGeminiModel by lazy {
-        Firebase.ai.generativeModel(modelName = "gemini-3.5-flash-lite")
-    }
+    private val primaryCloudflareModel = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    private val fastFallbackCloudflareModel = "@cf/meta/llama-3.1-8b-instruct-fast"
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -142,7 +140,7 @@ class HybridAiCoachEngine(
 
     /**
      * Client APKs must NEVER bundle server-side LLM API keys in BuildConfig.
-     * Production AI runs via Firebase AI Logic (App Check attested, zero client API key).
+     * Production AI runs via Cloudflare Workers AI (edge-hosted, zero client API key).
      * Optional custom keys provider is retained solely for local JVM unit tests.
      */
     fun configuredGroqEnvKeys(): List<Pair<Int, String>> {
@@ -263,11 +261,14 @@ class HybridAiCoachEngine(
         slots: List<LlmSlotConfig>,
         activeTopicTag: String = "수다",
         activeTwist: TravelTwist? = null,
-        learnerName: String = "원삐",
+        learnerName: String = "학습자",
         conversationGoalKo: String = "",
+        mandatoryLearnedWord: VocabWord? = null,
+        targetMotion: MotionPhotoGesture? = null,
         onStreamChunk: ((String) -> Unit)? = null
     ): AiCoachReply {
         val resolvedGoal = conversationGoalKo.ifBlank { goalForTopic(activeTopicTag) }
+        val resolvedMotion = targetMotion ?: MotionPhotoGesture.CURIOUS_TILT
         val prompt = buildTutorPrompt(
             tutor = tutor,
             userSpokenText = userSpokenText,
@@ -275,10 +276,12 @@ class HybridAiCoachEngine(
             activeTopicTag = activeTopicTag,
             activeTwist = activeTwist,
             learnerName = learnerName,
-            conversationGoalKo = resolvedGoal
+            conversationGoalKo = resolvedGoal,
+            mandatoryLearnedWord = mandatoryLearnedWord,
+            targetMotion = resolvedMotion
         )
 
-        return when (mode) {
+        val rawReply = when (mode) {
             AiEngineMode.OFFLINE_ONLY -> {
                 LocalConversationSkillEngine.generateReply(
                     tutor, userSpokenText, history, activeTopicTag, activeTwist, learnerName, resolvedGoal
@@ -308,11 +311,22 @@ class HybridAiCoachEngine(
                     )
             }
         }
+
+        return if (mandatoryLearnedWord != null) {
+            LearnedVocabCallMotionEngine.enforceLearnedWordQuestion(
+                reply = rawReply,
+                word = mandatoryLearnedWord,
+                motion = resolvedMotion,
+                learnerName = learnerName
+            )
+        } else {
+            rawReply
+        }
     }
 
     /**
      * Proactive Thinking API Turn:
-     * Actively calls the configured AI API (Groq 5-key / Gemini / external slots) so the character
+     * Actively calls the configured AI API (Cloudflare Workers AI / external slots) so the character
      * thinks independently about the situational topic & goal, calls the learner by name,
      * and initiates or advances the conversation without waiting passively.
      */
@@ -325,19 +339,24 @@ class HybridAiCoachEngine(
         mode: AiEngineMode,
         slots: List<LlmSlotConfig>,
         isOpening: Boolean,
+        mandatoryLearnedWord: VocabWord? = null,
+        targetMotion: MotionPhotoGesture? = null,
         onStreamChunk: ((String) -> Unit)? = null
     ): AiCoachReply {
         val resolvedGoal = conversationGoalKo.ifBlank { goalForTopic(activeTopicTag) }
+        val resolvedMotion = targetMotion ?: MotionPhotoGesture.FRIENDLY_WAVE
         val prompt = buildProactivePrompt(
             tutor = tutor,
             learnerName = learnerName,
             activeTopicTag = activeTopicTag,
             conversationGoalKo = resolvedGoal,
             history = history,
-            isOpening = isOpening
+            isOpening = isOpening,
+            mandatoryLearnedWord = mandatoryLearnedWord,
+            targetMotion = resolvedMotion
         )
 
-        return when (mode) {
+        val rawReply = when (mode) {
             AiEngineMode.OFFLINE_ONLY -> {
                 LocalConversationSkillEngine.generateProactiveOpener(
                     tutor = tutor,
@@ -371,6 +390,17 @@ class HybridAiCoachEngine(
                         tutor, learnerName, activeTopicTag, resolvedGoal, history.size, isOpening
                     )
             }
+        }
+
+        return if (mandatoryLearnedWord != null) {
+            LearnedVocabCallMotionEngine.enforceLearnedWordQuestion(
+                reply = rawReply,
+                word = mandatoryLearnedWord,
+                motion = resolvedMotion,
+                learnerName = learnerName
+            )
+        } else {
+            rawReply
         }
     }
 
@@ -470,10 +500,12 @@ class HybridAiCoachEngine(
         activeTopicTag: String,
         activeTwist: TravelTwist?,
         learnerName: String,
-        conversationGoalKo: String
+        conversationGoalKo: String,
+        mandatoryLearnedWord: VocabWord? = null,
+        targetMotion: MotionPhotoGesture = MotionPhotoGesture.CURIOUS_TILT
     ): String {
         val enName = formatLearnerEnglishName(learnerName)
-        val koName = learnerName.trim().ifBlank { "원삐" }
+        val koName = learnerName.trim().ifBlank { "학습자" }
         val recentLines = history.takeLast(6).joinToString("\n") { msg ->
             val speaker = if (msg.fromTutor) tutor.name else enName
             "$speaker: ${msg.textEn}"
@@ -514,15 +546,20 @@ class HybridAiCoachEngine(
             - In TIP_KO: 1 short Korean pronunciation/intonation/rhythm tip.
             """.trimIndent()
         }
+        val mandatoryVocabBlock = mandatoryLearnedWord?.let { word ->
+            LearnedVocabCallMotionEngine.buildMotionQuestionBundle(word, targetMotion, learnerName).promptDirectiveEn
+        }.orEmpty()
 
         return """
             ${tutor.friendPersonaPrompt}
             MINOR & EDUCATIONAL SAFETY GUARDRAILS (STRICT):
-            - You are an AI English conversation tutor designed for Korean teenagers and families.
+            - You are an AI English conversation tutor designed for Korean English learners.
             - Never claim to be a real human being in person, and never request personal contact details, school names, home addresses, financial info, or private photos.
             - Keep all conversation strictly educational, respectful, positive, and age-appropriate; gently redirect any unsafe or inappropriate topic back to English practice.
+            - ${KoreanTranslationRefinerEngine.NATURAL_KOREAN_PROMPT_RULES}
             $twistBlock
             $koreanQuestionBlock
+            $mandatoryVocabBlock
 
             Recent video-call transcript:
             $recentLines
@@ -533,7 +570,7 @@ class HybridAiCoachEngine(
             THOUGHT_KO: <1 short Korean inner thought showing how you are proactively steering this $activeTopicTag conversation for ${koName}님>
             GOAL_KO: <Short Korean status of the active conversation goal (목표)>
             MOOD: <One word only: happy | curious | excited | proud | thinking>
-            REPLY_EN: <Your natural spoken English response calling $enName by name, 1-2 short sentences>
+            REPLY_EN: <Your natural spoken English response calling $enName by name, 1-2 short sentences ending with a question>
             TRANSLATION_KO: <Warm natural Korean live subtitle of REPLY_EN>
             REPHRASE_EN: <Upgraded native English sentence for $enName to practice/shadow>
             GRAMMAR_KO: <1 short Korean explanation of the grammar/expression upgrade>
@@ -550,10 +587,12 @@ class HybridAiCoachEngine(
         activeTopicTag: String,
         conversationGoalKo: String,
         history: List<TutorChatMessage>,
-        isOpening: Boolean
+        isOpening: Boolean,
+        mandatoryLearnedWord: VocabWord? = null,
+        targetMotion: MotionPhotoGesture = MotionPhotoGesture.FRIENDLY_WAVE
     ): String {
         val enName = formatLearnerEnglishName(learnerName)
-        val koName = learnerName.trim().ifBlank { "원삐" }
+        val koName = learnerName.trim().ifBlank { "학습자" }
         val recentLines = history.takeLast(6).joinToString("\n") { msg ->
             val speaker = if (msg.fromTutor) tutor.name else enName
             "$speaker: ${msg.textEn}"
@@ -564,18 +603,23 @@ class HybridAiCoachEngine(
         } else {
             "$enName paused quietly for a moment during the '$activeTopicTag' conversation. Proactively think of a helpful next cue, call $enName BY NAME gently, offer a concrete choice or fun situational prompt so they feel excited to speak, moving closer to the goal: $conversationGoalKo."
         }
+        val mandatoryVocabBlock = mandatoryLearnedWord?.let { word ->
+            LearnedVocabCallMotionEngine.buildMotionQuestionBundle(word, targetMotion, learnerName).promptDirectiveEn
+        }.orEmpty()
 
         return """
             ${tutor.friendPersonaPrompt}
             MINOR & EDUCATIONAL SAFETY GUARDRAILS (STRICT):
-            - You are an AI English conversation tutor for Korean high school learners and families.
+            - You are an AI English conversation tutor for Korean English learners.
             - Never ask for private personal information and keep every prompt strictly safe, kind, and educational.
+            - ${KoreanTranslationRefinerEngine.NATURAL_KOREAN_PROMPT_RULES}
             ACTIVE SITUATION / TOPIC: $activeTopicTag
             CONVERSATION GOAL (목표): $conversationGoalKo
             LEARNER NAME: "$enName" (Korean: "$koName")
 
             PROACTIVE TASK:
             $stageInstruction
+            $mandatoryVocabBlock
 
             Recent transcript:
             $recentLines
@@ -600,49 +644,62 @@ class HybridAiCoachEngine(
         onStreamChunk: ((String) -> Unit)?
     ): AiCoachReply? {
         val now = System.currentTimeMillis()
-        if (now < geminiCooldownUntilMs) {
+        if (now < geminiCooldownUntilMs || !CloudflareConfig.isConfigured()) {
             return null
         }
-        val primary = streamFromModel(primaryGeminiModel, prompt, "Firebase AI · Gemini 3.8", timeoutMs = 45_000L, onStreamChunk = onStreamChunk)
+        val primary = streamFromCloudflareWorkersAi(
+            modelId = primaryCloudflareModel,
+            prompt = prompt,
+            badge = "Cloudflare Workers AI · Llama 3.3 70B",
+            timeoutMs = 30_000L,
+            onStreamChunk = onStreamChunk
+        )
         if (primary != null) return primary
-        Log.w(TAG, "Primary Gemini model unavailable, switching seamlessly to gemini-3.5-flash-lite")
-        val fallback = streamFromModel(fastFallbackGeminiModel, prompt, "Firebase AI · Gemini Lite", timeoutMs = 30_000L, onStreamChunk = onStreamChunk)
+        logWarn("Primary Cloudflare Workers AI model unavailable, switching to fast fallback model")
+        val fallback = streamFromCloudflareWorkersAi(
+            modelId = fastFallbackCloudflareModel,
+            prompt = prompt,
+            badge = "Cloudflare Workers AI · Fast 8B",
+            timeoutMs = 20_000L,
+            onStreamChunk = onStreamChunk
+        )
         if (fallback == null) {
-            geminiCooldownUntilMs = System.currentTimeMillis() + 90_000L
+            geminiCooldownUntilMs = System.currentTimeMillis() + 60_000L
         }
         return fallback
     }
 
-    private suspend fun streamFromModel(
-        model: com.google.firebase.ai.GenerativeModel,
+    private suspend fun streamFromCloudflareWorkersAi(
+        modelId: String,
         prompt: String,
         badge: String,
-        timeoutMs: Long = 14_000L,
+        timeoutMs: Long = 20_000L,
         onStreamChunk: ((String) -> Unit)?
     ): AiCoachReply? {
         return try {
             withTimeout(timeoutMs) {
-                val sb = StringBuilder()
-                model.generateContentStream(prompt).collect { chunk ->
-                    val piece = chunk.text.orEmpty()
-                    if (piece.isNotEmpty()) {
-                        sb.append(piece)
-                        val livePreview = extractLiveReplyPreview(sb.toString())
-                        if (livePreview.isNotBlank()) {
-                            onStreamChunk?.invoke(livePreview)
+                val res = CloudflareApiClient.chatWithWorkersAi(
+                    prompt = prompt,
+                    model = modelId,
+                    onStreamText = if (onStreamChunk != null) {
+                        { accumulated ->
+                            val livePreview = extractLiveReplyPreview(accumulated)
+                            if (livePreview.isNotBlank()) {
+                                onStreamChunk.invoke(livePreview)
+                            }
                         }
-                    }
-                }
-                val raw = sb.toString().trim()
+                    } else null
+                )
+                val raw = res.getOrNull()?.trim().orEmpty()
                 if (raw.isBlank()) null else parseStructuredReply(raw, badge)
             }
         } catch (e: TimeoutCancellationException) {
-            Log.w(TAG, "$badge stream timed out after ${timeoutMs}ms", e)
+            logWarn("$badge stream timed out after ${timeoutMs}ms", e)
             null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "$badge call failed gracefully: ${e.message}")
+            logWarn("$badge call failed gracefully: ${e.message}")
             null
         }
     }
@@ -713,7 +770,7 @@ class HybridAiCoachEngine(
     suspend fun testExternalSlot(slot: LlmSlotConfig): Result<String> = withContext(Dispatchers.IO) {
         if (!BuildConfig.DEBUG) {
             return@withContext Result.failure(
-                IllegalStateException("출시 버전에서는 보안상 기본 제공 Firebase AI Logic(Gemini)만 사용합니다.")
+                IllegalStateException("출시 버전에서는 보안상 기본 제공 Cloudflare Workers AI만 사용합니다.")
             )
         }
         if (!isAllowedCustomEndpoint(slot.baseUrl) || (slot.apiKey.isBlank() && !isLocalDebugEndpoint(slot.baseUrl))) {
@@ -841,17 +898,19 @@ class HybridAiCoachEngine(
                     !it.startsWith("HINT", true)
             }
             ?: "That sounds awesome! Tell me a little more about that!"
-        val translationKo = grab("TRANSLATION_KO")
-            ?: "정말 멋진 이야기야! 조금만 더 들려줄래?"
+        val translationKo = KoreanTranslationRefinerEngine.polishKorean(
+            grab("TRANSLATION_KO") ?: "정말 멋진 이야기예요! 조금만 더 들려줄래요?"
+        )
         val rephraseEn = grab("REPHRASE_EN") ?: replyEn
-        val grammarFixKo = grab("GRAMMAR_KO").orEmpty()
-        val tipKo = grab("TIP_KO")
-            ?: "핵심 동사와 명사에 강세를 실어 한 호흡으로 이어 말하면 원어민 리듬이 살아나요."
+        val grammarFixKo = KoreanTranslationRefinerEngine.polishKorean(grab("GRAMMAR_KO").orEmpty())
+        val tipKo = KoreanTranslationRefinerEngine.polishKorean(
+            grab("TIP_KO") ?: "핵심 동사와 명사에 강세를 실어 한 호흡으로 이어 말하면 원어민 리듬이 살아나요."
+        )
 
         val parsedHints = listOfNotNull(grab("HINT1"), grab("HINT2"), grab("HINT3")).mapNotNull { line ->
             val parts = line.split("|")
             val en = parts.getOrNull(0)?.trim().orEmpty()
-            val ko = parts.getOrNull(1)?.trim().orEmpty()
+            val ko = KoreanTranslationRefinerEngine.polishKorean(parts.getOrNull(1)?.trim().orEmpty())
             if (en.isNotBlank()) SuggestedReplyOption(en, ko.ifBlank { "자연스럽게 이어 답하기" }) else null
         }
 
@@ -863,10 +922,63 @@ class HybridAiCoachEngine(
             grammarFixKo = grammarFixKo,
             suggestedReplies = parsedHints,
             engineBadge = badge,
-            thoughtKo = thoughtKo,
-            goalProgressKo = goalProgressKo,
+            thoughtKo = KoreanTranslationRefinerEngine.polishKorean(thoughtKo),
+            goalProgressKo = KoreanTranslationRefinerEngine.polishKorean(goalProgressKo),
             characterMood = characterMood
         )
+    }
+
+    /**
+     * Uses Cloudflare Workers AI (with instant local rule fallback) to rewrite awkward
+     * Korean vocabulary meanings and example translations into natural, idiomatic Korean.
+     */
+    suspend fun polishWordTranslationWithAi(
+        word: String,
+        pos: String,
+        currentMeaningKo: String,
+        exampleEn: String,
+        currentExampleKo: String
+    ): Pair<String, String> = withContext(Dispatchers.IO) {
+        val localMeaning = KoreanTranslationRefinerEngine.normalizeMeaningKo(currentMeaningKo)
+        val localExampleKo = KoreanTranslationRefinerEngine.polishKorean(currentExampleKo)
+        val prompt = """
+            You are a professional English-to-Korean dictionary editor and natural translator.
+            ${KoreanTranslationRefinerEngine.NATURAL_KOREAN_PROMPT_RULES}
+            Word: "$word" ($pos)
+            Current Korean meaning: "$localMeaning"
+            English example: "$exampleEn"
+            Current Korean translation: "$localExampleKo"
+
+            Respond in EXACTLY 2 lines (plain text, no markdown):
+            MEANING_KO: <Concise, natural Korean dictionary meaning(s) separated by commas>
+            EXAMPLE_KO: <Natural, idiomatic Korean translation of the English example sentence without translationese>
+        """.trimIndent()
+
+        val aiText = runCatching {
+            withTimeout(10_000L) {
+                CloudflareApiClient.chatWithWorkersAi(
+                    prompt = prompt,
+                    model = primaryCloudflareModel,
+                    onStreamText = null
+                ).getOrNull().orEmpty()
+            }
+        }.getOrNull().orEmpty()
+
+        if (aiText.isBlank()) return@withContext (localMeaning to localExampleKo)
+
+        val lines = aiText.lines().map { it.trim() }
+        val aiMeaning = lines.firstOrNull { it.startsWith("MEANING_KO:", ignoreCase = true) }
+            ?.substringAfter(":")?.trim().orEmpty()
+        val aiExample = lines.firstOrNull { it.startsWith("EXAMPLE_KO:", ignoreCase = true) }
+            ?.substringAfter(":")?.trim().orEmpty()
+
+        val finalMeaning = if (aiMeaning.isNotBlank()) {
+            KoreanTranslationRefinerEngine.normalizeMeaningKo(aiMeaning)
+        } else localMeaning
+        val finalExample = if (aiExample.isNotBlank()) {
+            KoreanTranslationRefinerEngine.polishKorean(aiExample)
+        } else localExampleKo
+        finalMeaning to finalExample
     }
 
     companion object {
@@ -874,9 +986,7 @@ class HybridAiCoachEngine(
             val cleaned = rawName.trim()
             if (cleaned.isBlank()) return "friend"
             return when (cleaned) {
-                "원삐" -> "Wonppi"
-                "투삐" -> "Tooppi"
-                "손님" -> "friend"
+                "학습자", "게스트", "손님" -> "friend"
                 else -> cleaned
             }
         }

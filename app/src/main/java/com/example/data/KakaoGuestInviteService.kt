@@ -68,7 +68,7 @@ object KakaoGuestInviteService {
         val deepLink = buildStandaloneDeepLink(cleanCode, hostNickname)
         val smartPwaUrl = buildSmartShareUrl(cleanCode, hostNickname, cloudflareWorkerUrl)
         val msg = buildString {
-            appendLine("[아빠가딸들을 위한 학습도구 — 초대장]")
+            appendLine("[SpeakQuest — 영어 스터디 초대장]")
             appendLine("초대자: $hostNickname · 초대코드: $cleanCode")
             appendLine()
             appendLine("1) 아이폰/아이패드 (Apple PWA · 설치 없이 3초 홈화면 추가):")

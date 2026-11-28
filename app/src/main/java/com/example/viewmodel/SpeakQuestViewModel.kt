@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.AchievementShareSnapshot
 import com.example.data.CloudflareLevelPayload
 import com.example.data.CloudflareLevelSyncService
 import com.example.data.DadKingdomLocalStore
@@ -17,12 +18,17 @@ import com.example.data.LlmSlotStore
 import com.example.data.PatternSentenceRepository
 import com.example.data.SquirrelRpgRepository
 import com.example.data.TravelCurriculumRepository
+import com.example.data.ViralShareCardGenerator
 import com.example.data.VocabRepository
+import com.example.engine.AppThemeMode
 import com.example.engine.EnGameMathEngine
 import com.example.engine.EnGameMode
 import com.example.engine.EnGamePhase
 import com.example.engine.EnGameUiState
 import com.example.engine.HybridAiCoachEngine
+import com.example.engine.LearnedVocabCallMotionEngine
+import com.example.engine.LearnerGoalTrack
+import com.example.engine.PlayGrowthRetentionEngine
 import com.example.engine.LearningMission
 import com.example.engine.MediaReviewStatus
 import com.example.engine.MemoryPalaceEntry
@@ -96,10 +102,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
+import com.example.cloudflare.CloudflareAuthManager
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -227,7 +231,10 @@ data class TutorCallState(
     val conversationGoalKo: String = HybridAiCoachEngine.goalForTopic("수다"),
     val aiMood: String = "happy",
     val proactiveModeEnabled: Boolean = true,
-    val proactiveNudgeCount: Int = 0
+    val proactiveNudgeCount: Int = 0,
+    val activeLearnedWord: VocabWord? = null,
+    val activeMotionGesture: MotionPhotoGesture = MotionPhotoGesture.FRIENDLY_WAVE,
+    val masteredWordsUsedInCall: Int = 0
 )
 
 class SpeakQuestViewModel(
@@ -244,6 +251,8 @@ class SpeakQuestViewModel(
     private var twistReplyJob: Job? = null
     private var travelProactiveJob: Job? = null
     private var familyLeaderboardSyncJob: Job? = null
+    private val recentCallVocabIds = ArrayDeque<String>()
+    private var callVocabTurnCounter: Int = 0
 
     private val _firebaseUserUid = MutableStateFlow<String?>(null)
     private val _firebaseDisplayName = MutableStateFlow<String?>(null)
@@ -290,6 +299,23 @@ class SpeakQuestViewModel(
 
     val parentProfiles: StateFlow<ParentProfiles> = localStore.parentProfilesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), ParentProfiles())
+
+    // Google Play Commercial Growth & Retention StateFlows
+    val onboardingCompleted: StateFlow<Boolean?> = localStore.onboardingCompletedFlow
+        .map<Boolean, Boolean?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+
+    val learnerGoalTrack: StateFlow<LearnerGoalTrack> = localStore.learnerGoalTrackFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), LearnerGoalTrack.DAILY_HABIT)
+
+    val streakFreezeCount: StateFlow<Int> = localStore.streakFreezeCountFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 1)
+
+    val appThemeMode: StateFlow<AppThemeMode> = localStore.appThemeModeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), AppThemeMode.SYSTEM)
+
+    private val _showReviewPrompt = MutableStateFlow(false)
+    val showReviewPrompt: StateFlow<Boolean> = _showReviewPrompt.asStateFlow()
 
     // v2 Master Spec StateFlows (SM-2, Idempotent Reward Ledger, Daily Missions, Memory Palace)
     val wordSm2Progress: StateFlow<Map<String, WordLearningProgress>> = localStore.wordSm2ProgressFlow
@@ -999,7 +1025,7 @@ class SpeakQuestViewModel(
                         phase = SpartaPhase.COMPLETED,
                         lastFeedbackKo = "대승리!! '${st.bossNameKo}' 격파! +150 코인 · 성채 HP +20% · 선물 요청권 +1장 획득!"
                     )
-                    showToast("보스전 대승리! 아빠·엄마 선물 요청권 +1장 획득!")
+                    showToast("보스전 대승리! 목표 보상 요청권 +1장 획득!")
                 } else {
                     val nextQueue = st.queue.drop(1)
                     val nextWord = nextQueue.firstOrNull() ?: word
@@ -1302,37 +1328,138 @@ class SpeakQuestViewModel(
 
     // ==================== REAL VIDEO-CALL AI TEACHER + VOICE SETTINGS CONTROL ====================
 
+    private fun pickNextLearnedVocabForCall(): VocabWord? {
+        val allPool = (VocabRepository.allWords + harvestedApiWords.value).distinctBy { it.id }
+        val todayIds = weeklyStudyReport.value.todayWordResults.map { it.wordId }.toSet()
+        val chosen = LearnedVocabCallMotionEngine.selectTargetLearnedWord(
+            allWords = allPool,
+            masteredWordIds = masteredWordIds.value,
+            weakWordIds = weakWordIds.value,
+            sm2StudiedWordIds = wordSm2Progress.value.keys,
+            todayStudiedWordIds = todayIds,
+            recentlyAskedWordIds = recentCallVocabIds.toSet(),
+            turnSeed = callVocabTurnCounter++
+        )
+        if (chosen != null) {
+            recentCallVocabIds.addLast(chosen.id)
+            while (recentCallVocabIds.size > 10) recentCallVocabIds.removeFirst()
+        }
+        return chosen
+    }
+
     fun selectHumanTutor(tutor: AiHumanTutor) {
         stopVoiceIo()
         initTutorConversation(tutor)
         viewModelScope.launch {
             localStore.updateSelectedTeacher(tutor.id)
         }
-        speakWithActiveTutor(tutor.greetingEn)
+        speakWithActiveTutor(_tutorCallState.value.liveSubtitleEn)
     }
 
     private fun initTutorConversation(tutor: AiHumanTutor) {
         val defaultTopic = if (tutor.cityCountry.contains("Guam", ignoreCase = true)) "괌 바닷가" else "뉴욕 시내"
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "학습자" }
+        val targetWord = pickNextLearnedVocabForCall()
+        val syncedMotion = LearnedVocabCallMotionEngine.selectSyncedMotion(
+            activeTopicTag = defaultTopic,
+            turnCount = 0,
+            isOpening = true,
+            learnerUsedPreviousWord = false
+        )
+        val baseOpening = com.example.engine.AiCoachReply(
+            replyEn = tutor.greetingEn,
+            translationKo = tutor.greetingKo,
+            coachingTipKo = "${tutor.specialtyKo} · 영어로 수다 떨거나 'KR 질문'으로 한국어 표현·설정을 말로 지시해 보세요!",
+            naturalRephraseEn = tutor.greetingEn,
+            suggestedReplies = HybridAiCoachEngine.defaultSuggestedRepliesForTopic(defaultTopic),
+            engineBadge = engineMode.value.labelKo
+        )
+        val enforcedOpening = if (targetWord != null) {
+            LearnedVocabCallMotionEngine.enforceLearnedWordQuestion(
+                reply = baseOpening,
+                word = targetWord,
+                motion = syncedMotion,
+                learnerName = learnerName
+            )
+        } else {
+            baseOpening
+        }
+
         val welcomeMsg = TutorChatMessage(
             id = UUID.randomUUID().toString(),
             fromTutor = true,
-            textEn = tutor.greetingEn,
-            translationKo = tutor.greetingKo,
-            coachingTipKo = "${tutor.specialtyKo} · 영어로 수다 떨거나 'KR 질문'으로 한국어 표현·설정을 말로 지시해 보세요!",
+            textEn = enforcedOpening.replyEn,
+            translationKo = enforcedOpening.translationKo,
+            coachingTipKo = enforcedOpening.coachingTipKo,
             engineBadge = engineMode.value.labelKo
         )
         _tutorCallState.value = TutorCallState(
             selectedTutor = tutor,
             messages = listOf(welcomeMsg),
             showKoreanTranslations = _tutorCallState.value.showKoreanTranslations,
-            liveSubtitleEn = tutor.greetingEn,
-            liveSubtitleKo = tutor.greetingKo,
-            liveCoachingCommentKo = "EN 말하기 · KR 질문/음성설정 · 단어 탭하면 느리게 듣기!",
+            liveSubtitleEn = enforcedOpening.replyEn,
+            liveSubtitleKo = enforcedOpening.translationKo,
+            liveCoachingCommentKo = enforcedOpening.coachingTipKo,
             activeEngineBadgeKo = engineMode.value.labelKo,
-            dynamicSuggestedReplies = HybridAiCoachEngine.defaultSuggestedRepliesForTopic(defaultTopic),
+            dynamicSuggestedReplies = enforcedOpening.suggestedReplies.ifEmpty {
+                HybridAiCoachEngine.defaultSuggestedRepliesForTopic(defaultTopic)
+            },
             activeTopicTag = defaultTopic,
-            sceneLocationLabelKo = NanoBananaMotionEngine.topicToDisplayLocationKo(defaultTopic)
+            sceneLocationLabelKo = NanoBananaMotionEngine.topicToDisplayLocationKo(defaultTopic),
+            activeLearnedWord = targetWord,
+            activeMotionGesture = syncedMotion
         )
+    }
+
+    /**
+     * Triggered when the learner selects any of the 33 motions in the video-call gesture strip
+     * or taps the active learned-word badge to get an immediate motion-linked learned-word question.
+     */
+    fun triggerMotionLinkedVocabQuestion(explicitGesture: MotionPhotoGesture? = null) {
+        val curr = _tutorCallState.value
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "학습자" }
+        val targetWord = pickNextLearnedVocabForCall() ?: return
+        val syncedMotion = LearnedVocabCallMotionEngine.selectSyncedMotion(
+            activeTopicTag = curr.activeTopicTag,
+            turnCount = curr.turnsInCall + 1,
+            isOpening = false,
+            learnerUsedPreviousWord = false,
+            explicitGesture = explicitGesture
+        )
+        val bundle = LearnedVocabCallMotionEngine.buildMotionQuestionBundle(
+            word = targetWord,
+            motion = syncedMotion,
+            learnerName = learnerName
+        )
+        val hintReply = com.example.engine.SuggestedReplyOption(
+            english = bundle.hintReplyEn,
+            korean = bundle.hintReplyKo
+        )
+        val tutorMsg = TutorChatMessage(
+            id = UUID.randomUUID().toString(),
+            fromTutor = true,
+            textEn = bundle.questionEn,
+            translationKo = bundle.questionKo,
+            coachingTipKo = "[${syncedMotion.labelKo} · 학습단어 '${targetWord.word}'(${targetWord.meaningKo})] 질문을 듣고 단어를 포함해 대답해 보세요!",
+            engineBadge = "${syncedMotion.labelKo} · 33모션 연동"
+        )
+        _tutorCallState.value = curr.copy(
+            messages = curr.messages + tutorMsg,
+            liveSubtitleEn = bundle.questionEn,
+            liveSubtitleKo = bundle.questionKo,
+            liveCoachingCommentKo = tutorMsg.coachingTipKo.orEmpty(),
+            liveThoughtKo = "${syncedMotion.labelKo} 모션으로 학습한 단어 '${targetWord.word}'(${targetWord.meaningKo}) 질문을 건넸어요!",
+            activeLearnedWord = targetWord,
+            activeMotionGesture = syncedMotion,
+            dynamicSuggestedReplies = (listOf(hintReply) + curr.dynamicSuggestedReplies)
+                .distinctBy { it.english }
+                .take(3)
+        )
+        speakWithActiveTutor(bundle.questionEn) {
+            if (handsFreeMode.value) {
+                startTutorLiveListening()
+            }
+        }
     }
 
     fun toggleKoreanVoiceInputMode() {
@@ -1365,8 +1492,8 @@ class SpeakQuestViewModel(
         topicKo: String,
         starterPromptEn: String
     ) {
-        val tutor = _tutorCallState.value.selectedTutor
-        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+        val tutor = HumanTutorRepository.recommendedTutorForTopic(topicKo)
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "학습자" }
         val locationLabel = NanoBananaMotionEngine.topicToDisplayLocationKo(topicKo)
         val goalKo = HybridAiCoachEngine.goalForTopic(topicKo)
         val streamingId = UUID.randomUUID().toString()
@@ -1380,10 +1507,11 @@ class SpeakQuestViewModel(
         tutorReplyJob?.cancel()
         voiceEngine.stopSpeaking()
         _tutorCallState.value = _tutorCallState.value.copy(
+            selectedTutor = tutor,
             activeTopicTag = topicKo,
             sceneLocationLabelKo = locationLabel,
             conversationGoalKo = goalKo,
-            liveThoughtKo = "${learnerName}님과 '$topicKo' 상황 대화를 능동적으로 구상하는 중...",
+            liveThoughtKo = "${tutor.name}와 함께 '$topicKo' 실전 대화를 준비하는 중...",
             aiMood = "thinking",
             isThinking = true,
             isGeneratingScene = false,
@@ -1397,6 +1525,13 @@ class SpeakQuestViewModel(
         )
 
         tutorReplyJob = viewModelScope.launch {
+            val targetWord = pickNextLearnedVocabForCall()
+            val syncedMotion = LearnedVocabCallMotionEngine.selectSyncedMotion(
+                activeTopicTag = topicKo,
+                turnCount = _tutorCallState.value.turnsInCall,
+                isOpening = true,
+                learnerUsedPreviousWord = false
+            )
             val reply = try {
                 aiCoachEngine.generateProactiveTopicTurn(
                     tutor = tutor,
@@ -1407,6 +1542,8 @@ class SpeakQuestViewModel(
                     mode = engineMode.value,
                     slots = llmSlots.value,
                     isOpening = true,
+                    mandatoryLearnedWord = targetWord,
+                    targetMotion = syncedMotion,
                     onStreamChunk = { partial ->
                         _tutorCallState.value = _tutorCallState.value.copy(
                             liveSubtitleEn = partial,
@@ -1419,7 +1556,7 @@ class SpeakQuestViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Exception) {
-                com.example.engine.LocalConversationSkillEngine.generateProactiveOpener(
+                val fallback = com.example.engine.LocalConversationSkillEngine.generateProactiveOpener(
                     tutor = tutor,
                     learnerName = learnerName,
                     activeTopicTag = topicKo,
@@ -1427,6 +1564,11 @@ class SpeakQuestViewModel(
                     turnCount = _tutorCallState.value.turnsInCall,
                     isOpening = true
                 )
+                if (targetWord != null) {
+                    LearnedVocabCallMotionEngine.enforceLearnedWordQuestion(fallback, targetWord, syncedMotion, learnerName)
+                } else {
+                    fallback
+                }
             }
 
             val finalMsg = TutorChatMessage(
@@ -1452,6 +1594,8 @@ class SpeakQuestViewModel(
                 conversationGoalKo = reply.goalProgressKo.ifBlank { goalKo },
                 aiMood = reply.characterMood,
                 activeEngineBadgeKo = reply.engineBadge,
+                activeLearnedWord = targetWord,
+                activeMotionGesture = syncedMotion,
                 dynamicSuggestedReplies = reply.suggestedReplies.ifEmpty {
                     HybridAiCoachEngine.defaultSuggestedRepliesForTopic(topicKo)
                 }
@@ -1471,7 +1615,7 @@ class SpeakQuestViewModel(
         if (!manual && (!curr.proactiveModeEnabled || curr.proactiveNudgeCount >= 2)) return
 
         val tutor = curr.selectedTutor
-        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "학습자" }
         val streamingId = UUID.randomUUID().toString()
         val placeholderMsg = TutorChatMessage(
             id = streamingId,
@@ -1490,6 +1634,13 @@ class SpeakQuestViewModel(
         )
 
         tutorReplyJob = viewModelScope.launch {
+            val targetWord = pickNextLearnedVocabForCall()
+            val syncedMotion = LearnedVocabCallMotionEngine.selectSyncedMotion(
+                activeTopicTag = curr.activeTopicTag,
+                turnCount = curr.turnsInCall + curr.proactiveNudgeCount + 1,
+                isOpening = false,
+                learnerUsedPreviousWord = false
+            )
             val reply = try {
                 aiCoachEngine.generateProactiveTopicTurn(
                     tutor = tutor,
@@ -1500,6 +1651,8 @@ class SpeakQuestViewModel(
                     mode = engineMode.value,
                     slots = llmSlots.value,
                     isOpening = false,
+                    mandatoryLearnedWord = targetWord,
+                    targetMotion = syncedMotion,
                     onStreamChunk = { partial ->
                         _tutorCallState.value = _tutorCallState.value.copy(
                             liveSubtitleEn = partial,
@@ -1512,7 +1665,7 @@ class SpeakQuestViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Exception) {
-                com.example.engine.LocalConversationSkillEngine.generateProactiveOpener(
+                val fallback = com.example.engine.LocalConversationSkillEngine.generateProactiveOpener(
                     tutor = tutor,
                     learnerName = learnerName,
                     activeTopicTag = curr.activeTopicTag,
@@ -1520,6 +1673,11 @@ class SpeakQuestViewModel(
                     turnCount = curr.turnsInCall,
                     isOpening = false
                 )
+                if (targetWord != null) {
+                    LearnedVocabCallMotionEngine.enforceLearnedWordQuestion(fallback, targetWord, syncedMotion, learnerName)
+                } else {
+                    fallback
+                }
             }
 
             val finalMsg = TutorChatMessage(
@@ -1545,6 +1703,8 @@ class SpeakQuestViewModel(
                 conversationGoalKo = reply.goalProgressKo.ifBlank { latest.conversationGoalKo },
                 aiMood = reply.characterMood,
                 activeEngineBadgeKo = reply.engineBadge,
+                activeLearnedWord = targetWord,
+                activeMotionGesture = syncedMotion,
                 dynamicSuggestedReplies = reply.suggestedReplies.ifEmpty { latest.dynamicSuggestedReplies }
             )
             speakWithActiveTutor(reply.replyEn) {
@@ -1724,7 +1884,7 @@ class SpeakQuestViewModel(
             isStreaming = true
         )
 
-        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "학습자" }
         voiceEngine.clearErrorNotice()
         tutorReplyJob?.cancel()
         _tutorCallState.value = st.copy(
@@ -1738,6 +1898,17 @@ class SpeakQuestViewModel(
         )
 
         tutorReplyJob = viewModelScope.launch {
+            val usedPreviousWord = LearnedVocabCallMotionEngine.didLearnerUseTargetWord(
+                learnerText = trimmed,
+                targetWord = st.activeLearnedWord
+            )
+            val nextTargetWord = pickNextLearnedVocabForCall()
+            val syncedMotion = LearnedVocabCallMotionEngine.selectSyncedMotion(
+                activeTopicTag = st.activeTopicTag,
+                turnCount = st.turnsInCall + 1,
+                isOpening = false,
+                learnerUsedPreviousWord = usedPreviousWord
+            )
             val reply = try {
                 aiCoachEngine.generateFriendReply(
                     tutor = tutor,
@@ -1748,6 +1919,8 @@ class SpeakQuestViewModel(
                     activeTopicTag = st.activeTopicTag,
                     learnerName = learnerName,
                     conversationGoalKo = st.conversationGoalKo,
+                    mandatoryLearnedWord = nextTargetWord,
+                    targetMotion = syncedMotion,
                     onStreamChunk = { partial ->
                         _tutorCallState.value = _tutorCallState.value.copy(
                             liveSubtitleEn = partial,
@@ -1760,7 +1933,7 @@ class SpeakQuestViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Exception) {
-                com.example.engine.LocalConversationSkillEngine.generateReply(
+                val fallback = com.example.engine.LocalConversationSkillEngine.generateReply(
                     tutor = tutor,
                     userText = trimmed,
                     history = st.messages + userMsg,
@@ -1769,6 +1942,11 @@ class SpeakQuestViewModel(
                     learnerName = learnerName,
                     conversationGoalKo = st.conversationGoalKo
                 )
+                if (nextTargetWord != null) {
+                    LearnedVocabCallMotionEngine.enforceLearnedWordQuestion(fallback, nextTargetWord, syncedMotion, learnerName)
+                } else {
+                    fallback
+                }
             }
 
             val coachingReport = if (isEnglishSpeech) {
@@ -1790,6 +1968,7 @@ class SpeakQuestViewModel(
 
             val currentCall = _tutorCallState.value
             val nextTurns = currentCall.turnsInCall + 1
+            val updatedWordsUsed = currentCall.masteredWordsUsedInCall + if (usedPreviousWord) 1 else 0
             val updatedUpgrades = if (reply.naturalRephraseEn.isNotBlank()) {
                 (listOf(trimmed to reply.naturalRephraseEn) + currentCall.collectedUpgrades)
                     .distinctBy { it.second }
@@ -1811,13 +1990,20 @@ class SpeakQuestViewModel(
                 latestPronunciation = coachingReport,
                 liveSubtitleEn = reply.replyEn,
                 liveSubtitleKo = reply.translationKo,
-                liveCoachingCommentKo = reply.coachingTipKo,
+                liveCoachingCommentKo = if (usedPreviousWord && st.activeLearnedWord != null) {
+                    "학습 단어 '${st.activeLearnedWord.word}' 실전 활용 성공 (+10 XP)! ${reply.coachingTipKo}"
+                } else {
+                    reply.coachingTipKo
+                },
                 liveNaturalRephraseEn = reply.naturalRephraseEn,
                 liveGrammarFixKo = reply.grammarFixKo,
                 liveThoughtKo = reply.thoughtKo.ifBlank { "${learnerName}님과 '${currentCall.activeTopicTag}' 대화를 이어가는 중" },
                 conversationGoalKo = reply.goalProgressKo.ifBlank { currentCall.conversationGoalKo },
                 aiMood = reply.characterMood,
                 activeEngineBadgeKo = reply.engineBadge,
+                activeLearnedWord = nextTargetWord,
+                activeMotionGesture = syncedMotion,
+                masteredWordsUsedInCall = updatedWordsUsed,
                 dynamicSuggestedReplies = reply.suggestedReplies.ifEmpty {
                     HybridAiCoachEngine.defaultSuggestedRepliesForTopic(currentCall.activeTopicTag)
                 },
@@ -1826,6 +2012,10 @@ class SpeakQuestViewModel(
                 turnsInCall = nextTurns
             )
 
+            if (usedPreviousWord && st.activeLearnedWord != null) {
+                showToast("학습 단어 '${st.activeLearnedWord.word}' 대화 활용 성공! +10 XP · +8 코인")
+            }
+
             speakWithActiveTutor(reply.replyEn) {
                 if (handsFreeMode.value) {
                     startTutorLiveListening()
@@ -1833,8 +2023,8 @@ class SpeakQuestViewModel(
             }
 
             val (boss, lvlUp) = localStore.recordLearningAchievement(
-                xpDelta = 15,
-                coinsDelta = 12,
+                xpDelta = 15 + if (usedPreviousWord) 10 else 0,
+                coinsDelta = 12 + if (usedPreviousWord) 8 else 0,
                 castleHpDelta = 2,
                 missionCompleted = (nextTurns % 5 == 0)
             )
@@ -1951,7 +2141,7 @@ class SpeakQuestViewModel(
     fun triggerTravelProactiveConversation(isOpening: Boolean = false) {
         val st = _travelState.value
         val tutor = _tutorCallState.value.selectedTutor
-        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "학습자" }
         val streetLoc = com.example.ui.components.TravelStreetDirectory.locationForZone(st.selectedZoneId)
         val topicLabel = "${streetLoc.placeNameKo} · ${st.activeScenario.titleKo}"
         val goalKo = "${streetLoc.cityBadgeEn} 실제 거리에서 '${st.activeScenario.titleKo}' 상황 영어로 자연스럽게 해결하기"
@@ -1999,7 +2189,7 @@ class SpeakQuestViewModel(
 
     fun replayTravelProactiveLine() {
         val st = _travelState.value
-        val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+        val learnerName = parentProfiles.value.daughterName.ifBlank { "학습자" }
         val loc = com.example.ui.components.TravelStreetDirectory.locationForZone(st.selectedZoneId)
         val text = st.proactiveLineEn.ifBlank {
             "Hey $learnerName! Welcome to ${loc.cityBadgeEn}. Ready to practice ${st.activeScenario.titleKo}?"
@@ -2089,7 +2279,7 @@ class SpeakQuestViewModel(
         _travelState.value = st.copy(twistLoading = true, latestPronunciation = pronReport)
 
         twistReplyJob = viewModelScope.launch {
-            val learnerName = parentProfiles.value.daughterName.ifBlank { "원삐" }
+            val learnerName = parentProfiles.value.daughterName.ifBlank { "학습자" }
             val reply = try {
                 aiCoachEngine.generateFriendReply(
                     tutor = tutor,
@@ -2153,7 +2343,7 @@ class SpeakQuestViewModel(
         viewModelScope.launch {
             localStore.saveParentProfiles(profiles)
             val pinNotice = if (rawPin.isNotBlank()) " · PIN 암호화 저장 완료" else ""
-            showToast("가족 왕국 구성원(${profiles.dadName} · ${profiles.momName} · ${profiles.daughterName}) 저장 완료$pinNotice!")
+            showToast("학습 프로필(${profiles.dadName} · ${profiles.momName} · ${profiles.daughterName}) 저장 완료$pinNotice!")
         }
     }
 
@@ -2186,7 +2376,7 @@ class SpeakQuestViewModel(
             val existingCode = guestInviteSession.value.myGeneratedCode
             val code = existingCode.ifBlank { KakaoGuestInviteService.generateInviteCode() }
             localStore.saveGeneratedInviteCode(code)
-            val host = parentProfiles.value.daughterName.ifBlank { "원삐" }
+            val host = parentProfiles.value.daughterName.ifBlank { "학습자" }
             KakaoGuestInviteService.shareGuestInviteViaKakaoTalk(
                 context = context,
                 code = code,
@@ -2205,7 +2395,7 @@ class SpeakQuestViewModel(
         }
     }
 
-    fun acceptGuestInviteCode(rawCode: String, hostNickname: String = "원삐", fromDeepLink: Boolean = false) {
+    fun acceptGuestInviteCode(rawCode: String, hostNickname: String = "학습자", fromDeepLink: Boolean = false) {
         val clean = KakaoGuestInviteService.normalizeCode(rawCode)
         if (clean.length < 4) {
             showToast("올바른 초대코드를 입력해 주세요 (예: WP-7K2A)")
@@ -2237,7 +2427,7 @@ class SpeakQuestViewModel(
                         if (g.id == giftId) g.copy(isApproved = true) else g
                     }
                     localStore.saveGiftRequests(updated, consumeTicket = false)
-                    showToast("왕실 선물 약속 승인 기록 완료! ${parentProfiles.value.daughterName} 최고예요!")
+                    showToast("목표 보상 승인 기록 완료! ${parentProfiles.value.daughterName}님 멋져요!")
                     onResult(true)
                 }
                 is com.example.engine.PinVerificationResult.LockedOut -> {
@@ -2245,11 +2435,11 @@ class SpeakQuestViewModel(
                     onResult(false)
                 }
                 is com.example.engine.PinVerificationResult.Invalid -> {
-                    showToast("부모님 PIN이 일치하지 않아요. (남은 시도 ${result.remainingAttempts}회)")
+                    showToast("승인 PIN이 일치하지 않아요. (남은 시도 ${result.remainingAttempts}회)")
                     onResult(false)
                 }
                 is com.example.engine.PinVerificationResult.NotConfigured -> {
-                    showToast("먼저 '가족' 탭에서 부모님 PIN(4~6자리)을 설정해 주세요.")
+                    showToast("먼저 프로필 설정에서 승인 PIN(4~6자리)을 등록해 주세요.")
                     onResult(false)
                 }
             }
@@ -2259,17 +2449,17 @@ class SpeakQuestViewModel(
     fun shareGiftRequestToKakao(context: Context, gift: GiftRequestItem) {
         val parents = parentProfiles.value
         val stats = kingdomStats.value
-        val parentCall = if (gift.targetParent == "아빠") parents.dadName else parents.momName
+        val parentCall = if (gift.targetParent == "멘토" || gift.targetParent == "아빠") parents.dadName else parents.momName
         val message = """
-            [아빠가딸들을 위한 학습도구 — 왕실 선물 요청장]
+            [SpeakQuest — 목표 달성 보상 요청]
             받는 분: $parentCall
-            보내는 분: ${parents.daughterName} (Lv.${stats.princessLevel} · 성채 수복 ${stats.castleHpPercent}%)
+            보내는 분: ${parents.daughterName} (Lv.${stats.princessLevel} · 달성률 ${stats.castleHpPercent}%)
             
-            요청 선물: ${gift.giftTitleKo}
+            요청 보상: ${gift.giftTitleKo}
             사유: ${gift.reasonKo}
             누적 학습: 예습 ${stats.previewCount}회 · 복습 ${stats.reviewCount}회 · 만점 ${stats.perfectScoreCount}회 · 보스전 ${stats.bossVictories}승!
             
-            앱에서 부모님 PIN으로 승인해 주세요!
+            앱에서 승인 PIN으로 확인해 주세요!
         """.trimIndent()
         KakaoAuthAndFriendsService.shareKingdomReportViaKakaoTalk(context, message)
     }
@@ -2280,13 +2470,13 @@ class SpeakQuestViewModel(
             val newMission = DadAllowanceMission(
                 id = UUID.randomUUID().toString(),
                 titleKo = titleKo.trim(),
-                descriptionKo = descKo.trim().ifBlank { "성을 지키기 위한 아빠의 특별 용돈 미션!" },
+                descriptionKo = descKo.trim().ifBlank { "목표 달성을 위한 커스텀 영어 미션!" },
                 rewardWon = rewardWon.coerceIn(500, 100_000),
                 castleHpBonus = 12,
-                categoryKo = "아빠 직접 미션"
+                categoryKo = "커스텀 미션"
             )
             localStore.saveDadMissions(listOf(newMission) + dadMissions.value)
-            showToast("아빠의 새 용돈 미션(+${rewardWon}원) 등록 완료!")
+            showToast("새 목표 미션(+${rewardWon}원) 등록 완료!")
         }
     }
 
@@ -2354,10 +2544,10 @@ class SpeakQuestViewModel(
 
     /**
      * Google Play Account & Data Deletion compliance flow:
-     * 1) Deletes user's Firestore familyStreaks entries
-     * 2) Deletes user's Firestore /users/{uid} profile and subcollections
+     * 1) Deletes user's Cloudflare D1 familyStreaks entries
+     * 2) Deletes user's Cloudflare D1 profile, mastery, and session tables
      * 3) Clears all local DataStore preferences & saved PIN/settings
-     * 4) Deletes (or signs out if re-auth required) the Firebase Auth account
+     * 4) Clears Cloudflare session and signs out
      */
     fun deleteAccountAndAllData(
         context: Context,
@@ -2376,16 +2566,13 @@ class SpeakQuestViewModel(
             localStore.clearAllLocalData()
             llmSlotStore.clearAll()
 
-            var authDeleteNote = ""
-            val currentUser = Firebase.auth.currentUser
-            if (currentUser != null) {
-                val authDel = runCatching {
-                    currentUser.delete().await()
-                }
-                if (authDel.isFailure) {
-                    authDeleteNote = " (보안상 최근 로그인 확인이 필요해 로그아웃 처리되었습니다. 다시 로그인 후 계정 삭제를 완료할 수 있습니다.)"
-                }
-                runCatching { Firebase.auth.signOut() }
+            val authDel = runCatching {
+                CloudflareAuthManager.deleteAccount(context)
+            }
+            val authDeleteNote = if (authDel.isFailure) {
+                " (오프라인 상태여서 기기 세션이 즉시 로그아웃 처리되었습니다.)"
+            } else {
+                ""
             }
 
             _firebaseUserUid.value = null
@@ -2636,13 +2823,13 @@ class SpeakQuestViewModel(
         val prog = userProgress.value
         val avgScore = scorecards.value.map { it.score }.average().takeIf { !it.isNaN() }?.toInt() ?: 0
         val report = """
-            [아빠가딸들을 위한 학습도구 — 가족 왕국 보고서]
-            도전자: ${parents.daughterName} (Lv.${stats.princessLevel} · 수능 ${vocabGradeTier.value}등급 빌드업)
-            왕국 성채 수복률: ${stats.castleHpPercent}% · 보스전 ${stats.bossVictories}승!
+            [SpeakQuest — 주간 학습 리포트]
+            학습자: ${parents.daughterName} (Lv.${stats.princessLevel} · 수능 ${vocabGradeTier.value}등급 빌드업)
+            학습 목표 달성률: ${stats.castleHpPercent}% · 보스전 ${stats.bossVictories}승!
             누적 완료: 오늘 ${prog.todayWordsCompleted}단어 · 예습 ${stats.previewCount} · 복습 ${stats.reviewCount} · 만점 ${stats.perfectScoreCount}
-            성적표 평균: ${avgScore}점 · 누적 획득 용돈: ${stats.totalAllowanceWon}원
+            성적표 평균: ${avgScore}점 · 누적 보상 기록: ${stats.totalAllowanceWon}원
             
-            ${parents.dadName} · ${parents.momName}, 오늘도 응원해 주세요!
+            오늘도 꾸준한 영어 루틴을 이어가고 있어요!
         """.trimIndent()
         KakaoAuthAndFriendsService.shareKingdomReportViaKakaoTalk(context, report)
     }
@@ -2734,8 +2921,8 @@ class SpeakQuestViewModel(
     private val secretTreasurePool: List<Triple<String, String, String>> = listOf(
         Triple("황금 도토리 왕관 유물", "전설", "비밀 유물"),
         Triple("에메랄드 별빛 망토", "에픽", "비밀 유물"),
-        Triple("아빠의 깜짝 간식 비밀권", "스페셜", "비밀 쿠폰"),
-        Triple("엄마의 주말 데이트 비밀권", "스페셜", "비밀 쿠폰"),
+        Triple("스페셜 간식 쿠폰", "스페셜", "비밀 쿠폰"),
+        Triple("주말 자유 휴식 쿠폰", "스페셜", "비밀 쿠폰"),
         Triple("크리스탈 발음 마법봉", "희귀", "비밀 유물"),
         Triple("피그미 다람쥐 황금 방패", "에픽", "비밀 유물"),
         Triple("아이스크림·디저트 깜짝권", "스페셜", "비밀 쿠폰"),
@@ -3844,6 +4031,10 @@ class SpeakQuestViewModel(
         if (!_firebaseUserUid.value.isNullOrBlank()) {
             refreshFamilyLeaderboard(manual = false)
         }
+        maybePromptPlayReview(
+            todayWords = result.todayWordsCompleted,
+            streakAfter = result.streakMilestoneHit ?: userProgress.value.streakCount
+        )
         notifySpecialMilestones(result.unlockedBoss, result.leveledUp)
     }
 
@@ -3851,6 +4042,125 @@ class SpeakQuestViewModel(
         when {
             bossUnlocked -> showToast("7회 미션 돌파!! 난이도 상승 + 시험 마왕 보스전이 열렸습니다!")
             leveledUp -> showToast("레벨 업!! 미스터리 보물상자 기운이 모였습니다!")
+        }
+    }
+
+    fun completeFirstLaunchOnboarding(
+        nickname: String,
+        goalTrack: LearnerGoalTrack,
+        dailyGoal: Int,
+        earnedWarmupBonus: Boolean
+    ) {
+        viewModelScope.launch {
+            val bonusXp = if (earnedWarmupBonus) PlayGrowthRetentionEngine.ONBOARDING_BONUS_XP else 0
+            val bonusCoins = if (earnedWarmupBonus) PlayGrowthRetentionEngine.ONBOARDING_BONUS_COINS else 0
+            localStore.completeFirstLaunchOnboarding(
+                nickname = nickname,
+                goalTrack = goalTrack,
+                dailyGoal = dailyGoal,
+                bonusXp = bonusXp,
+                bonusCoins = bonusCoins
+            )
+            showToast(
+                if (earnedWarmupBonus) {
+                    "${nickname}님 환영해요! +${bonusXp} XP · +${bonusCoins} 코인 · 스트릭 보호막 1개 지급!"
+                } else {
+                    "${nickname}님 맞춤 학습이 준비되었습니다!"
+                }
+            )
+        }
+    }
+
+    fun skipFirstLaunchOnboarding() {
+        viewModelScope.launch {
+            localStore.markOnboardingSkipped()
+        }
+    }
+
+    fun purchaseStreakFreeze() {
+        viewModelScope.launch {
+            val (_, message) = localStore.purchaseStreakFreeze()
+            showToast(message)
+        }
+    }
+
+    fun cycleAppThemeMode() {
+        val nextMode = appThemeMode.value.next()
+        viewModelScope.launch {
+            localStore.setAppThemeMode(nextMode)
+            showToast("화면 테마: ${nextMode.labelKo} 모드")
+        }
+    }
+
+    fun shareViralAchievementCard(context: Context) {
+        val prog = userProgress.value
+        val report = weeklyStudyReport.value
+        val standing = PlayGrowthRetentionEngine.computeLeagueStanding(
+            totalXp = prog.totalXp,
+            streakCount = prog.streakCount,
+            masteredWordsCount = masteredWordIds.value.size
+        )
+        val snapshot = AchievementShareSnapshot(
+            learnerName = parentProfiles.value.daughterName.ifBlank { prog.displayName },
+            streakCount = prog.streakCount,
+            todayWords = report.todayKnownCount,
+            dailyGoal = report.dailyGoalTarget,
+            masteredWords = masteredWordIds.value.size,
+            accuracyPercent = report.todayAccuracyPercent,
+            gradeLabel = report.todayGradeLabel,
+            leagueStanding = standing,
+            inviteCode = guestInviteSession.value.myGeneratedCode
+        )
+        val launched = ViralShareCardGenerator.shareAchievementCard(context, snapshot)
+        if (!launched) {
+            showToast("공유 가능한 앱을 찾지 못했습니다.")
+        }
+    }
+
+    private fun maybePromptPlayReview(todayWords: Int, streakAfter: Int) {
+        viewModelScope.launch {
+            val doneOnboarding = localStore.onboardingCompletedFlow.first()
+            val (lastPromptMs, dismissedPermanently) = localStore.reviewPromptStateFlow.first()
+            val eligible = PlayGrowthRetentionEngine.shouldTriggerPlayReviewPrompt(
+                onboardingCompleted = doneOnboarding,
+                hasDismissedPermanently = dismissedPermanently,
+                lastPromptedAtMs = lastPromptMs,
+                nowMs = System.currentTimeMillis(),
+                todayWordsCompleted = todayWords,
+                dailyGoal = userProgress.value.dailyGoal,
+                streakCount = streakAfter,
+                bossVictories = kingdomStats.value.bossVictories
+            )
+            if (eligible) {
+                _showReviewPrompt.value = true
+            }
+        }
+    }
+
+    fun openPlayStoreReview(context: Context) {
+        _showReviewPrompt.value = false
+        viewModelScope.launch {
+            localStore.recordReviewPromptInteraction(permanent = true)
+        }
+        val opened = ViralShareCardGenerator.openGooglePlayStoreListing(context)
+        if (!opened) {
+            showToast("Google Play 스토어를 열 수 없습니다.")
+        }
+    }
+
+    fun submitPlayFeedback(context: Context, feedback: String) {
+        _showReviewPrompt.value = false
+        viewModelScope.launch {
+            localStore.recordReviewPromptInteraction(permanent = true)
+        }
+        val sent = ViralShareCardGenerator.shareConstructiveFeedback(context, feedback)
+        showToast(if (sent) "소중한 의견 감사합니다!" else "의견을 기록했습니다. 감사합니다!")
+    }
+
+    fun dismissReviewPrompt(permanent: Boolean) {
+        _showReviewPrompt.value = false
+        viewModelScope.launch {
+            localStore.recordReviewPromptInteraction(permanent = permanent)
         }
     }
 

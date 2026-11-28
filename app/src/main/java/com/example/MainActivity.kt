@@ -8,12 +8,17 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Flight
@@ -26,7 +31,12 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
+import com.example.engine.AppThemeMode
+import com.example.engine.LearnerGoalTrack
+import com.example.ui.components.FirstLaunchOnboardingOverlay
+import com.example.ui.components.PlayReviewPromptDialog
 import com.example.ui.components.StitchIconBadge
 import com.example.ui.theme.GlacierCyan
 import com.example.ui.theme.StudioCoral
@@ -36,6 +46,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -68,11 +81,7 @@ import com.example.data.SquirrelRpgRepository
 import com.example.engine.HybridAiCoachEngine
 import com.example.engine.VoiceSpeechEngine
 import com.example.engine.EnGamePhase
-import com.example.firebase.attemptAutoSignIn
-import com.example.firebase.authStateFlow
-import com.example.firebase.configureAppCheck
-import com.example.firebase.onGoogleSignInClicked
-import com.example.firebase.signOutUser
+import com.example.cloudflare.CloudflareAuthManager
 import com.example.model.RpgGamePhase
 import com.example.ui.components.QuestCompleteCelebrationDialog
 import com.example.ui.components.StreakMilestoneConfettiOverlay
@@ -88,8 +97,6 @@ import com.example.ui.screens.WorldMapScreen
 import com.example.ui.theme.StudioCobalt
 import com.example.ui.theme.SpeakQuestTheme
 import com.example.viewmodel.SpeakQuestViewModel
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -133,19 +140,28 @@ class MainActivity : ComponentActivity() {
                 android.graphics.Color.TRANSPARENT
             )
         )
-        // MUST configure Firebase App Check before setContent or any Firebase AI Logic calls
-        configureAppCheck(this, intent)
+        // Initialize Cloudflare session state before rendering UI
+        CloudflareAuthManager.init(this)
         extractIncomingDeepLinks(intent)
 
         setContent {
-            SpeakQuestTheme {
-                FamilyKingdomApp(
-                    pendingKakaoAuthCodeFlow = pendingKakaoAuthCode,
-                    onConsumeKakaoCode = { _pendingKakaoAuthCode.value = null },
-                    pendingGuestInviteFlow = pendingGuestInvite,
-                    onConsumeGuestInvite = { _pendingGuestInvite.value = null }
-                )
-            }
+            FamilyKingdomApp(
+                pendingKakaoAuthCodeFlow = pendingKakaoAuthCode,
+                onConsumeKakaoCode = { _pendingKakaoAuthCode.value = null },
+                pendingGuestInviteFlow = pendingGuestInvite,
+                onConsumeGuestInvite = { _pendingGuestInvite.value = null },
+                onSystemBarDarkThemeChanged = { isDark ->
+                    val style = if (isDark) {
+                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT
+                        )
+                    }
+                    enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                }
+            )
         }
     }
 
@@ -171,7 +187,7 @@ class MainActivity : ComponentActivity() {
             (data.path?.startsWith("/invite") == true)
         if (isCustomInvite || isWebInvite) {
             val inviteCode = data.getQueryParameter("code")
-            val hostNickname = data.getQueryParameter("host").orEmpty().ifBlank { "원삐" }
+            val hostNickname = data.getQueryParameter("host").orEmpty().ifBlank { "학습자" }
             if (!inviteCode.isNullOrBlank()) {
                 _pendingGuestInvite.value = inviteCode to hostNickname
             }
@@ -184,7 +200,8 @@ private fun FamilyKingdomApp(
     pendingKakaoAuthCodeFlow: StateFlow<String?>,
     onConsumeKakaoCode: () -> Unit,
     pendingGuestInviteFlow: StateFlow<Pair<String, String>?>,
-    onConsumeGuestInvite: () -> Unit
+    onConsumeGuestInvite: () -> Unit,
+    onSystemBarDarkThemeChanged: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -214,8 +231,8 @@ private fun FamilyKingdomApp(
     val snackbarHostState = remember { SnackbarHostState() }
     val authScope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
-    val firebaseUser by remember { Firebase.auth.authStateFlow() }
-        .collectAsStateWithLifecycle(initialValue = Firebase.auth.currentUser)
+    val cloudflareUser by CloudflareAuthManager.currentUserFlow
+        .collectAsStateWithLifecycle(initialValue = CloudflareAuthManager.currentUser)
 
     val progress by viewModel.userProgress.collectAsStateWithLifecycle()
     val weeklyStudyReport by viewModel.weeklyStudyReport.collectAsStateWithLifecycle()
@@ -286,9 +303,24 @@ private fun FamilyKingdomApp(
     val familyLeaderboardState by viewModel.familyLeaderboardState.collectAsStateWithLifecycle()
     val shareStreakWithFriends by viewModel.shareStreakWithFriends.collectAsStateWithLifecycle()
     val firebaseDisplayName by viewModel.firebaseDisplayName.collectAsStateWithLifecycle()
+    val onboardingCompleted by viewModel.onboardingCompleted.collectAsStateWithLifecycle()
+    val learnerGoalTrack by viewModel.learnerGoalTrack.collectAsStateWithLifecycle()
+    val streakFreezeCount by viewModel.streakFreezeCount.collectAsStateWithLifecycle()
+    val appThemeMode by viewModel.appThemeMode.collectAsStateWithLifecycle()
+    val showReviewPrompt by viewModel.showReviewPrompt.collectAsStateWithLifecycle()
+
+    val systemDark = isSystemInDarkTheme()
+    val isDarkTheme = when (appThemeMode) {
+        AppThemeMode.SYSTEM -> systemDark
+        AppThemeMode.DARK -> true
+        AppThemeMode.LIGHT -> false
+    }
+    LaunchedEffect(isDarkTheme) {
+        onSystemBarDarkThemeChanged(isDarkTheme)
+    }
 
     LaunchedEffect(Unit) {
-        attemptAutoSignIn(
+        CloudflareAuthManager.attemptAutoSignIn(
             context = context,
             credentialManager = credentialManager,
             onAuthSuccess = {},
@@ -297,15 +329,15 @@ private fun FamilyKingdomApp(
         )
     }
 
-    LaunchedEffect(firebaseUser?.uid, firebaseUser?.displayName) {
+    LaunchedEffect(cloudflareUser?.uid, cloudflareUser?.displayName) {
         viewModel.onFirebaseAuthStateChanged(
-            uid = firebaseUser?.uid,
-            displayName = firebaseUser?.displayName
+            uid = cloudflareUser?.uid,
+            displayName = cloudflareUser?.displayName
         )
     }
 
     val triggerGoogleSignIn: () -> Unit = {
-        onGoogleSignInClicked(
+        CloudflareAuthManager.onGoogleSignInClicked(
             context = context,
             credentialManager = credentialManager,
             onAuthSuccess = {
@@ -321,13 +353,14 @@ private fun FamilyKingdomApp(
         )
     }
 
-    val triggerFirebaseSignOut: () -> Unit = {
-        signOutUser(
+    val triggerCloudflareSignOut: () -> Unit = {
+        CloudflareAuthManager.signOutUser(
+            context = context,
             credentialManager = credentialManager,
             scope = authScope,
             onSignOutComplete = {
                 viewModel.onFirebaseAuthStateChanged(uid = null, displayName = null)
-                viewModel.showToast("Firebase 계정이 로그아웃되었습니다.")
+                viewModel.showToast("Cloudflare 계정이 로그아웃되었습니다.")
             }
         )
     }
@@ -373,20 +406,21 @@ private fun FamilyKingdomApp(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets.statusBars,
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        bottomBar = {
-            NavigationBar(
+    SpeakQuestTheme(darkTheme = isDarkTheme) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val useNavigationRail = maxWidth >= 600.dp
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (useNavigationRail) {
+            NavigationRail(
                 containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp,
-                windowInsets = WindowInsets.navigationBars
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .testTag("adaptive_navigation_rail")
             ) {
                 FamilyKingdomTab.entries.forEach { tab ->
                     val selected = currentTab == tab
-                    NavigationBarItem(
+                    NavigationRailItem(
                         selected = selected,
                         onClick = {
                             if (currentTab != tab) {
@@ -415,13 +449,12 @@ private fun FamilyKingdomApp(
                             Text(
                                 text = tab.labelKo,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.5.sp,
                                     fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
                                 ),
                                 maxLines = 1
                             )
                         },
-                        colors = NavigationBarItemDefaults.colors(
+                        colors = NavigationRailItemDefaults.colors(
                             selectedIconColor = tab.accentColor,
                             selectedTextColor = tab.accentColor,
                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -433,12 +466,82 @@ private fun FamilyKingdomApp(
                 }
             }
         }
+
+    Scaffold(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight(),
+        contentWindowInsets = WindowInsets.statusBars,
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        bottomBar = {
+            if (!useNavigationRail) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 4.dp,
+                    windowInsets = WindowInsets.navigationBars
+                ) {
+                    FamilyKingdomTab.entries.forEach { tab ->
+                        val selected = currentTab == tab
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                if (currentTab != tab) {
+                                    viewModel.stopVoiceIo()
+                                    currentTab = tab
+                                }
+                            },
+                            icon = {
+                                if (selected) {
+                                    StitchIconBadge(
+                                        icon = tab.activeIcon,
+                                        contentDescription = tab.labelKo,
+                                        accent = tab.accentColor,
+                                        size = 38.dp,
+                                        iconSize = 20.dp,
+                                        filled = true
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = tab.icon,
+                                        contentDescription = tab.labelKo
+                                    )
+                                }
+                            },
+                            label = {
+                                Text(
+                                    text = tab.labelKo,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
+                                    ),
+                                    maxLines = 1
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = tab.accentColor,
+                                selectedTextColor = tab.accentColor,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                indicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                            ),
+                            modifier = Modifier.testTag(tab.tag)
+                        )
+                    }
+                }
+            }
+        }
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (useNavigationRail) Modifier.widthIn(max = 920.dp) else Modifier)
+            ) {
             when (currentTab) {
                 FamilyKingdomTab.KINGDOM -> {
                     WorldMapScreen(
@@ -503,10 +606,10 @@ private fun FamilyKingdomApp(
                         },
                         familyLeaderboardState = familyLeaderboardState,
                         kakaoSession = kakaoSession,
-                        firebaseDisplayName = firebaseDisplayName ?: firebaseUser?.displayName,
+                        firebaseDisplayName = firebaseDisplayName ?: cloudflareUser?.displayName,
                         shareStreakWithFriends = shareStreakWithFriends,
                         onGoogleSignIn = triggerGoogleSignIn,
-                        onSignOutFirebase = triggerFirebaseSignOut,
+                        onSignOutFirebase = triggerCloudflareSignOut,
                         onConnectKakao = { viewModel.launchKakaoLogin(context) },
                         onRefreshFamilyLeaderboard = { viewModel.refreshFamilyLeaderboard(manual = true) },
                         onToggleShareStreakWithFriends = { enabled -> viewModel.toggleShareStreakWithFriends(enabled) },
@@ -514,6 +617,33 @@ private fun FamilyKingdomApp(
                         onOpenFullFamilyLeaderboard = {
                             hubSelectedSubTab = 0
                             currentTab = FamilyKingdomTab.FAMILY_HUB
+                        },
+                        learnerGoalTrack = learnerGoalTrack,
+                        streakFreezeCount = streakFreezeCount,
+                        appThemeMode = appThemeMode,
+                        onStartInstantDailyChallenge = {
+                            when (learnerGoalTrack) {
+                                LearnerGoalTrack.TRAVEL_SPEAKING -> {
+                                    viewModel.selectTravelZone(1)
+                                    currentTab = FamilyKingdomTab.TRAVEL
+                                }
+                                else -> {
+                                    viewModel.startSmartVocabSession(
+                                        track = com.example.model.VocabStudyTrack.CSAT_FREQUENCY,
+                                        tier1To5 = vocabGradeTier
+                                    )
+                                    currentTab = FamilyKingdomTab.VOCAB
+                                }
+                            }
+                        },
+                        onShareAchievementCard = {
+                            viewModel.shareViralAchievementCard(context)
+                        },
+                        onBuyStreakFreeze = {
+                            viewModel.purchaseStreakFreeze()
+                        },
+                        onCycleThemeMode = {
+                            viewModel.cycleAppThemeMode()
                         }
                     )
                 }
@@ -675,7 +805,8 @@ private fun FamilyKingdomApp(
                         onTriggerProactiveCheckIn = { viewModel.triggerProactiveCheckIn(manual = true) },
                         onAutoProactiveCheckIn = { viewModel.triggerProactiveCheckIn(manual = false) },
                         onUpdateLearnerName = { newName -> viewModel.selectActivePlayer(newName) },
-                        onUpdateConversationGoal = { newGoal -> viewModel.updateConversationGoal(newGoal) }
+                        onUpdateConversationGoal = { newGoal -> viewModel.updateConversationGoal(newGoal) },
+                        onTriggerMotionVocabQuestion = { gesture -> viewModel.triggerMotionLinkedVocabQuestion(gesture) }
                     )
                 }
 
@@ -745,17 +876,19 @@ private fun FamilyKingdomApp(
                         onTestLlmSlot = { slot -> viewModel.testLlmSlot(slot) },
                         initialSubTab = hubSelectedSubTab,
                         familyLeaderboardState = familyLeaderboardState,
-                        firebaseDisplayName = firebaseDisplayName ?: firebaseUser?.displayName,
+                        firebaseDisplayName = firebaseDisplayName ?: cloudflareUser?.displayName,
                         shareStreakWithFriends = shareStreakWithFriends,
                         onGoogleSignIn = triggerGoogleSignIn,
-                        onSignOutFirebase = triggerFirebaseSignOut,
+                        onSignOutFirebase = triggerCloudflareSignOut,
                         onRefreshFamilyLeaderboard = { viewModel.refreshFamilyLeaderboard(manual = true) },
                         onToggleShareStreakWithFriends = { enabled -> viewModel.toggleShareStreakWithFriends(enabled) },
                         onDeleteAccountAndData = { viewModel.deleteAccountAndAllData(context) }
                     )
                 }
             }
+            }
         }
+    }
     }
 
         // Full-Screen White Pygmy Squirrel 10-Job Hero Picker Overlay
@@ -837,14 +970,48 @@ private fun FamilyKingdomApp(
             )
         }
 
-        // Weekly Study Report Modal (Today's Words Scorecard + Cumulative Streak + Achievement Charts)
+        // Weekly Study Report Modal (Today's Words Scorecard + Cumulative Streak + Achievement Charts + Viral Share)
         if (showWeeklyReportModal) {
             WeeklyStudyReportModal(
                 report = weeklyStudyReport,
                 playerName = parents.daughterName,
                 activeHero = activeSquirrelHero,
-                onDismiss = { showWeeklyReportModal = false }
+                onDismiss = { showWeeklyReportModal = false },
+                onShareReportCard = { viewModel.shareViralAchievementCard(context) }
             )
         }
+
+        // Peak-Happiness Google Play Review & Constructive Feedback Dialog
+        if (showReviewPrompt) {
+            PlayReviewPromptDialog(
+                learnerName = parents.daughterName,
+                streakCount = progress.streakCount,
+                onOpenPlayStoreReview = { viewModel.openPlayStoreReview(context) },
+                onSendFeedback = { text -> viewModel.submitPlayFeedback(context, text) },
+                onSnooze = { viewModel.dismissReviewPrompt(permanent = false) },
+                onDismissPermanently = { viewModel.dismissReviewPrompt(permanent = true) }
+            )
+        }
+
+        // 15-Second First-Launch Interactive Onboarding (zero flash for returning users!)
+        if (onboardingCompleted == false) {
+            FirstLaunchOnboardingOverlay(
+                defaultNickname = parents.daughterName,
+                onComplete = { chosenName, chosenTrack, chosenGoal, earnedBonus ->
+                    viewModel.completeFirstLaunchOnboarding(
+                        nickname = chosenName,
+                        goalTrack = chosenTrack,
+                        dailyGoal = chosenGoal,
+                        earnedWarmupBonus = earnedBonus
+                    )
+                    if (chosenTrack == LearnerGoalTrack.TRAVEL_SPEAKING) {
+                        viewModel.selectTravelZone(1)
+                        currentTab = FamilyKingdomTab.TRAVEL
+                    }
+                },
+                onSkip = { viewModel.skipFirstLaunchOnboarding() }
+            )
+        }
+    }
     }
 }
